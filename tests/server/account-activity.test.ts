@@ -38,7 +38,7 @@ describe("account activity", () => {
 
   it("schedules a shared source only for recent unpaused subscribers", async () => {
     const database = new AppDatabase(":memory:", 20, PUBLIC_DEPLOYMENT_POLICY);
-    const auth = new AuthService(database.auth, 20, { maxAccounts: 100 });
+    const auth = new AuthService(database.auth, 20, { maxAccounts: 100, registrationMode: "open" });
     const first = (await auth.register("first-reader", "reader-password"))?.user;
     const second = (await auth.register("second-reader", "reader-password"))?.user;
     if (!first || !second) throw new Error("Test accounts were not created");

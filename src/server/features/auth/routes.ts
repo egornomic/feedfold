@@ -1,6 +1,7 @@
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { OperationForbiddenError } from "../../errors.js";
 import { QuotaExceededError } from "../../quota.js";
 import { type AuthService, type LoginSession, sessionToken } from "./service.js";
 
@@ -22,8 +23,9 @@ const loginCredentials = z.object({
   username: loginUsername,
   password: z.string().min(1).max(128),
 });
-const registrationCredentials = z.object({ username, password });
-const passkeySignup = z.object({ username });
+const inviteCode = z.string().max(32).optional();
+const registrationCredentials = z.object({ username, password, inviteCode });
+const passkeySignup = z.object({ username, inviteCode });
 const passwordCredential = z.object({ password });
 const ceremonyId = z.string().min(32).max(128);
 const operationId = z.string().min(32).max(128);
@@ -113,6 +115,7 @@ export async function authRoutes(
 ): Promise<void> {
   app.get("/api/auth/config", async (request) => ({
     registrationAvailable: authService.registrationAvailable(),
+    registrationMode: authService.registrationMode,
     passkeysAvailable: passkeysAvailable(publicOrigin(request, configuredOrigin)),
   }));
 
@@ -131,7 +134,7 @@ export async function authRoutes(
     if (rateLimited) return rateLimited;
     const body = registrationCredentials.parse(request.body);
     if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
-    const session = await authService.register(body.username, body.password);
+    const session = await authService.register(body.username, body.password, body.inviteCode);
     if (!session) {
       if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
       return reply
@@ -149,7 +152,7 @@ export async function authRoutes(
     if (!passkeysAvailable(new URL(context.origin)))
       return reply.code(400).send({ error: "Passkeys require HTTPS or localhost." });
     if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
-    const result = await authService.passkeySignupOptions(body.username, context);
+    const result = await authService.passkeySignupOptions(body.username, context, body.inviteCode);
     if (!result) {
       if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
       return reply
@@ -172,9 +175,38 @@ export async function authRoutes(
       }
       return sendSession(reply.code(201), request, authService, session, configuredOrigin);
     } catch (error) {
-      if (error instanceof QuotaExceededError) throw error;
+      if (error instanceof QuotaExceededError || error instanceof OperationForbiddenError)
+        throw error;
       return reply.code(400).send({ error: "The account could not be created. Try again." });
     }
+  });
+
+  app.get("/api/auth/invitations", async (request, reply) => {
+    const user = authenticatedUser(request, authService);
+    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
+    return authService.invitations(user.id);
+  });
+
+  app.post("/api/auth/invitations", async (request, reply) => {
+    const user = authenticatedUser(request, authService);
+    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
+    const body = z
+      .object({
+        replaceId: z
+          .string()
+          .regex(/^[a-f0-9]{32}$/)
+          .optional(),
+      })
+      .parse(request.body ?? {});
+    return reply.code(201).send(authService.createInvitation(user.id, body.replaceId));
+  });
+
+  app.delete("/api/auth/invitations/:id", async (request, reply) => {
+    const user = authenticatedUser(request, authService);
+    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
+    const { id } = z.object({ id: z.string().regex(/^[a-f0-9]{32}$/) }).parse(request.params);
+    authService.revokeInvitation(user.id, id);
+    return reply.code(204).send();
   });
 
   app.get("/api/auth/session", async (request, reply) => {

@@ -31,7 +31,7 @@ describe("deployment policy", () => {
     );
   });
 
-  it("uses the account cap as the only public registration switch", () => {
+  it("uses the account cap independently of registration policy", () => {
     expect(registrationAccountCap(PRIVATE_DEPLOYMENT_POLICY, undefined)).toBe(1);
     expect(registrationAccountCap(PRIVATE_DEPLOYMENT_POLICY, "20")).toBe(1);
     expect(registrationAccountCap(PUBLIC_DEPLOYMENT_POLICY, undefined)).toBe(0);
@@ -65,7 +65,7 @@ describe("deployment policy", () => {
 
   it("disables the public manual refresh API and capability", async () => {
     const database = new AppDatabase(":memory:", 20, PUBLIC_DEPLOYMENT_POLICY);
-    const auth = new AuthService(database.auth, 20, { maxAccounts: 100 });
+    const auth = new AuthService(database.auth, 20, { maxAccounts: 100, registrationMode: "open" });
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
     let requests = 0;
     const refresh = new FeedRefreshService(database.feeds, 1, 1_000, undefined, async () => {
@@ -130,7 +130,7 @@ describe("deployment policy", () => {
       20,
       deploymentPolicy("public", { feedDiscoveriesPerDay: 1, webAnalysesPerDay: 1 }),
     );
-    const auth = new AuthService(database.auth);
+    const auth = new AuthService(database.auth, 20, { registrationMode: "open" });
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
     const refresh = new FeedRefreshService(database.feeds, 1, 1_000);
     const webFeeds = new WebFeedService({ quotas: database.quotas });
@@ -492,7 +492,10 @@ describe("deployment policy", () => {
       deploymentPolicy("public", { registeredAccounts: 1 }),
     );
     try {
-      const auth = new AuthService(accountDatabase.auth, 20, { maxAccounts: 2 });
+      const auth = new AuthService(accountDatabase.auth, 20, {
+        maxAccounts: 2,
+        registrationMode: "open",
+      });
       await expect(auth.register("first-account", "reader-password")).resolves.toBeTruthy();
       await expect(auth.register("second-account", "reader-password")).rejects.toThrow(
         "not accepting more accounts",

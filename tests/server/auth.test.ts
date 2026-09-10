@@ -279,6 +279,7 @@ describe("hosted account authentication", () => {
 
     expect((await app.inject({ method: "GET", url: "/api/auth/config" })).json()).toEqual({
       registrationAvailable: true,
+      registrationMode: "open",
       passkeysAvailable: true,
     });
     const weakPassword = await app.inject({
@@ -326,6 +327,7 @@ describe("hosted account authentication", () => {
 
     expect((await app.inject({ method: "GET", url: "/api/auth/config" })).json()).toEqual({
       registrationAvailable: false,
+      registrationMode: "open",
       passkeysAvailable: true,
     });
     const secondAccount = await app.inject({
@@ -613,6 +615,7 @@ describe("hosted account authentication", () => {
     ).toBe(401);
     expect((await app.inject({ method: "GET", url: "/api/auth/config" })).json()).toMatchObject({
       registrationAvailable: true,
+      registrationMode: "open",
     });
   });
 

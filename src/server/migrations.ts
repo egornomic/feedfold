@@ -1477,6 +1477,26 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    sql: `
+      ALTER TABLE users ADD COLUMN unlimited_invites INTEGER NOT NULL DEFAULT 0
+        CHECK (unlimited_invites IN (0, 1));
+      CREATE TABLE invitations (
+        id TEXT PRIMARY KEY,
+        number INTEGER NOT NULL,
+        code_hash TEXT NOT NULL UNIQUE,
+        creator_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT,
+        redeemed_at TEXT,
+        recipient_id TEXT
+      );
+      CREATE UNIQUE INDEX invitations_creator ON invitations(creator_id, number);
+      ALTER TABLE pending_registrations ADD COLUMN invite_hash TEXT;
+      DROP INDEX pending_registrations_username_idx;
+    `,
+  },
 ];
 
 export function migrateDatabase(

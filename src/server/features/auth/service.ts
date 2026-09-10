@@ -9,8 +9,14 @@ import {
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import argon2 from "argon2";
-import { normalizeFeedPollInterval, type SessionUser } from "../../../shared/types.js";
+import {
+  type Invitations,
+  normalizeFeedPollInterval,
+  type RegistrationMode,
+  type SessionUser,
+} from "../../../shared/types.js";
 import { accountActivityCutoff, accountActivityTouchBefore } from "../../account-activity.js";
+import { OperationForbiddenError } from "../../errors.js";
 import type {
   AuthRepository,
   StoredAuthChallenge,
@@ -65,6 +71,7 @@ export interface AuthRateLimitOptions {
 }
 
 export interface AuthOptions {
+  registrationMode?: RegistrationMode;
   maxAccounts?: number;
   recentAuthenticationSeconds?: number;
   rateLimits?: Partial<AuthRateLimitOptions>;
@@ -140,6 +147,7 @@ export function sessionToken(cookieHeader: string | undefined): string | null {
 
 export class AuthService {
   private readonly maxAccounts: number;
+  readonly registrationMode: RegistrationMode;
   private readonly recentAuthenticationSeconds: number;
   private readonly rateLimits: AuthRateLimitOptions;
   private readonly authHashSecret: Buffer;
@@ -151,6 +159,8 @@ export class AuthService {
     options: AuthOptions = {},
   ) {
     this.maxAccounts = options.maxAccounts ?? 1;
+    this.registrationMode =
+      options.registrationMode ?? (repository.deploymentMode === "public" ? "closed" : "open");
     this.recentAuthenticationSeconds = options.recentAuthenticationSeconds ?? 5 * 60;
     this.rateLimits = { ...DEFAULT_RATE_LIMITS, ...options.rateLimits };
     this.authHashSecret = this.repository.authHashSecret();
@@ -164,7 +174,47 @@ export class AuthService {
   }
 
   registrationAvailable(): boolean {
-    return this.repository.registrationAvailable(this.maxAccounts);
+    return (
+      this.registrationMode !== "closed" && this.repository.registrationAvailable(this.maxAccounts)
+    );
+  }
+
+  private inviteHash(code?: string): string | null {
+    const normalized = code?.replaceAll("-", "").trim().toUpperCase();
+    return normalized ? this.keyedHash("invitation", normalized) : null;
+  }
+
+  invitations(userId: number): Invitations {
+    const { unlimited, remaining } = this.repository.invitationAllowance(userId);
+    return {
+      enabled: this.registrationMode === "invite",
+      unlimited,
+      remaining,
+      invitations: this.registrationMode === "invite" ? this.repository.invitations(userId) : [],
+    };
+  }
+
+  createInvitation(userId: number, replaceId?: string) {
+    if (this.registrationMode !== "invite")
+      throw new OperationForbiddenError("Invitations are not enabled on this server.");
+    const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    while (true) {
+      const code = [...randomBytes(6)].map((byte) => alphabet[byte & 31]).join("");
+      const id = randomBytes(16).toString("hex");
+      const number = this.repository.createInvitation(
+        userId,
+        id,
+        this.inviteHash(code) as string,
+        replaceId,
+      );
+      if (number !== null) return { id, number, code };
+    }
+  }
+
+  revokeInvitation(userId: number, id: string): void {
+    if (this.registrationMode !== "invite")
+      throw new OperationForbiddenError("Invitations are not enabled on this server.");
+    this.repository.revokeInvitation(userId, id);
   }
 
   private keyedHash(namespace: string, value: string): string {
@@ -246,7 +296,13 @@ export class AuthService {
     return this.repository.registrationQuotaReached();
   }
 
-  async register(username: string, password: string): Promise<LoginSession | null> {
+  async register(
+    username: string,
+    password: string,
+    inviteCode?: string,
+  ): Promise<LoginSession | null> {
+    const inviteHash = this.inviteHash(inviteCode);
+    this.repository.assertRegistration(this.registrationMode, inviteHash);
     const token = randomBytes(32).toString("base64url");
     const storedSession = this.storedSession(token);
     const user = this.repository.registerUserWithSession(
@@ -257,11 +313,15 @@ export class AuthService {
       normalizeFeedPollInterval(this.defaultPollIntervalMinutes),
       storedSession,
       this.maxAccounts,
+      this.registrationMode,
+      inviteHash,
     );
     return user ? { token, user: authenticatedUser(user) } : null;
   }
 
-  async passkeySignupOptions(username: string, context: WebAuthnContext) {
+  async passkeySignupOptions(username: string, context: WebAuthnContext, inviteCode?: string) {
+    const inviteHash = this.inviteHash(inviteCode);
+    this.repository.assertRegistration(this.registrationMode, inviteHash);
     const trimmedUsername = username.trim();
     if (!this.registrationAvailable()) return null;
     const userHandle = randomBytes(32);
@@ -278,6 +338,7 @@ export class AuthService {
     const stored = this.repository.storePendingRegistration(
       {
         idHash: tokenHash(registrationId),
+        inviteHash: this.registrationMode === "invite" ? inviteHash : null,
         username: trimmedUsername,
         webauthnUserId: userHandle,
         challenge: options.challenge,
@@ -286,6 +347,7 @@ export class AuthService {
         expiresAt: new Date(Date.now() + PENDING_REGISTRATION_SECONDS * 1_000).toISOString(),
       },
       this.maxAccounts,
+      this.registrationMode,
     );
     return stored ? { registrationId, options } : null;
   }
@@ -327,6 +389,7 @@ export class AuthService {
       normalizeFeedPollInterval(this.defaultPollIntervalMinutes),
       session,
       this.maxAccounts,
+      this.registrationMode,
       createdAt,
     );
     return user ? { token, user: authenticatedUser(user) } : null;

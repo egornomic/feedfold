@@ -94,9 +94,17 @@ export class ApplicationApi {
       case "logout":
         return undefined;
       case "authConfig":
-        return { registrationAvailable: false, passkeysAvailable: false };
+        return {
+          registrationAvailable: false,
+          registrationMode: "closed",
+          passkeysAvailable: false,
+        };
+      case "invitations":
+        return { enabled: false, unlimited: false, remaining: 0, invitations: [] };
       case "passkeys":
         return { passkeys: [] };
+      case "createInvitation":
+      case "revokeInvitation":
       case "changePassword":
       case "removePassword":
       case "deleteAccount":

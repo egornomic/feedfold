@@ -5,8 +5,8 @@ import {
 } from "@simplewebauthn/browser";
 import { KeyRound, LoaderCircle, LogIn, UserPlus } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
-import type { SessionUser } from "../shared/types";
-import { api, errorMessage } from "./api";
+import type { RegistrationMode, SessionUser } from "../shared/types";
+import { api, appUrl, errorMessage } from "./api";
 import { BrandIdentity } from "./brand";
 
 export function SessionLoading() {
@@ -20,7 +20,16 @@ export function SessionLoading() {
 }
 
 export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [inviteCode, setInviteCode] = useState(() =>
+    window.location.pathname.replace(/\/$/, "").endsWith("/join")
+      ? window.location.hash.slice(1).replaceAll("-", "").trim().toUpperCase()
+      : "",
+  );
+  const [mode, setMode] = useState<"login" | "register">(
+    window.location.pathname.replace(/\/$/, "").endsWith("/join") ? "register" : "login",
+  );
+  const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("closed");
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -36,23 +45,38 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
       .then((config) => {
         if (!active) return;
         setRegistrationAvailable(config.registrationAvailable);
+        setRegistrationMode(config.registrationMode);
+        setConfigLoaded(true);
+        if (!config.registrationAvailable) setMode("login");
         setPasskeysAvailable(config.passkeysAvailable && browserSupportsWebAuthn());
       })
-      .catch(() => undefined);
+      .catch((caught) => {
+        if (active) {
+          setError(errorMessage(caught));
+          setConfigLoaded(true);
+        }
+      });
     return () => {
       active = false;
     };
   }, []);
+
+  const authenticated = (user: SessionUser) => {
+    if (window.location.pathname.replace(/\/$/, "").endsWith("/join")) {
+      window.history.replaceState(null, "", appUrl("/"));
+    }
+    onAuthenticated(user);
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      onAuthenticated(
+      authenticated(
         mode === "login"
           ? await api.login(username, password)
-          : await api.register(username, password),
+          : await api.register(username, password, inviteCode),
       );
     } catch (caught) {
       setError(errorMessage(caught));
@@ -73,7 +97,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
     try {
       const { ceremonyId, options } = await api.passkeyAuthenticationOptions();
       const response = await startAuthentication({ optionsJSON: options });
-      onAuthenticated(await api.passkeyLogin(ceremonyId, response));
+      authenticated(await api.passkeyLogin(ceremonyId, response));
     } catch (caught) {
       setError(
         caught instanceof DOMException && caught.name === "NotAllowedError"
@@ -89,9 +113,9 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
     setUsingPasskey(true);
     setError(null);
     try {
-      const { registrationId, options } = await api.passkeySignupOptions(username);
+      const { registrationId, options } = await api.passkeySignupOptions(username, inviteCode);
       const response = await startRegistration({ optionsJSON: options });
-      onAuthenticated(await api.completePasskeySignup(registrationId, response));
+      authenticated(await api.completePasskeySignup(registrationId, response));
     } catch (caught) {
       setError(
         caught instanceof DOMException && caught.name === "NotAllowedError"
@@ -116,11 +140,34 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
           <h1 id="auth-heading">{actionLabel}</h1>
           <p>
             {registering
-              ? "Create the account that will own this reading queue."
+              ? registrationMode === "invite"
+                ? "Use your invitation to start your reading queue."
+                : "Create the account that will own this reading queue."
               : "Sign in to open your reading queue."}
           </p>
         </div>
         <form className="login-form" onSubmit={submit}>
+          {registering && registrationMode === "invite" ? (
+            <label className="login-field" htmlFor="auth-invite">
+              <span>Invite code</span>
+              <input
+                id="auth-invite"
+                name="inviteCode"
+                type="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                required
+                maxLength={32}
+                pattern="[0-9A-HJ-KM-NP-TV-Za-hj-km-np-tv-z]{6}"
+                placeholder="K7M9XR"
+                value={inviteCode}
+                onChange={(event) =>
+                  setInviteCode(event.target.value.replaceAll("-", "").trim().toUpperCase())
+                }
+              />
+            </label>
+          ) : null}
           {!registering && passkeysAvailable ? (
             <button
               className="primary-button login-button"
@@ -162,7 +209,14 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
             <button
               className="primary-button login-button"
               type="button"
-              disabled={submitting || usingPasskey || username.trim().length < 3}
+              disabled={
+                !configLoaded ||
+                !registrationAvailable ||
+                submitting ||
+                usingPasskey ||
+                username.trim().length < 3 ||
+                (registrationMode === "invite" && inviteCode.length !== 6)
+              }
               onClick={() => void createAccountWithPasskey()}
             >
               {usingPasskey ? (
@@ -202,7 +256,9 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
               passkeysAvailable ? "secondary-button login-button" : "primary-button login-button"
             }
             type="submit"
-            disabled={submitting || usingPasskey}
+            disabled={
+              !configLoaded || submitting || usingPasskey || (registering && !registrationAvailable)
+            }
           >
             {submitting ? (
               <LoaderCircle className="spin" aria-hidden="true" size={16} />
@@ -216,11 +272,19 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
           <div className="auth-switch">
             <span>{registering ? "Already have an account?" : "Need an account?"}</span>
             <button type="button" onClick={switchMode} disabled={submitting || usingPasskey}>
-              {registering ? "Sign in" : "Create account"}
+              {registering
+                ? "Sign in"
+                : registrationMode === "invite"
+                  ? "Have an invite code?"
+                  : "Create account"}
             </button>
           </div>
         ) : (
-          <p className="registration-closed">Account creation is closed on this server.</p>
+          <p className="registration-closed">
+            {configLoaded
+              ? "Account creation is closed on this server."
+              : "Checking account availability…"}
+          </p>
         )}
       </section>
     </main>

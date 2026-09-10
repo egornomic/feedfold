@@ -23,6 +23,7 @@ describe("static demo data", () => {
     });
     await expect(demoApi.authConfig()).resolves.toEqual({
       registrationAvailable: false,
+      registrationMode: "closed",
       passkeysAvailable: false,
     });
     await expect(demoApi.passkeys()).resolves.toEqual({ passkeys: [], hasPassword: false });

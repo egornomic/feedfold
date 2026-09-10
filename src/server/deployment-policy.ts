@@ -1,3 +1,5 @@
+import type { RegistrationMode } from "../shared/types.js";
+
 export type DeploymentMode = "private" | "public";
 
 export interface ResourceQuotas {
@@ -100,4 +102,13 @@ export function registrationAccountCap(
   if (policy.mode === "private") return 1;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+export function registrationMode(policy: DeploymentPolicy, value?: string): RegistrationMode {
+  if (value && value !== "closed" && value !== "invite" && value !== "open") {
+    throw new Error("FEEDFOLD_REGISTRATION_MODE must be closed, invite, or open");
+  }
+  // Private servers only expose initial owner setup, bounded by their one-account cap.
+  if (policy.mode === "private") return "open";
+  return value === "open" || value === "invite" ? value : "closed";
 }

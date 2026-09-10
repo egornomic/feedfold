@@ -4,6 +4,9 @@ import {
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
   DEFAULT_CUSTOM_PROMPTS,
 } from "../../../shared/ai-prompts.js";
+import type { InvitationSummary, RegistrationMode } from "../../../shared/types.js";
+import type { DeploymentMode } from "../../deployment-policy.js";
+import { OperationForbiddenError } from "../../errors.js";
 import type { QuotaService } from "../../quota.js";
 import type { FeedService } from "../feeds/service.js";
 
@@ -60,6 +63,7 @@ export interface StoredAuthChallenge {
 }
 
 export interface StoredPendingRegistration {
+  inviteHash: string | null;
   idHash: string;
   username: string;
   webauthnUserId: Buffer;
@@ -92,7 +96,114 @@ export class AuthRepository {
     private readonly sqlite: Sqlite.Database,
     private readonly quotas: QuotaService,
     private readonly feeds: FeedService,
+    readonly deploymentMode: DeploymentMode,
   ) {}
+
+  assertRegistration(mode: RegistrationMode, inviteHash: string | null): void {
+    if (mode === "closed")
+      throw new OperationForbiddenError("Account creation is closed on this server.");
+    if (
+      mode === "invite" &&
+      !this.sqlite
+        .prepare(
+          "SELECT 1 FROM invitations WHERE code_hash = ? AND redeemed_at IS NULL AND revoked_at IS NULL AND expires_at > ?",
+        )
+        .get(inviteHash, new Date().toISOString())
+    ) {
+      throw new OperationForbiddenError(
+        "This invitation is invalid or no longer available. Ask for a new invitation.",
+      );
+    }
+  }
+
+  private redeemInvitation(mode: RegistrationMode, hash: string | null, recipientId: string): void {
+    if (mode !== "invite") return;
+    this.sqlite
+      .prepare("UPDATE invitations SET redeemed_at = ?, recipient_id = ? WHERE code_hash = ?")
+      .run(new Date().toISOString(), recipientId, hash);
+  }
+
+  invitationAllowance(userId: number): {
+    publicId: string;
+    unlimited: boolean;
+    remaining: number | null;
+  } {
+    const user = this.sqlite
+      .prepare(
+        "SELECT public_id AS publicId, unlimited_invites AS unlimited FROM users WHERE id = ? AND enabled = 1",
+      )
+      .get(userId) as { publicId: string; unlimited: number } | undefined;
+    if (!user) throw new OperationForbiddenError("Sign in to continue.");
+    const used = this.sqlite
+      .prepare("SELECT 1 FROM invitations WHERE creator_id = ? AND redeemed_at IS NOT NULL")
+      .get(user.publicId);
+    return {
+      publicId: user.publicId,
+      unlimited: Boolean(user.unlimited),
+      remaining: user.unlimited ? null : used ? 0 : 1,
+    };
+  }
+
+  invitations(userId: number): InvitationSummary[] {
+    const { publicId } = this.invitationAllowance(userId);
+    return this.sqlite
+      .prepare(`SELECT id, number, created_at AS createdAt, expires_at AS expiresAt,
+      revoked_at AS revokedAt, redeemed_at AS redeemedAt FROM invitations WHERE creator_id = ? ORDER BY number DESC`)
+      .all(publicId) as InvitationSummary[];
+  }
+
+  createInvitation(userId: number, id: string, hash: string, replaceId?: string): number | null {
+    return this.sqlite
+      .transaction(() => {
+        const { publicId, unlimited, remaining } = this.invitationAllowance(userId);
+        if (remaining === 0)
+          throw new OperationForbiddenError("You have already used your invitation.");
+        if (this.sqlite.prepare("SELECT 1 FROM invitations WHERE code_hash = ?").get(hash))
+          return null;
+        const at = new Date().toISOString();
+        if (replaceId) this.revokeInvitation(userId, replaceId);
+        if (
+          !unlimited &&
+          this.sqlite
+            .prepare(`SELECT 1 FROM invitations WHERE creator_id = ?
+        AND redeemed_at IS NULL AND revoked_at IS NULL AND expires_at > ?`)
+            .get(publicId, at)
+        ) {
+          throw new OperationForbiddenError(
+            "Replace or revoke your unused invitation before creating another.",
+          );
+        }
+        const number = this.sqlite
+          .prepare("SELECT COALESCE(MAX(number), 0) + 1 FROM invitations WHERE creator_id = ?")
+          .pluck()
+          .get(publicId) as number;
+        this.sqlite
+          .prepare(`INSERT INTO invitations (id, number, code_hash, creator_id, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?)`)
+          .run(
+            id,
+            number,
+            hash,
+            publicId,
+            at,
+            new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
+          );
+        return number;
+      })
+      .immediate();
+  }
+
+  revokeInvitation(userId: number, id: string): void {
+    const { publicId } = this.invitationAllowance(userId);
+    const result = this.sqlite
+      .prepare(`UPDATE invitations SET revoked_at = ? WHERE id = ? AND creator_id = ?
+      AND redeemed_at IS NULL AND revoked_at IS NULL`)
+      .run(new Date().toISOString(), id, publicId);
+    if (!result.changes)
+      throw new OperationForbiddenError(
+        "This invitation cannot be revoked. Reload your invitations.",
+      );
+  }
 
   authHashSecret(): Buffer {
     return this.sqlite
@@ -213,8 +324,11 @@ export class AuthRepository {
     defaultPollIntervalMinutes: number,
     session: StoredSession,
     maxAccounts: number,
+    mode: RegistrationMode,
+    inviteHash: string | null,
   ): StoredUser | null {
     const register = this.sqlite.transaction(() => {
+      this.assertRegistration(mode, inviteHash);
       this.quotas.assertCanRegisterAccount();
       if (!this.registrationAvailable(maxAccounts)) return null;
       if (
@@ -231,6 +345,7 @@ export class AuthRepository {
         defaultPollIntervalMinutes,
         session.createdAt,
       );
+      this.redeemInvitation(mode, inviteHash, user.publicId);
       this.insertSession(user.id, session);
       this.quotas.assertGlobalStorage();
       return user;
@@ -238,8 +353,13 @@ export class AuthRepository {
     return register.immediate();
   }
 
-  storePendingRegistration(pending: StoredPendingRegistration, maxAccounts: number): boolean {
+  storePendingRegistration(
+    pending: StoredPendingRegistration,
+    maxAccounts: number,
+    mode: RegistrationMode,
+  ): boolean {
     const store = this.sqlite.transaction(() => {
+      this.assertRegistration(mode, pending.inviteHash);
       this.sqlite
         .prepare("DELETE FROM pending_registrations WHERE expires_at <= ?")
         .run(new Date().toISOString());
@@ -247,17 +367,14 @@ export class AuthRepository {
       if (
         this.sqlite
           .prepare("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE")
-          .get(pending.username) ||
-        this.sqlite
-          .prepare("SELECT 1 FROM pending_registrations WHERE username = ? COLLATE NOCASE")
           .get(pending.username)
       )
         return false;
       this.sqlite
         .prepare(
           `INSERT INTO pending_registrations (
-             id_hash, username, webauthn_user_id, challenge, origin, rp_id, expires_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             id_hash, username, webauthn_user_id, challenge, origin, rp_id, expires_at, invite_hash
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           pending.idHash,
@@ -267,6 +384,7 @@ export class AuthRepository {
           pending.origin,
           pending.rpId,
           pending.expiresAt,
+          pending.inviteHash,
         );
       return true;
     });
@@ -278,7 +396,7 @@ export class AuthRepository {
       (this.sqlite
         .prepare(
           `SELECT id_hash AS idHash, username, webauthn_user_id AS webauthnUserId,
-                  challenge, origin, rp_id AS rpId, expires_at AS expiresAt
+                  challenge, origin, rp_id AS rpId, expires_at AS expiresAt, invite_hash AS inviteHash
            FROM pending_registrations WHERE id_hash = ? AND expires_at > ?`,
         )
         .get(idHash, at) as StoredPendingRegistration | undefined) ?? null
@@ -293,11 +411,14 @@ export class AuthRepository {
     defaultPollIntervalMinutes: number,
     session: StoredSession,
     maxAccounts: number,
+    mode: RegistrationMode,
     at: string,
   ): StoredUser | null {
     const complete = this.sqlite.transaction(() => {
       this.quotas.assertCanRegisterAccount();
       const pending = this.pendingRegistration(idHash, at);
+      const inviteHash = pending?.inviteHash ?? null;
+      this.assertRegistration(mode, inviteHash);
       this.sqlite.prepare("DELETE FROM pending_registrations WHERE id_hash = ?").run(idHash);
       if (!pending || !this.registrationAvailable(maxAccounts)) return null;
       if (
@@ -318,6 +439,7 @@ export class AuthRepository {
         at,
       );
       this.insertPasskey({ ...passkey, userId: user.id, username: user.username });
+      this.redeemInvitation(mode, inviteHash, user.publicId);
       this.insertSession(user.id, session);
       this.quotas.assertGlobalStorage();
       return user;
@@ -406,6 +528,10 @@ export class AuthRepository {
 
   deleteAccount(userId: number): boolean {
     return this.sqlite.transaction(() => {
+      this.sqlite
+        .prepare(`UPDATE invitations SET revoked_at = ? WHERE creator_id =
+        (SELECT public_id FROM users WHERE id = ?) AND redeemed_at IS NULL AND revoked_at IS NULL`)
+        .run(new Date().toISOString(), userId);
       this.sqlite.prepare("DELETE FROM quota_daily_usage WHERE scope = ?").run(`user:${userId}`);
       return (
         this.sqlite.prepare("DELETE FROM users WHERE id = ? AND enabled = 1").run(userId).changes >
@@ -698,4 +824,17 @@ export class AuthRepository {
   clearRateLimit(keyHash: string): void {
     this.sqlite.prepare("DELETE FROM auth_rate_limits WHERE key_hash = ?").run(keyHash);
   }
+}
+
+export function setInvitationOwner(sqlite: Sqlite.Database, publicId: string): void {
+  sqlite
+    .transaction(() => {
+      if (
+        !sqlite.prepare("SELECT 1 FROM users WHERE public_id = ? AND enabled = 1").get(publicId)
+      ) {
+        throw new Error("No active account has that public ID.");
+      }
+      sqlite.prepare("UPDATE users SET unlimited_invites = (public_id = ?)").run(publicId);
+    })
+    .immediate();
 }

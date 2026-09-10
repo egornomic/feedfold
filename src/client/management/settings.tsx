@@ -47,6 +47,7 @@ import { DropdownCombobox, DropdownSelect } from "../dropdown";
 import { useAnimatedDialog } from "../motion";
 import { clearReaderPreferences, type Theme } from "../reader-preferences";
 import type { SettingsCategory } from "../routes";
+import { InvitationsSection } from "./invitations";
 import {
   ExportOpmlLink,
   formatRefreshInterval,
@@ -1467,6 +1468,7 @@ function SettingsPage({
           role="tabpanel"
           aria-labelledby="settings-account-tab"
         >
+          <InvitationsSection showToast={showToast} />
           <AccountSettingsSection
             userId={userId}
             onAccountDeleted={onAccountDeleted}

@@ -8,6 +8,7 @@ import {
   deploymentPolicy,
   type ResourceQuotas,
   registrationAccountCap,
+  registrationMode,
 } from "./deployment-policy.js";
 import { ExtractionQueue } from "./extraction.js";
 import { AiService } from "./features/ai/service.js";
@@ -124,6 +125,7 @@ mkdirSync(dirname(databasePath), { recursive: true });
 const database = new AppDatabase(databasePath, pollIntervalMinutes, policy);
 const authService = new AuthService(database.auth, pollIntervalMinutes, {
   maxAccounts: registrationAccountCap(policy, process.env.FEEDFOLD_MAX_ACCOUNTS),
+  registrationMode: registrationMode(policy, process.env.FEEDFOLD_REGISTRATION_MODE),
   recentAuthenticationSeconds: positiveInteger(
     process.env.FEEDFOLD_RECENT_AUTH_SECONDS,
     300,

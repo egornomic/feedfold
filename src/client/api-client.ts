@@ -21,8 +21,10 @@ import type {
   FeedDiscoveryResult,
   Folder,
   ImportResult,
+  Invitations,
   MarkReadRequest,
   RefreshResult,
+  RegistrationMode,
   Rule,
   SessionUser,
   TelegramArticleMedia,
@@ -44,6 +46,7 @@ export interface ApiRuntime {
 }
 
 export interface AuthConfig {
+  registrationMode: RegistrationMode;
   registrationAvailable: boolean;
   passkeysAvailable: boolean;
 }
@@ -90,26 +93,26 @@ export function createApiClient(runtime: ApiRuntime) {
       return body.user;
     },
 
-    async register(username: string, password: string): Promise<SessionUser> {
+    async register(username: string, password: string, inviteCode?: string): Promise<SessionUser> {
       const body = await request<{ user: SessionUser }>(
         "register",
-        { username, password },
+        { username, password, inviteCode },
         "/api/auth/register",
         {
           method: "POST",
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username, password, inviteCode }),
         },
       );
       return body.user;
     },
 
-    passkeySignupOptions: (username: string) =>
+    passkeySignupOptions: (username: string, inviteCode?: string) =>
       request<{
         registrationId: string;
         options: PublicKeyCredentialCreationOptionsJSON;
-      }>("passkeySignupOptions", { username }, "/api/auth/register/passkey/options", {
+      }>("passkeySignupOptions", { username, inviteCode }, "/api/auth/register/passkey/options", {
         method: "POST",
-        body: JSON.stringify({ username }),
+        body: JSON.stringify({ username, inviteCode }),
       }),
 
     async completePasskeySignup(
@@ -131,6 +134,22 @@ export function createApiClient(runtime: ApiRuntime) {
     logout: () => request<void>("logout", undefined, "/api/auth/logout", { method: "POST" }),
 
     authConfig: () => request<AuthConfig>("authConfig", undefined, "/api/auth/config"),
+
+    invitations: () => request<Invitations>("invitations", undefined, "/api/auth/invitations"),
+    createInvitation: (replaceId?: string) =>
+      request<{ id: string; number: number; code: string }>(
+        "createInvitation",
+        { replaceId },
+        "/api/auth/invitations",
+        {
+          method: "POST",
+          body: JSON.stringify({ replaceId }),
+        },
+      ),
+    revokeInvitation: (id: string) =>
+      request<void>("revokeInvitation", { id }, `/api/auth/invitations/${id}`, {
+        method: "DELETE",
+      }),
 
     changePassword: (password: string) =>
       request<void>("changePassword", { password }, "/api/auth/password", {

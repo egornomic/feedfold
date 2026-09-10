@@ -234,7 +234,7 @@ describe("shared feed sources", () => {
       20,
       deploymentPolicy("public", { articlesPerAccount: 1 }),
     );
-    const auth = new AuthService(database.auth, 20, { maxAccounts: 100 });
+    const auth = new AuthService(database.auth, 20, { maxAccounts: 100, registrationMode: "open" });
     cleanups.push(() => database.close());
 
     const fullUser = (await auth.register("full-reader", "reader-password"))?.user;

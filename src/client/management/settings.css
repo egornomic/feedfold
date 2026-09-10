@@ -673,3 +673,25 @@
     backdrop-filter: none;
   }
 }
+
+.invitation-share {
+  display: grid;
+  gap: 12px;
+  margin-block: 16px;
+}
+
+.invitation-share .login-field {
+  max-width: 14rem;
+}
+
+.invitation-list li {
+  flex-wrap: wrap;
+}
+
+.invitation-list .passkey-actions {
+  flex-direction: row;
+}
+
+.invitation-list .passkey-actions button {
+  flex: 1;
+}

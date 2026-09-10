@@ -89,7 +89,8 @@ Compose reads these values from the shell or a project-level `.env` file:
 | `FEEDFOLD_BASE_PATH` | `/` | Browser-facing path where feedfold is mounted. Set this at build time, including the leading and trailing slash, when a reverse proxy publishes feedfold below a path such as `/feedfold/`. |
 | `FEEDFOLD_DEPLOYMENT_MODE` | `private` | Use `private` for unrestricted desktop and self-hosted operation, or `public` for public-service inactivity, refresh, and subscription limits. |
 | `FEEDFOLD_PUBLIC_ORIGIN` | none | Exact external HTTPS origin used for secure cookies, passkeys, and browser-origin validation. |
-| `FEEDFOLD_MAX_ACCOUNTS` | none | Public-mode account cap. `0`, a missing value, or an invalid value disables registration. |
+| `FEEDFOLD_REGISTRATION_MODE` | `closed` | Public-server registration policy: `closed`, `invite`, or `open`. Private servers only offer initial owner setup. |
+| `FEEDFOLD_MAX_ACCOUNTS` | none | Public-mode account cap, including the owner. `0`, a missing value, or an invalid value disables registration under every policy. |
 | `FEEDFOLD_RECENT_AUTH_SECONDS` | `300` | Time after authentication during which credential changes do not require another check. |
 | `FEEDFOLD_REGISTRATION_IP_LIMIT` | `10` | Registration attempts allowed per source during the registration cooldown. |
 | `FEEDFOLD_REGISTRATION_GLOBAL_LIMIT` | `100` | Registration attempts allowed across the deployment during the registration cooldown. |

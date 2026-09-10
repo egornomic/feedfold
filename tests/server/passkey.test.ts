@@ -14,9 +14,23 @@ afterEach(async () => {
 });
 
 describe("passkey authentication", () => {
-  it("creates an account with a discoverable passkey and signs in without a username or password", async () => {
+  it.each([
+    "open",
+    "invite",
+  ] as const)("creates an account in %s mode with a discoverable passkey and signs in without a username or password", async (registrationMode) => {
     const database = new AppDatabase(":memory:");
-    const authService = new AuthService(database.auth);
+    let inviteCode: string | undefined;
+    if (registrationMode === "invite") {
+      const setup = new AuthService(database.auth);
+      const owner = await setup.register("owner", "reader-password");
+      if (!owner) throw new Error("Owner setup failed");
+      const issuer = new AuthService(database.auth, 20, { registrationMode: "invite" });
+      inviteCode = issuer.createInvitation(owner.user.id).code;
+    }
+    const authService = new AuthService(database.auth, 20, {
+      registrationMode,
+      maxAccounts: registrationMode === "invite" ? 2 : 1,
+    });
     const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
     const refreshService = new FeedRefreshService(database.feeds, 1, 1_000);
     const app = await createApp({
@@ -51,7 +65,7 @@ describe("passkey authentication", () => {
     });
     await page.goto(`${origin}/health`);
 
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate(async (inviteCode) => {
       const decode = (value: string): Uint8Array => {
         const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
         const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
@@ -73,7 +87,7 @@ describe("passkey authentication", () => {
 
       const registrationOptions = await json("/api/auth/register/passkey/options", {
         method: "POST",
-        body: JSON.stringify({ username: "passkey-reader" }),
+        body: JSON.stringify({ username: "passkey-reader", inviteCode }),
       });
       if (!registrationOptions.response.ok)
         throw new Error(JSON.stringify(registrationOptions.body));
@@ -179,7 +193,7 @@ describe("passkey authentication", () => {
         sessionStatus: session.response.status,
         sessionBody: session.body,
       };
-    });
+    }, inviteCode);
 
     expect(result).toEqual({
       pendingRegistrationAvailable: true,

@@ -472,7 +472,13 @@ export class DemoStore {
       case "register":
         return { user: this.session() };
       case "authConfig":
-        return { registrationAvailable: false, passkeysAvailable: false };
+        return {
+          registrationAvailable: false,
+          registrationMode: "closed",
+          passkeysAvailable: false,
+        };
+      case "invitations":
+        return { enabled: false, unlimited: false, remaining: 0, invitations: [] };
       case "passkeys":
         return { passkeys: [], hasPassword: false };
       case "logout":

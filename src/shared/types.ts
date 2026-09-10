@@ -1,3 +1,21 @@
+export type RegistrationMode = "closed" | "invite" | "open";
+
+export interface InvitationSummary {
+  id: string;
+  number: number;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  redeemedAt: string | null;
+}
+
+export interface Invitations {
+  enabled: boolean;
+  unlimited: boolean;
+  remaining: number | null;
+  invitations: InvitationSummary[];
+}
+
 export type ArticleState = "all" | "unread" | "read" | "starred";
 export type FolderSortDirection = "newest" | "oldest";
 export type ReadingMode = "magazine" | "expanded";

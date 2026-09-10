@@ -19,7 +19,7 @@
     "build:client": "vite build",
     "build:demo": "FEEDFOLD_BASE_PATH=/ VITE_FEEDFOLD_DEMO=true vite build",
     "deploy:demo": "npm run build:demo && wrangler deploy",
-    "build:server": "esbuild src/server/index.ts --bundle --platform=node --format=esm --target=node24 --outdir=dist/server --packages=external --sourcemap",
+    "build:server": "esbuild src/server/index.ts src/server/manage-accounts.ts --bundle --platform=node --format=esm --target=node24 --outdir=dist/server --packages=external --sourcemap",
     "build:desktop:runtime": "npm run build:desktop:main && npm run build:desktop:preload",
     "build:desktop:main": "esbuild src/desktop/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/desktop/main.js --packages=external --sourcemap",
     "build:desktop:preload": "esbuild src/desktop/preload.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/desktop/preload.cjs --packages=external --sourcemap",
