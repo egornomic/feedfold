@@ -520,11 +520,11 @@ function htmlResponse(body: string, csp: string): Response {
 
 async function applicationResource(pathname: string, request: Request): Promise<Response | null> {
   if (!runtime) return new Response("feedfold is still starting", { status: 503 });
-  const snapshotMatch = pathname.match(/^\/api\/web-feed-snapshots\/([^/]+)$/);
-  if (snapshotMatch) {
+  const snapshotId = pathname.match(/^\/api\/web-feed-snapshots\/([^/]+)$/)?.[1];
+  if (snapshotId) {
     try {
       return htmlResponse(
-        runtime.application.snapshot(decodeURIComponent(snapshotMatch[1])),
+        runtime.application.snapshot(decodeURIComponent(snapshotId)),
         snapshotCsp,
       );
     } catch {

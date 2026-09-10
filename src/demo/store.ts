@@ -38,8 +38,8 @@ function idAfter(items: Array<{ id: number }>): number {
 function titleFromUrl(value: string): string {
   try {
     const hostname = new URL(value).hostname.replace(/^www\./, "");
-    return hostname
-      .split(".")[0]
+    const [label = ""] = hostname.split(".");
+    return label
       .split(/[-_]/)
       .filter(Boolean)
       .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)

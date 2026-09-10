@@ -606,8 +606,8 @@ describe("reader data resource", () => {
     const database = new AppDatabase(join(directory, "feedfold.db"));
     const authService = new AuthService(database.auth);
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
-    const fetchStarted = [deferred(), deferred()];
-    const fetchRelease = [deferred(), deferred()];
+    const fetchStarted = [deferred(), deferred()] as const;
+    const fetchRelease = [deferred(), deferred()] as const;
     let fetchIndex = 0;
     const feedFetcher: typeof fetch = async () => {
       const index = fetchIndex;

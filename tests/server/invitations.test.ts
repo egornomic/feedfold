@@ -150,7 +150,7 @@ describe("invitation registration through HTTP", () => {
     expect(completed.status).toBe(change === "open" ? 201 : 403);
     expect(database.auth.findEnabledUser("passkey-friend") !== null).toBe(change === "open");
     if (change === "open") {
-      expect((await api.list()).invitations[0].redeemedAt).toBeNull();
+      expect((await api.list()).invitations[0]?.redeemedAt).toBeNull();
       expect((await api.register("next-friend", issued.body.code)).status).toBe(201);
     }
   });
@@ -178,7 +178,7 @@ describe("invitation registration through HTTP", () => {
     expect((await open.register("no-invite-needed")).status).toBe(201);
     expect((await open.create()).status).toBe(403);
     expect(await open.list()).toMatchObject({ enabled: false, invitations: [] });
-    expect((await invite.list()).invitations[0].redeemedAt).toBeNull();
+    expect((await invite.list()).invitations[0]?.redeemedAt).toBeNull();
     const joined = await invite.register("invited-reader", issued.body.code.toLowerCase());
     expect(joined.status).toBe(201);
     expect((await invite.register("replay-reader", issued.body.code)).status).toBe(403);
@@ -280,7 +280,7 @@ describe("invitation registration through HTTP", () => {
         })
       ).status,
     ).toBe(403);
-    expect((await api.list()).invitations[0].redeemedAt).toBeNull();
+    expect((await api.list()).invitations[0]?.redeemedAt).toBeNull();
     const secondDatabase = new AppDatabase(path, 20, PUBLIC_DEPLOYMENT_POLICY);
     try {
       const second = new AuthService(secondDatabase.auth, 20, {
@@ -317,7 +317,7 @@ describe("invitation registration through HTTP", () => {
     const blocked = await afterRestart.register("limited-reader", issued.body.code);
     expect(blocked.status).toBe(429);
     expect(Number(blocked.retryAfter)).toBeGreaterThan(0);
-    expect((await issuer.list()).invitations[0].redeemedAt).toBeNull();
+    expect((await issuer.list()).invitations[0]?.redeemedAt).toBeNull();
   });
 
   it("isolates invitation management by account and revokes unused links when their creator deletes their account", async () => {

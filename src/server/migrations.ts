@@ -1512,9 +1512,9 @@ export function migrateDatabase(
       ({ version }) => version,
     ),
   );
-  for (let index = 0; index < Math.min(throughVersion, migrations.length); index += 1) {
+  for (const [index, migration] of migrations.entries()) {
+    if (!(index < throughVersion)) break;
     if (appliedVersions.has(index + 1)) continue;
-    const migration = migrations[index];
     const apply = database.transaction(() => {
       const sql =
         typeof migration.sql === "function"

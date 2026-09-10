@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   appendUnseenArticles,
   articleQueryForReaderRoute,
@@ -218,7 +218,7 @@ describe("reader state", () => {
       { id: 1, title: "Full article", isRead: false, isStarred: true },
       { id: 2, title: article.title, isRead: false, isStarred: false },
     ]);
-    expect(articlesWithUpdatedState(current, refreshed)[0].contentHtml).toBe(
+    expect(articlesWithUpdatedState(current, refreshed)[0]?.contentHtml).toBe(
       "<p>Extracted text</p>",
     );
   });
@@ -324,6 +324,7 @@ describe("reader state", () => {
 
       for (const isRead of [true, false]) {
         const stored = database.articles.listArticlePage(1, { state: "all" }).articles[0];
+        assert.isDefined(stored);
         const before = {
           ...database.bootstrap.getBootstrap(1),
           aiSettings: bootstrap().aiSettings,
@@ -395,6 +396,8 @@ describe("reader state", () => {
   it("reports unread counts for the active reader scope", () => {
     const data = bootstrap();
     data.counts.unread = 9;
+    assert.isDefined(data.feeds[1]);
+    assert.isDefined(data.folders[0]);
     data.feeds[1] = { ...data.feeds[1], unreadCount: 4 };
     data.folders[0] = { ...data.folders[0], unreadCount: 7 };
 

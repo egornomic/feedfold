@@ -178,9 +178,11 @@ async function settleDom(
           async () => {
             const now = performance.now();
             const quiet = now - lastMutationAt >= quietMs;
-            const pendingRequests = await (
-              window as unknown as Record<string, () => Promise<number>>
-            )[pendingRequestBinding]();
+            const pendingRequestCount = Reflect.get(
+              window,
+              pendingRequestBinding,
+            ) as () => Promise<number>;
+            const pendingRequests = await pendingRequestCount();
             if (
               expectedConfig === null &&
               pendingRequests > 0 &&

@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
@@ -20,7 +20,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 const TEST_ACCOUNTS = [
   { username: "reader", password: "reader-password" },
   { username: "partner", password: "partner-password" },
-];
+] as const;
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -692,7 +692,7 @@ describe("live API, OPML, and filtering rules", () => {
         .get() as number,
     );
     const rules = await asReader<{ rules: Rule[] }>("/api/rules");
-    expect(rules.rules[0].matchedCount).toBe(1);
+    expect(rules.rules[0]?.matchedCount).toBe(1);
 
     const disabledRule = await asReader<Rule>(`/api/rules/${rule.id}`, {
       method: "PATCH",
@@ -723,7 +723,7 @@ describe("live API, OPML, and filtering rules", () => {
     expect(new Set(movedOut.articles.map((article) => article.title))).toEqual(
       new Set(["Noisy weekly roundup", "Keep this story"]),
     );
-    expect((await asReader<{ rules: Rule[] }>("/api/rules")).rules[0].matchedCount).toBe(0);
+    expect((await asReader<{ rules: Rule[] }>("/api/rules")).rules[0]?.matchedCount).toBe(0);
     await asReader(`/api/folders/${child?.id}`, {
       method: "PATCH",
       body: JSON.stringify({ parentId: parent?.id }),
@@ -732,12 +732,13 @@ describe("live API, OPML, and filtering rules", () => {
     const listed = await asReader<{ articles: Article[] }>("/api/articles?state=all");
     expect(listed.articles.map((article) => article.title)).toEqual(["Keep this story"]);
     const keep = listed.articles[0];
+    assert.isDefined(keep);
     expect(keep).toMatchObject({ contentHtml: null, imageUrl: `${feedBase}/keep.jpg` });
     const expanded = await asReader<{ articles: Article[] }>(
       "/api/articles?state=all&includeContent=true",
     );
-    expect(expanded.articles[0].feedContentHtml).toContain("Feed fallback worth reading");
-    expect(expanded.articles[0].contentHtml).toBeNull();
+    expect(expanded.articles[0]?.feedContentHtml).toContain("Feed fallback worth reading");
+    expect(expanded.articles[0]?.contentHtml).toBeNull();
     const updated = await asReader<Article>(`/api/articles/${keep.id}/state`, {
       method: "PATCH",
       body: JSON.stringify({ isRead: true, isStarred: true }),

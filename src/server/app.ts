@@ -153,7 +153,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   app.addHook("onRequest", async (request, reply) => {
     if (!request.url.startsWith("/api/")) return;
     reply.header("Cache-Control", "no-store");
-    const path = request.url.split("?", 1)[0];
+    const [path = ""] = request.url.split("?", 1);
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
       const expectedOrigin =
         services.publicOrigin ??

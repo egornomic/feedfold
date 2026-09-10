@@ -104,7 +104,7 @@ describe("feed normalization", () => {
       publishedAt: "2026-07-13T14:00:00.000Z",
       summary: "First line Second <unsafe> line",
     });
-    expect(json.articles[0].feedContentHtml).toContain("Second &lt;unsafe&gt; line");
+    expect(json.articles[0]?.feedContentHtml).toContain("Second &lt;unsafe&gt; line");
   });
 
   it("normalizes playable YouTube videos, thumbnails, and Shorts metadata", () => {

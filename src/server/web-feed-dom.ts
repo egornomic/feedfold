@@ -338,9 +338,10 @@ function uniqueSelector(element: Element, document: Document): string {
 }
 
 function sharedClasses(elements: Element[]): string[] {
-  if (elements.length === 0) return [];
-  const rest = elements.slice(1).map((element) => new Set(stableClasses(element)));
-  return stableClasses(elements[0]).filter((name) => rest.every((classes) => classes.has(name)));
+  const [first, ...remaining] = elements;
+  if (!first) return [];
+  const rest = remaining.map((element) => new Set(stableClasses(element)));
+  return stableClasses(first).filter((name) => rest.every((classes) => classes.has(name)));
 }
 
 function itemSelector(parent: Element, elements: Element[], document: Document): string {

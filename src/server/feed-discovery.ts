@@ -84,8 +84,12 @@ function feedCandidates(source: string, pageUrl: string): string[] {
     for (const link of dom.window.document.querySelectorAll<HTMLLinkElement>(
       'link[rel~="alternate"][href]',
     )) {
-      const type = link.type.split(";", 1)[0]?.trim().toLowerCase();
-      if (!FEED_MIME_TYPES.has(type) && !isFeedReference(`${link.title} ${link.href}`)) continue;
+      const [type = ""] = link.type.split(";", 1);
+      if (
+        !FEED_MIME_TYPES.has(type.trim().toLowerCase()) &&
+        !isFeedReference(`${link.title} ${link.href}`)
+      )
+        continue;
       add(resolvedHttpUrl(link.getAttribute("href") ?? "", pageUrl));
     }
     for (const link of dom.window.document.querySelectorAll<HTMLAnchorElement>("a[href]")) {

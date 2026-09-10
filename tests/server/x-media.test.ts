@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
@@ -48,6 +48,7 @@ describe("X article media", () => {
 
   it("rejects media URLs returned from untrusted hosts", () => {
     const payload = structuredClone(PAYLOAD);
+    assert.isDefined(payload.mediaDetails[0]);
     payload.mediaDetails[0].video_info.variants = [
       { content_type: "video/mp4", bitrate: 10, url: "https://example.test/video.mp4" },
     ];

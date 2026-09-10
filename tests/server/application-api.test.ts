@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import { type ApiRuntime, createApiClient } from "../../src/client/api-client.js";
 import { ApiError } from "../../src/client/api-contract.js";
 import { createApp } from "../../src/server/app.js";
@@ -231,6 +231,7 @@ describe("local application API", () => {
     const article = (
       await client.articles({ state: "all", feedId: feed.id, limit: 1, includeContent: true })
     ).articles[0];
+    assert.isDefined(article);
     expect(article).toMatchObject({ title: "Contract story", isRead: false, isStarred: false });
     expect(await client.updateArticleState(article.id, { isStarred: true })).toMatchObject({
       isStarred: true,

@@ -2169,7 +2169,8 @@ export function ReaderPane({
 
   const handleTouchStart = useCallback((event: ReactTouchEvent<HTMLElement>) => {
     fullContentPullStart.current = null;
-    if (event.touches.length !== 1 || pendingNavigation.current) return;
+    const touch = event.touches[0];
+    if (!touch || event.touches.length > 1 || pendingNavigation.current) return;
 
     const surface = activeLayerRef.current;
     const snapshot = activeSurfaceRef.current;
@@ -2186,7 +2187,6 @@ export function ReaderPane({
       return;
     }
 
-    const touch = event.touches[0];
     fullContentPullStart.current = {
       identifier: touch.identifier,
       articleId: snapshot.article.id,

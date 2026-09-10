@@ -37,11 +37,10 @@ export function observeScheduledRefresh(
         : ACTIVITY_RATE_ALPHA * sampleRate + (1 - ACTIVITY_RATE_ALPHA) * state.activityRatePerHour;
   const desiredInterval = activityRatePerHour <= 0 ? 60 : MINUTES_PER_HOUR / activityRatePerHour;
   const targetInterval = normalizeFeedPollInterval(desiredInterval);
-  const currentIndex = FEED_POLL_INTERVAL_MINUTES.indexOf(state.pollIntervalMinutes);
-  const targetIndex = FEED_POLL_INTERVAL_MINUTES.indexOf(targetInterval);
   const pollIntervalMinutes =
-    targetIndex > currentIndex
-      ? FEED_POLL_INTERVAL_MINUTES[Math.min(currentIndex + 1, targetIndex)]
+    targetInterval > state.pollIntervalMinutes
+      ? (FEED_POLL_INTERVAL_MINUTES.find((interval) => interval > state.pollIntervalMinutes) ??
+        targetInterval)
       : targetInterval;
 
   return {

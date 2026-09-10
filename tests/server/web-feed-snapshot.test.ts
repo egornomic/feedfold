@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import {
   parseWebFeedSelectionMessage,
   webFeedHighlightMessage,
@@ -38,6 +38,8 @@ describe("web-feed snapshot sanitization", () => {
       source.window.document,
       "https://example.com/",
     ).candidates;
+    const [firstCandidate] = candidates;
+    assert.isDefined(firstCandidate);
     const token = "snapshot-message-token";
 
     const html = createWebFeedSnapshot(source.window.document, candidates, token);
@@ -66,7 +68,7 @@ describe("web-feed snapshot sanitization", () => {
     const candidateIds = new Set(candidates.map(({ candidate }) => candidate.id));
     expect(parseWebFeedSelectionMessage(messages.at(-1), token, candidateIds)).toEqual({
       kind: "select",
-      candidateId: candidates[0]?.candidate.id,
+      candidateId: firstCandidate.candidate.id,
     });
     expect(firstSelectable?.getAttribute("aria-pressed")).toBe("true");
 
@@ -78,7 +80,7 @@ describe("web-feed snapshot sanitization", () => {
     });
     expect(firstSelectable?.getAttribute("aria-pressed")).toBe("false");
 
-    for (const candidateId of [candidates[0].candidate.id, null]) {
+    for (const candidateId of [firstCandidate.candidate.id, null]) {
       preview.window.dispatchEvent(
         new preview.window.MessageEvent("message", {
           source: preview.window.parent,

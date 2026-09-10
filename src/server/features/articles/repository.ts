@@ -239,21 +239,23 @@ export class ArticleRepository {
     );
     const pageRows: Row[] = [];
     while (pageRows.length < limit) {
-      const available = queues.filter((queue) => queue.index < queue.rows.length);
+      const available = queues.flatMap((queue) => {
+        const row = queue.rows[queue.index];
+        return row ? [{ queue, row }] : [];
+      });
       if (available.length === 0) break;
-      const selected = available.reduce((preferred, candidate) => {
-        if (candidate.consumed !== preferred.consumed) {
-          return candidate.consumed < preferred.consumed ? candidate : preferred;
+      const { queue: selected, row } = available.reduce((preferred, candidate) => {
+        if (candidate.queue.consumed !== preferred.queue.consumed) {
+          return candidate.queue.consumed < preferred.queue.consumed ? candidate : preferred;
         }
-        const candidateRow = candidate.rows[candidate.index];
-        const preferredRow = preferred.rows[preferred.index];
+        const candidateRow = candidate.row;
+        const preferredRow = preferred.row;
         const dateComparison = String(candidateRow.sortAt).localeCompare(
           String(preferredRow.sortAt),
         );
         if (dateComparison !== 0) return dateComparison > 0 ? candidate : preferred;
         return Number(candidateRow.id) > Number(preferredRow.id) ? candidate : preferred;
       });
-      const row = selected.rows[selected.index];
       selected.index += 1;
       selected.consumed += 1;
       pageRows.push(row);
