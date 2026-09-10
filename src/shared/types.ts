@@ -9,10 +9,11 @@ export interface InvitationSummary {
   redeemedAt: string | null;
 }
 
-export interface Invitations {
+export type InvitationAllowance = { kind: "unlimited" } | { kind: "limited"; remaining: 0 | 1 };
+
+export interface InvitationOverview {
   enabled: boolean;
-  unlimited: boolean;
-  remaining: number | null;
+  allowance: InvitationAllowance;
   invitations: InvitationSummary[];
 }
 

@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
-import type { InvitationSummary, Invitations } from "../../shared/types";
+import { INVITE_EXPIRATION_DAYS } from "../../shared/auth";
+import type { InvitationOverview, InvitationSummary } from "../../shared/types";
 import { api, appUrl, errorMessage } from "../api";
 
-function invitationStatus(invitation: InvitationSummary): string {
+type InvitationStatus = "Available" | "Expired" | "Revoked" | "Used";
+
+function invitationStatus(invitation: InvitationSummary): InvitationStatus {
   if (invitation.redeemedAt) return "Used";
   if (invitation.revokedAt) return "Revoked";
   if (invitation.expiresAt <= new Date().toISOString()) return "Expired";
@@ -10,10 +13,10 @@ function invitationStatus(invitation: InvitationSummary): string {
 }
 
 export function InvitationsSection({ showToast }: { showToast: (message: string) => void }) {
-  const [data, setData] = useState<Invitations | null>(null);
-  const [created, setCreated] = useState<Awaited<ReturnType<typeof api.createInvitation>> | null>(
-    null,
-  );
+  const [overview, setOverview] = useState<InvitationOverview | null>(null);
+  const [createdInvitation, setCreatedInvitation] = useState<Awaited<
+    ReturnType<typeof api.createInvitation>
+  > | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +25,7 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
     void api
       .invitations()
       .then((result) => {
-        if (active) setData(result);
+        if (active) setOverview(result);
       })
       .catch((caught) => {
         if (active) setError(errorMessage(caught));
@@ -32,12 +35,12 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
     };
   }, []);
 
-  const mutate = async (action: () => Promise<void>) => {
+  const refreshAfterMutation = async (mutation: () => Promise<void>) => {
     setBusy(true);
     setError(null);
     try {
-      await action();
-      setData(await api.invitations());
+      await mutation();
+      setOverview(await api.invitations());
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -45,112 +48,141 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
     }
   };
 
-  const create = (replaceId?: string) =>
-    mutate(async () => {
-      setCreated(await api.createInvitation(replaceId));
-      showToast(replaceId ? "Invitation replaced" : "Invitation created");
+  const createInvitation = () =>
+    refreshAfterMutation(async () => {
+      setCreatedInvitation(await api.createInvitation());
+      showToast("Invite created");
     });
 
-  const copy = async (link: boolean) => {
-    if (!created) return;
+  const replaceInvitation = (id: string) =>
+    refreshAfterMutation(async () => {
+      setCreatedInvitation(await api.createInvitation(id));
+      showToast("Invite replaced");
+    });
+
+  const revokeInvitation = (id: string) =>
+    refreshAfterMutation(async () => {
+      await api.revokeInvitation(id);
+      if (createdInvitation?.id === id) setCreatedInvitation(null);
+      showToast("Invite revoked");
+    });
+
+  const copyCreatedInvitation = async (value: string, confirmation: string) => {
     try {
-      await navigator.clipboard.writeText(
-        link
-          ? new URL(`${appUrl("/join")}#${created.code}`, window.location.origin).href
-          : created.code,
-      );
-      showToast(link ? "Invite link copied" : "Invite code copied");
+      await navigator.clipboard.writeText(value);
+      showToast(confirmation);
     } catch {
       setError("Could not copy. Select and copy the code below.");
     }
   };
 
-  if (data && !data.enabled) return null;
-  const activeInvitation = data?.invitations.find(
-    (invite) => invitationStatus(invite) === "Available",
+  if (overview && !overview.enabled) return null;
+  const hasActiveInvitation = overview?.invitations.some(
+    (invitation) => invitationStatus(invitation) === "Available",
   );
-  const canCreate = data && data.remaining !== 0 && (data.unlimited || !activeInvitation);
+  const canCreate =
+    overview &&
+    (overview.allowance.kind === "unlimited" ||
+      (overview.allowance.remaining > 0 && !hasActiveInvitation));
 
   return (
     <section
       className="settings-section"
       aria-labelledby="invitations-heading"
-      aria-busy={busy || !data}
+      aria-busy={busy || !overview}
     >
       <div className="settings-heading">
-        <h2 id="invitations-heading">Invitations</h2>
+        <h2 id="invitations-heading">Invites</h2>
         <p>
-          {!data
-            ? "Loading invitations…"
-            : data.unlimited
-              ? "Invite as many friends as you like. Each invitation admits one person."
-              : data.remaining === 0
-                ? "Your invitation has been used. Your friend now has one to share."
-                : "Invite one friend. They’ll get one invitation of their own."}
+          {!overview
+            ? "Loading invites…"
+            : overview.allowance.kind === "unlimited"
+              ? "Invite as many people as you like. Each invite can be used once."
+              : overview.allowance.remaining === 0
+                ? "Your invite was used. Its recipient now has an invite to share."
+                : "Invite one person. They’ll get an invite of their own."}
         </p>
       </div>
-      {data ? (
+      {overview ? (
         <div className="account-setting-block">
           {canCreate ? (
-            <div className="passkey-actions">
+            <div className="settings-item-actions">
               <button
                 type="button"
                 className="secondary-button"
                 disabled={busy}
-                onClick={() => void create()}
+                onClick={() => void createInvitation()}
               >
-                Create invitation
+                Create invite
               </button>
             </div>
           ) : null}
-          {created ? (
+          {createdInvitation ? (
             <div className="invitation-share" role="status">
               <label className="login-field" htmlFor="created-invite-code">
-                <span>Invitation {created.number} · Invite code</span>
+                <span>Invite code</span>
                 <input
                   id="created-invite-code"
-                  value={created.code}
+                  value={createdInvitation.code}
                   readOnly
                   onFocus={(event) => event.target.select()}
                 />
               </label>
-              <div className="passkey-actions">
-                <button type="button" className="primary-button" onClick={() => void copy(true)}>
+              <div className="settings-item-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() =>
+                    void copyCreatedInvitation(
+                      new URL(
+                        `${appUrl("/join")}#${createdInvitation.code}`,
+                        window.location.origin,
+                      ).href,
+                      "Invite link copied",
+                    )
+                  }
+                >
                   Copy invite link
                 </button>
-                <button type="button" className="secondary-button" onClick={() => void copy(false)}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    void copyCreatedInvitation(createdInvitation.code, "Invite code copied")
+                  }
+                >
                   Copy code
                 </button>
               </div>
               <p className="account-setting-note">
-                Copy it now. You can replace an unused invitation if you lose its code. Invitations
-                expire after 30 days.
+                Copy it now. If you lose the code, you can replace an unused invite. Invites expire
+                after {INVITE_EXPIRATION_DAYS} days.
               </p>
             </div>
           ) : null}
-          {data.invitations.length ? (
-            <ul className="passkey-list invitation-list">
-              {data.invitations.map((invite) => {
-                const status = invitationStatus(invite);
+          {overview.invitations.length ? (
+            <ul className="settings-item-list invitation-list">
+              {overview.invitations.map((invitation) => {
+                const status = invitationStatus(invitation);
                 return (
-                  <li key={invite.id}>
-                    <div className="passkey-copy">
-                      <strong>Invitation {invite.number}</strong>
+                  <li key={invitation.id}>
+                    <div className="settings-item-copy">
+                      <strong>Invite {invitation.number}</strong>
                       <p>
                         {status} · {status === "Available" ? "Expires" : "Created"}{" "}
                         {new Date(
-                          status === "Available" ? invite.expiresAt : invite.createdAt,
+                          status === "Available" ? invitation.expiresAt : invitation.createdAt,
                         ).toLocaleDateString()}
                       </p>
                     </div>
                     {status === "Available" ? (
-                      <div className="passkey-actions">
+                      <div className="settings-item-actions">
                         <button
                           type="button"
                           className="secondary-button"
                           disabled={busy}
-                          aria-label={`Replace invitation ${invite.number}`}
-                          onClick={() => void create(invite.id)}
+                          aria-label={`Replace invite ${invitation.number}`}
+                          onClick={() => void replaceInvitation(invitation.id)}
                         >
                           Replace
                         </button>
@@ -158,14 +190,8 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
                           type="button"
                           className="secondary-button"
                           disabled={busy}
-                          aria-label={`Revoke invitation ${invite.number}`}
-                          onClick={() =>
-                            void mutate(async () => {
-                              await api.revokeInvitation(invite.id);
-                              if (created?.id === invite.id) setCreated(null);
-                              showToast("Invitation revoked");
-                            })
-                          }
+                          aria-label={`Revoke invite ${invitation.number}`}
+                          onClick={() => void revokeInvitation(invitation.id)}
                         >
                           Revoke
                         </button>

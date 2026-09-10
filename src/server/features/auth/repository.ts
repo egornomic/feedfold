@@ -4,9 +4,8 @@ import {
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
   DEFAULT_CUSTOM_PROMPTS,
 } from "../../../shared/ai-prompts.js";
-import type { InvitationSummary, RegistrationMode } from "../../../shared/types.js";
-import type { DeploymentMode } from "../../deployment-policy.js";
-import { OperationForbiddenError } from "../../errors.js";
+import { INVITE_EXPIRATION_MS } from "../../../shared/auth.js";
+import type { InvitationAllowance, InvitationSummary } from "../../../shared/types.js";
 import type { QuotaService } from "../../quota.js";
 import type { FeedService } from "../feeds/service.js";
 
@@ -83,6 +82,21 @@ export interface StoredAuthOperation {
   expiresAt: string;
 }
 
+export type StoredRegistrationResult =
+  | { status: "created"; user: StoredUser }
+  | { status: "unavailable" }
+  | { status: "invite-unavailable" };
+
+export type StorePendingRegistrationResult = "stored" | "unavailable" | "invite-unavailable";
+
+export type CreateInvitationResult =
+  | { status: "created"; number: number }
+  | { status: "code-conflict" }
+  | { status: "account-unavailable" }
+  | { status: "allowance-used" }
+  | { status: "active-invite" }
+  | { status: "replacement-unavailable" };
+
 function booleanRow<T extends { hasPassword: number }>(
   row: T,
 ): Omit<T, "hasPassword"> & {
@@ -96,28 +110,20 @@ export class AuthRepository {
     private readonly sqlite: Sqlite.Database,
     private readonly quotas: QuotaService,
     private readonly feeds: FeedService,
-    readonly deploymentMode: DeploymentMode,
   ) {}
 
-  assertRegistration(mode: RegistrationMode, inviteHash: string | null): void {
-    if (mode === "closed")
-      throw new OperationForbiddenError("Account creation is closed on this server.");
-    if (
-      mode === "invite" &&
-      !this.sqlite
+  invitationAvailable(inviteHash: string | null, at: string): boolean {
+    return Boolean(
+      this.sqlite
         .prepare(
           "SELECT 1 FROM invitations WHERE code_hash = ? AND redeemed_at IS NULL AND revoked_at IS NULL AND expires_at > ?",
         )
-        .get(inviteHash, new Date().toISOString())
-    ) {
-      throw new OperationForbiddenError(
-        "This invitation is invalid or no longer available. Ask for a new invitation.",
-      );
-    }
+        .get(inviteHash, at),
+    );
   }
 
-  private redeemInvitation(mode: RegistrationMode, hash: string | null, recipientId: string): void {
-    if (mode !== "invite") return;
+  private redeemInvitation(hash: string | null, recipientId: string): void {
+    if (!hash) return;
     this.sqlite
       .prepare("UPDATE invitations SET redeemed_at = ?, recipient_id = ? WHERE code_hash = ?")
       .run(new Date().toISOString(), recipientId, hash);
@@ -125,53 +131,58 @@ export class AuthRepository {
 
   invitationAllowance(userId: number): {
     publicId: string;
-    unlimited: boolean;
-    remaining: number | null;
-  } {
+    allowance: InvitationAllowance;
+  } | null {
     const user = this.sqlite
       .prepare(
         "SELECT public_id AS publicId, unlimited_invites AS unlimited FROM users WHERE id = ? AND enabled = 1",
       )
       .get(userId) as { publicId: string; unlimited: number } | undefined;
-    if (!user) throw new OperationForbiddenError("Sign in to continue.");
+    if (!user) return null;
     const used = this.sqlite
       .prepare("SELECT 1 FROM invitations WHERE creator_id = ? AND redeemed_at IS NOT NULL")
       .get(user.publicId);
     return {
       publicId: user.publicId,
-      unlimited: Boolean(user.unlimited),
-      remaining: user.unlimited ? null : used ? 0 : 1,
+      allowance: user.unlimited
+        ? { kind: "unlimited" }
+        : { kind: "limited", remaining: used ? 0 : 1 },
     };
   }
 
-  invitations(userId: number): InvitationSummary[] {
-    const { publicId } = this.invitationAllowance(userId);
+  invitations(publicId: string): InvitationSummary[] {
     return this.sqlite
       .prepare(`SELECT id, number, created_at AS createdAt, expires_at AS expiresAt,
       revoked_at AS revokedAt, redeemed_at AS redeemedAt FROM invitations WHERE creator_id = ? ORDER BY number DESC`)
       .all(publicId) as InvitationSummary[];
   }
 
-  createInvitation(userId: number, id: string, hash: string, replaceId?: string): number | null {
+  createInvitation(
+    userId: number,
+    id: string,
+    hash: string,
+    replaceId?: string,
+  ): CreateInvitationResult {
     return this.sqlite
-      .transaction(() => {
-        const { publicId, unlimited, remaining } = this.invitationAllowance(userId);
-        if (remaining === 0)
-          throw new OperationForbiddenError("You have already used your invitation.");
+      .transaction((): CreateInvitationResult => {
+        const access = this.invitationAllowance(userId);
+        if (!access) return { status: "account-unavailable" };
+        const { publicId, allowance } = access;
+        if (allowance.kind === "limited" && allowance.remaining === 0)
+          return { status: "allowance-used" };
         if (this.sqlite.prepare("SELECT 1 FROM invitations WHERE code_hash = ?").get(hash))
-          return null;
+          return { status: "code-conflict" };
         const at = new Date().toISOString();
-        if (replaceId) this.revokeInvitation(userId, replaceId);
+        if (replaceId && !this.revokeInvitationForCreator(publicId, replaceId))
+          return { status: "replacement-unavailable" };
         if (
-          !unlimited &&
+          allowance.kind === "limited" &&
           this.sqlite
             .prepare(`SELECT 1 FROM invitations WHERE creator_id = ?
         AND redeemed_at IS NULL AND revoked_at IS NULL AND expires_at > ?`)
             .get(publicId, at)
         ) {
-          throw new OperationForbiddenError(
-            "Replace or revoke your unused invitation before creating another.",
-          );
+          return { status: "active-invite" };
         }
         const number = this.sqlite
           .prepare("SELECT COALESCE(MAX(number), 0) + 1 FROM invitations WHERE creator_id = ?")
@@ -186,23 +197,25 @@ export class AuthRepository {
             hash,
             publicId,
             at,
-            new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
+            new Date(Date.now() + INVITE_EXPIRATION_MS).toISOString(),
           );
-        return number;
+        return { status: "created", number };
       })
       .immediate();
   }
 
-  revokeInvitation(userId: number, id: string): void {
-    const { publicId } = this.invitationAllowance(userId);
-    const result = this.sqlite
-      .prepare(`UPDATE invitations SET revoked_at = ? WHERE id = ? AND creator_id = ?
+  private revokeInvitationForCreator(publicId: string, id: string): boolean {
+    return (
+      this.sqlite
+        .prepare(`UPDATE invitations SET revoked_at = ? WHERE id = ? AND creator_id = ?
       AND redeemed_at IS NULL AND revoked_at IS NULL`)
-      .run(new Date().toISOString(), id, publicId);
-    if (!result.changes)
-      throw new OperationForbiddenError(
-        "This invitation cannot be revoked. Reload your invitations.",
-      );
+        .run(new Date().toISOString(), id, publicId).changes > 0
+    );
+  }
+
+  revokeInvitation(userId: number, id: string): boolean {
+    const access = this.invitationAllowance(userId);
+    return access ? this.revokeInvitationForCreator(access.publicId, id) : false;
   }
 
   authHashSecret(): Buffer {
@@ -324,17 +337,17 @@ export class AuthRepository {
     defaultPollIntervalMinutes: number,
     session: StoredSession,
     maxAccounts: number,
-    mode: RegistrationMode,
     inviteHash: string | null,
-  ): StoredUser | null {
+  ): StoredRegistrationResult {
     const register = this.sqlite.transaction(() => {
-      this.assertRegistration(mode, inviteHash);
+      if (inviteHash && !this.invitationAvailable(inviteHash, session.createdAt))
+        return { status: "invite-unavailable" } as const;
       this.quotas.assertCanRegisterAccount();
-      if (!this.registrationAvailable(maxAccounts)) return null;
+      if (!this.registrationAvailable(maxAccounts)) return { status: "unavailable" } as const;
       if (
         this.sqlite.prepare("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE").get(username)
       )
-        return null;
+        return { status: "unavailable" } as const;
       const user = this.createUser(
         username,
         passwordHash,
@@ -345,10 +358,10 @@ export class AuthRepository {
         defaultPollIntervalMinutes,
         session.createdAt,
       );
-      this.redeemInvitation(mode, inviteHash, user.publicId);
+      this.redeemInvitation(inviteHash, user.publicId);
       this.insertSession(user.id, session);
       this.quotas.assertGlobalStorage();
-      return user;
+      return { status: "created", user } as const;
     });
     return register.immediate();
   }
@@ -356,20 +369,23 @@ export class AuthRepository {
   storePendingRegistration(
     pending: StoredPendingRegistration,
     maxAccounts: number,
-    mode: RegistrationMode,
-  ): boolean {
+  ): StorePendingRegistrationResult {
     const store = this.sqlite.transaction(() => {
-      this.assertRegistration(mode, pending.inviteHash);
+      if (
+        pending.inviteHash &&
+        !this.invitationAvailable(pending.inviteHash, new Date().toISOString())
+      )
+        return "invite-unavailable";
       this.sqlite
         .prepare("DELETE FROM pending_registrations WHERE expires_at <= ?")
         .run(new Date().toISOString());
-      if (!this.registrationAvailable(maxAccounts)) return false;
+      if (!this.registrationAvailable(maxAccounts)) return "unavailable";
       if (
         this.sqlite
           .prepare("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE")
           .get(pending.username)
       )
-        return false;
+        return "unavailable";
       this.sqlite
         .prepare(
           `INSERT INTO pending_registrations (
@@ -386,7 +402,7 @@ export class AuthRepository {
           pending.expiresAt,
           pending.inviteHash,
         );
-      return true;
+      return "stored";
     });
     return store.immediate();
   }
@@ -411,23 +427,24 @@ export class AuthRepository {
     defaultPollIntervalMinutes: number,
     session: StoredSession,
     maxAccounts: number,
-    mode: RegistrationMode,
+    inviteHash: string | null,
     at: string,
-  ): StoredUser | null {
+  ): StoredRegistrationResult {
     const complete = this.sqlite.transaction(() => {
+      if (inviteHash && !this.invitationAvailable(inviteHash, at))
+        return { status: "invite-unavailable" } as const;
       this.quotas.assertCanRegisterAccount();
       const pending = this.pendingRegistration(idHash, at);
-      const inviteHash = pending?.inviteHash ?? null;
-      this.assertRegistration(mode, inviteHash);
       this.sqlite.prepare("DELETE FROM pending_registrations WHERE id_hash = ?").run(idHash);
-      if (!pending || !this.registrationAvailable(maxAccounts)) return null;
+      if (!pending || !this.registrationAvailable(maxAccounts))
+        return { status: "unavailable" } as const;
       if (
         this.sqlite
           .prepare("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE")
           .get(pending.username) ||
         this.sqlite.prepare("SELECT 1 FROM passkeys WHERE id = ?").get(passkey.id)
       )
-        return null;
+        return { status: "unavailable" } as const;
       const user = this.createUser(
         pending.username,
         passwordHash,
@@ -439,10 +456,10 @@ export class AuthRepository {
         at,
       );
       this.insertPasskey({ ...passkey, userId: user.id, username: user.username });
-      this.redeemInvitation(mode, inviteHash, user.publicId);
+      this.redeemInvitation(inviteHash, user.publicId);
       this.insertSession(user.id, session);
       this.quotas.assertGlobalStorage();
-      return user;
+      return { status: "created", user } as const;
     });
     return complete.immediate();
   }

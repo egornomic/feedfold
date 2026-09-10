@@ -10,7 +10,12 @@ import {
 } from "@simplewebauthn/server";
 import argon2 from "argon2";
 import {
-  type Invitations,
+  INVITE_CODE_ALPHABET,
+  INVITE_CODE_LENGTH,
+  normalizeInviteCode,
+} from "../../../shared/auth.js";
+import {
+  type InvitationOverview,
   normalizeFeedPollInterval,
   type RegistrationMode,
   type SessionUser,
@@ -159,8 +164,7 @@ export class AuthService {
     options: AuthOptions = {},
   ) {
     this.maxAccounts = options.maxAccounts ?? 1;
-    this.registrationMode =
-      options.registrationMode ?? (repository.deploymentMode === "public" ? "closed" : "open");
+    this.registrationMode = options.registrationMode ?? "open";
     this.recentAuthenticationSeconds = options.recentAuthenticationSeconds ?? 5 * 60;
     this.rateLimits = { ...DEFAULT_RATE_LIMITS, ...options.rateLimits };
     this.authHashSecret = this.repository.authHashSecret();
@@ -180,41 +184,71 @@ export class AuthService {
   }
 
   private inviteHash(code?: string): string | null {
-    const normalized = code?.replaceAll("-", "").trim().toUpperCase();
+    const normalized = normalizeInviteCode(code);
     return normalized ? this.keyedHash("invitation", normalized) : null;
   }
 
-  invitations(userId: number): Invitations {
-    const { unlimited, remaining } = this.repository.invitationAllowance(userId);
+  private assertRegistrationAllowed(inviteHash: string | null): void {
+    if (this.registrationMode === "closed")
+      throw new OperationForbiddenError("Account creation is closed on this server.");
+    if (
+      this.registrationMode === "invite" &&
+      !this.repository.invitationAvailable(inviteHash, now())
+    ) {
+      this.inviteUnavailable();
+    }
+  }
+
+  private inviteUnavailable(): never {
+    throw new OperationForbiddenError(
+      "This invite is invalid or no longer available. Ask for a new invite.",
+    );
+  }
+
+  invitations(userId: number): InvitationOverview {
+    const access = this.repository.invitationAllowance(userId);
+    if (!access) throw new OperationForbiddenError("Sign in to continue.");
     return {
       enabled: this.registrationMode === "invite",
-      unlimited,
-      remaining,
-      invitations: this.registrationMode === "invite" ? this.repository.invitations(userId) : [],
+      allowance: access.allowance,
+      invitations:
+        this.registrationMode === "invite" ? this.repository.invitations(access.publicId) : [],
     };
   }
 
   createInvitation(userId: number, replaceId?: string) {
     if (this.registrationMode !== "invite")
-      throw new OperationForbiddenError("Invitations are not enabled on this server.");
-    const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+      throw new OperationForbiddenError("Invites are not enabled on this server.");
     while (true) {
-      const code = [...randomBytes(6)].map((byte) => alphabet[byte & 31]).join("");
+      const code = [...randomBytes(INVITE_CODE_LENGTH)]
+        .map((byte) => INVITE_CODE_ALPHABET[byte & 31])
+        .join("");
       const id = randomBytes(16).toString("hex");
-      const number = this.repository.createInvitation(
+      const result = this.repository.createInvitation(
         userId,
         id,
         this.inviteHash(code) as string,
         replaceId,
       );
-      if (number !== null) return { id, number, code };
+      if (result.status === "created") return { id, number: result.number, code };
+      if (result.status === "code-conflict") continue;
+      if (result.status === "allowance-used")
+        throw new OperationForbiddenError("You have already used your invite.");
+      if (result.status === "active-invite")
+        throw new OperationForbiddenError(
+          "Replace or revoke your unused invite before creating another.",
+        );
+      if (result.status === "replacement-unavailable")
+        throw new OperationForbiddenError("This invite cannot be replaced. Reload your invites.");
+      throw new OperationForbiddenError("Sign in to continue.");
     }
   }
 
   revokeInvitation(userId: number, id: string): void {
     if (this.registrationMode !== "invite")
-      throw new OperationForbiddenError("Invitations are not enabled on this server.");
-    this.repository.revokeInvitation(userId, id);
+      throw new OperationForbiddenError("Invites are not enabled on this server.");
+    if (!this.repository.revokeInvitation(userId, id))
+      throw new OperationForbiddenError("This invite cannot be revoked. Reload your invites.");
   }
 
   private keyedHash(namespace: string, value: string): string {
@@ -302,10 +336,10 @@ export class AuthService {
     inviteCode?: string,
   ): Promise<LoginSession | null> {
     const inviteHash = this.inviteHash(inviteCode);
-    this.repository.assertRegistration(this.registrationMode, inviteHash);
+    this.assertRegistrationAllowed(inviteHash);
     const token = randomBytes(32).toString("base64url");
     const storedSession = this.storedSession(token);
-    const user = this.repository.registerUserWithSession(
+    const result = this.repository.registerUserWithSession(
       username.trim(),
       await hashPassword(password),
       randomBytes(16).toString("hex"),
@@ -313,15 +347,15 @@ export class AuthService {
       normalizeFeedPollInterval(this.defaultPollIntervalMinutes),
       storedSession,
       this.maxAccounts,
-      this.registrationMode,
-      inviteHash,
+      this.registrationMode === "invite" ? inviteHash : null,
     );
-    return user ? { token, user: authenticatedUser(user) } : null;
+    if (result.status === "invite-unavailable") return this.inviteUnavailable();
+    return result.status === "created" ? { token, user: authenticatedUser(result.user) } : null;
   }
 
   async passkeySignupOptions(username: string, context: WebAuthnContext, inviteCode?: string) {
     const inviteHash = this.inviteHash(inviteCode);
-    this.repository.assertRegistration(this.registrationMode, inviteHash);
+    this.assertRegistrationAllowed(inviteHash);
     const trimmedUsername = username.trim();
     if (!this.registrationAvailable()) return null;
     const userHandle = randomBytes(32);
@@ -347,9 +381,9 @@ export class AuthService {
         expiresAt: new Date(Date.now() + PENDING_REGISTRATION_SECONDS * 1_000).toISOString(),
       },
       this.maxAccounts,
-      this.registrationMode,
     );
-    return stored ? { registrationId, options } : null;
+    if (stored === "invite-unavailable") return this.inviteUnavailable();
+    return stored === "stored" ? { registrationId, options } : null;
   }
 
   async completePasskeySignup(
@@ -359,6 +393,8 @@ export class AuthService {
     const idHash = tokenHash(registrationId);
     const pending = this.repository.pendingRegistration(idHash, now());
     if (!pending) return null;
+    const inviteHash = this.registrationMode === "invite" ? pending.inviteHash : null;
+    this.assertRegistrationAllowed(inviteHash);
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: pending.challenge,
@@ -371,7 +407,7 @@ export class AuthService {
     const createdAt = now();
     const token = randomBytes(32).toString("base64url");
     const session = this.storedSession(token);
-    const user = this.repository.completePendingRegistration(
+    const result = this.repository.completePendingRegistration(
       idHash,
       await this.dummyPasswordHash,
       randomBytes(16).toString("hex"),
@@ -389,10 +425,11 @@ export class AuthService {
       normalizeFeedPollInterval(this.defaultPollIntervalMinutes),
       session,
       this.maxAccounts,
-      this.registrationMode,
+      inviteHash,
       createdAt,
     );
-    return user ? { token, user: authenticatedUser(user) } : null;
+    if (result.status === "invite-unavailable") return this.inviteUnavailable();
+    return result.status === "created" ? { token, user: authenticatedUser(result.user) } : null;
   }
 
   async login(username: string, password: string): Promise<LoginSession | null> {

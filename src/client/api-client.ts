@@ -21,7 +21,7 @@ import type {
   FeedDiscoveryResult,
   Folder,
   ImportResult,
-  Invitations,
+  InvitationOverview,
   MarkReadRequest,
   RefreshResult,
   RegistrationMode,
@@ -135,7 +135,8 @@ export function createApiClient(runtime: ApiRuntime) {
 
     authConfig: () => request<AuthConfig>("authConfig", undefined, "/api/auth/config"),
 
-    invitations: () => request<Invitations>("invitations", undefined, "/api/auth/invitations"),
+    invitations: () =>
+      request<InvitationOverview>("invitations", undefined, "/api/auth/invitations"),
     createInvitation: (replaceId?: string) =>
       request<{ id: string; number: number; code: string }>(
         "createInvitation",

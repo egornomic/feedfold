@@ -276,7 +276,7 @@ function AccountSettingsSection({
             <strong>Passkeys</strong>
             <p>Use your device lock, fingerprint, face, or security key instead of a password.</p>
           </div>
-          <div className="passkey-actions">
+          <div className="settings-item-actions">
             <button
               className="secondary-button"
               type="button"
@@ -296,10 +296,10 @@ function AccountSettingsSection({
           <p className="account-setting-note">Passkeys require a supported browser and HTTPS.</p>
         ) : null}
         {passkeys.length > 0 ? (
-          <ul className="passkey-list">
+          <ul className="settings-item-list">
             {passkeys.map((passkey) => (
               <li key={passkey.id}>
-                <div className="passkey-copy">
+                <div className="settings-item-copy">
                   {editingPasskeyId === passkey.id ? (
                     <form
                       className="passkey-rename-form"

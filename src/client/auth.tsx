@@ -5,6 +5,15 @@ import {
 } from "@simplewebauthn/browser";
 import { KeyRound, LoaderCircle, LogIn, UserPlus } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
+import {
+  INVITE_CODE_INPUT_MAX_LENGTH,
+  INVITE_CODE_LENGTH,
+  INVITE_CODE_PATTERN_SOURCE,
+  normalizeInviteCode,
+  USERNAME_MAX_LENGTH,
+  USERNAME_MIN_LENGTH,
+  USERNAME_PATTERN_SOURCE,
+} from "../shared/auth";
 import type { RegistrationMode, SessionUser } from "../shared/types";
 import { api, appUrl, errorMessage } from "./api";
 import { BrandIdentity } from "./brand";
@@ -22,7 +31,7 @@ export function SessionLoading() {
 export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
   const [inviteCode, setInviteCode] = useState(() =>
     window.location.pathname.replace(/\/$/, "").endsWith("/join")
-      ? window.location.hash.slice(1).replaceAll("-", "").trim().toUpperCase()
+      ? normalizeInviteCode(window.location.hash.slice(1))
       : "",
   );
   const [mode, setMode] = useState<"login" | "register">(
@@ -141,7 +150,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
           <p>
             {registering
               ? registrationMode === "invite"
-                ? "Use your invitation to start your reading queue."
+                ? "Create your account with an invite."
                 : "Create the account that will own this reading queue."
               : "Sign in to open your reading queue."}
           </p>
@@ -158,13 +167,11 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
                 autoCapitalize="characters"
                 spellCheck={false}
                 required
-                maxLength={32}
-                pattern="[0-9A-HJ-KM-NP-TV-Za-hj-km-np-tv-z]{6}"
+                maxLength={INVITE_CODE_INPUT_MAX_LENGTH}
+                pattern={INVITE_CODE_PATTERN_SOURCE}
                 placeholder="K7M9XR"
                 value={inviteCode}
-                onChange={(event) =>
-                  setInviteCode(event.target.value.replaceAll("-", "").trim().toUpperCase())
-                }
+                onChange={(event) => setInviteCode(normalizeInviteCode(event.target.value))}
               />
             </label>
           ) : null}
@@ -198,9 +205,9 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
               autoCapitalize="none"
               spellCheck={false}
               required
-              minLength={registering ? 3 : undefined}
-              maxLength={registering ? 32 : 80}
-              pattern={registering ? "[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?" : undefined}
+              minLength={registering ? USERNAME_MIN_LENGTH : undefined}
+              maxLength={registering ? USERNAME_MAX_LENGTH : 80}
+              pattern={registering ? USERNAME_PATTERN_SOURCE : undefined}
               value={username}
               onChange={(event) => setUsername(event.target.value)}
             />
@@ -214,8 +221,8 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
                 !registrationAvailable ||
                 submitting ||
                 usingPasskey ||
-                username.trim().length < 3 ||
-                (registrationMode === "invite" && inviteCode.length !== 6)
+                username.trim().length < USERNAME_MIN_LENGTH ||
+                (registrationMode === "invite" && inviteCode.length !== INVITE_CODE_LENGTH)
               }
               onClick={() => void createAccountWithPasskey()}
             >
@@ -275,7 +282,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
               {registering
                 ? "Sign in"
                 : registrationMode === "invite"
-                  ? "Have an invite code?"
+                  ? "Create account with invite"
                   : "Create account"}
             </button>
           </div>

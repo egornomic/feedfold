@@ -1,6 +1,12 @@
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import {
+  INVITE_CODE_INPUT_MAX_LENGTH,
+  USERNAME_MAX_LENGTH,
+  USERNAME_MIN_LENGTH,
+  USERNAME_PATTERN,
+} from "../../../shared/auth.js";
 import { OperationForbiddenError } from "../../errors.js";
 import { QuotaExceededError } from "../../quota.js";
 import { type AuthService, type LoginSession, sessionToken } from "./service.js";
@@ -8,10 +14,10 @@ import { type AuthService, type LoginSession, sessionToken } from "./service.js"
 const username = z
   .string()
   .trim()
-  .min(3, "Use at least 3 characters for the username.")
-  .max(32, "Use no more than 32 characters for the username.")
+  .min(USERNAME_MIN_LENGTH, `Use at least ${USERNAME_MIN_LENGTH} characters for the username.`)
+  .max(USERNAME_MAX_LENGTH, `Use no more than ${USERNAME_MAX_LENGTH} characters for the username.`)
   .regex(
-    /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/,
+    USERNAME_PATTERN,
     "Use letters, numbers, dots, hyphens, or underscores; start and end with a letter or number.",
   );
 const loginUsername = z.string().trim().min(1).max(80);
@@ -23,7 +29,7 @@ const loginCredentials = z.object({
   username: loginUsername,
   password: z.string().min(1).max(128),
 });
-const inviteCode = z.string().max(32).optional();
+const inviteCode = z.string().max(INVITE_CODE_INPUT_MAX_LENGTH).optional();
 const registrationCredentials = z.object({ username, password, inviteCode });
 const passkeySignup = z.object({ username, inviteCode });
 const passwordCredential = z.object({ password });

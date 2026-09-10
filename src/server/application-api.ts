@@ -100,7 +100,11 @@ export class ApplicationApi {
           passkeysAvailable: false,
         };
       case "invitations":
-        return { enabled: false, unlimited: false, remaining: 0, invitations: [] };
+        return {
+          enabled: false,
+          allowance: { kind: "limited", remaining: 0 },
+          invitations: [],
+        };
       case "passkeys":
         return { passkeys: [] };
       case "createInvitation":

@@ -10,7 +10,7 @@ import { ExtractionQueue } from "../../src/server/extraction.js";
 import { setInvitationOwner } from "../../src/server/features/auth/repository.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
-import type { Invitations, RegistrationMode } from "../../src/shared/types.js";
+import type { InvitationOverview, RegistrationMode } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -32,7 +32,7 @@ async function fixture() {
 
   const server = async (mode?: RegistrationMode, maxAccounts = 100, attempts = 100) => {
     const auth = new AuthService(database.auth, 20, {
-      registrationMode: mode,
+      registrationMode: mode ?? "closed",
       maxAccounts,
       rateLimits: {
         registrationPerIp: { attempts, windowMs: 60_000 },
@@ -76,7 +76,8 @@ async function fixture() {
       create: (cookie = ownerCookie, replaceId?: string) =>
         request("POST", "/api/auth/invitations", { replaceId }, cookie),
       list: async (cookie = ownerCookie) =>
-        (await request("GET", "/api/auth/invitations", undefined, cookie)).body as Invitations,
+        (await request("GET", "/api/auth/invitations", undefined, cookie))
+          .body as InvitationOverview,
     };
   };
   return { database, path, server, ownerCookie, owner };
@@ -181,7 +182,9 @@ describe("invitation registration through HTTP", () => {
     const joined = await invite.register("invited-reader", issued.body.code.toLowerCase());
     expect(joined.status).toBe(201);
     expect((await invite.register("replay-reader", issued.body.code)).status).toBe(403);
-    expect(await invite.list(joined.cookie)).toMatchObject({ remaining: 1, unlimited: false });
+    expect(await invite.list(joined.cookie)).toMatchObject({
+      allowance: { kind: "limited", remaining: 1 },
+    });
     expect(database.auth.findEnabledUser("open-reader")).not.toBeNull();
     expect((await invite.request("GET", "/api/auth/session", undefined, ownerCookie)).status).toBe(
       200,
@@ -204,8 +207,12 @@ describe("invitation registration through HTTP", () => {
     const joined = await api.register("friend-of-friend", issued.body.code);
     expect(joined.status).toBe(201);
     expect((await api.create(friend.cookie)).status).toBe(403);
-    expect(await api.list(friend.cookie)).toMatchObject({ remaining: 0 });
-    expect(await api.list(joined.cookie)).toMatchObject({ remaining: 1 });
+    expect(await api.list(friend.cookie)).toMatchObject({
+      allowance: { kind: "limited", remaining: 0 },
+    });
+    expect(await api.list(joined.cookie)).toMatchObject({
+      allowance: { kind: "limited", remaining: 1 },
+    });
     expect(
       (await api.request("DELETE", "/api/auth/account", undefined, joined.cookie)).status,
     ).toBe(204);
@@ -349,7 +356,9 @@ describe("invitation registration through HTTP", () => {
       .prepare("SELECT code_hash FROM invitations WHERE id = ?")
       .pluck()
       .get(invite.id) as string;
-    expect(database.auth.createInvitation(owner.user.id, "collision", hash, invite.id)).toBeNull();
+    expect(database.auth.createInvitation(owner.user.id, "collision", hash, invite.id)).toEqual({
+      status: "code-conflict",
+    });
     expect((await api.register("recipient", invite.code)).status).toBe(201);
   });
 });

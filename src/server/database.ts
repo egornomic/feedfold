@@ -88,7 +88,7 @@ export class AppDatabase {
       deploymentPolicy,
       this.quotas,
     );
-    this.auth = new AuthRepository(this.connection, this.quotas, this.feeds, deploymentPolicy.mode);
+    this.auth = new AuthRepository(this.connection, this.quotas, this.feeds);
     this.extractions = new ExtractionService(
       this.connection,
       extractionRepository,

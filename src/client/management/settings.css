@@ -39,7 +39,7 @@
 .account-setting-heading strong,
 .password-change-form > div:first-child strong,
 .account-delete-setting strong,
-.passkey-list strong {
+.settings-item-list strong {
   display: block;
   color: var(--text);
   font-size: var(--type-supporting);
@@ -48,7 +48,7 @@
 .account-setting-heading p,
 .password-change-form > div:first-child p,
 .account-delete-setting p,
-.passkey-list p,
+.settings-item-list p,
 .account-setting-note {
   margin: 2px 0 0;
   color: var(--muted);
@@ -59,7 +59,7 @@
   margin-top: 10px;
 }
 
-.passkey-actions {
+.settings-item-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -106,14 +106,14 @@
   line-height: var(--leading-body);
 }
 
-.passkey-list {
+.settings-item-list {
   margin: 14px -16px -14px;
   padding: 0;
   border-top: 1px solid var(--border);
   list-style: none;
 }
 
-.passkey-list li {
+.settings-item-list li {
   display: flex;
   min-height: 62px;
   align-items: center;
@@ -122,11 +122,11 @@
   padding: 10px 16px;
 }
 
-.passkey-copy {
+.settings-item-copy {
   min-width: 0;
 }
 
-.passkey-copy > strong {
+.settings-item-copy > strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -164,11 +164,11 @@
   color: var(--accent);
 }
 
-.passkey-list li + li {
+.settings-item-list li + li {
   border-top: 1px solid var(--border);
 }
 
-.passkey-list .danger-action {
+.settings-item-list .danger-action {
   color: var(--danger);
 }
 
@@ -621,13 +621,13 @@
     gap: 12px;
   }
 
-  .passkey-actions {
+  .settings-item-actions {
     width: 100%;
     align-items: stretch;
     flex-direction: column;
   }
 
-  .passkey-copy {
+  .settings-item-copy {
     flex: 1 1 auto;
   }
 }
@@ -688,10 +688,10 @@
   flex-wrap: wrap;
 }
 
-.invitation-list .passkey-actions {
+.invitation-list .settings-item-actions {
   flex-direction: row;
 }
 
-.invitation-list .passkey-actions button {
+.invitation-list .settings-item-actions button {
   flex: 1;
 }

@@ -38,8 +38,7 @@ describe("server account management", () => {
       const login = await auth.login("owner", password ?? "");
       expect(login).not.toBeNull();
       expect(auth.invitations(login?.user.id ?? 0)).toMatchObject({
-        unlimited: true,
-        remaining: null,
+        allowance: { kind: "unlimited" },
       });
       expect(() => run("create-owner", "second-owner")).toThrow();
       expect(database.auth.findEnabledUser("second-owner")).toBeNull();
@@ -59,10 +58,10 @@ describe("server account management", () => {
       database.connection.prepare("UPDATE feed_sources SET refreshing = 1").run();
       expect(run("list")).toContain(first.user.publicId);
       run("set-owner", second.user.publicId);
-      expect(setup.invitations(first.user.id).unlimited).toBe(false);
-      expect(setup.invitations(second.user.id).unlimited).toBe(true);
+      expect(setup.invitations(first.user.id).allowance.kind).toBe("limited");
+      expect(setup.invitations(second.user.id).allowance.kind).toBe("unlimited");
       expect(() => run("set-owner", "missing-account")).toThrow();
-      expect(setup.invitations(second.user.id).unlimited).toBe(true);
+      expect(setup.invitations(second.user.id).allowance.kind).toBe("unlimited");
       expect(
         database.connection.prepare("SELECT MIN(refreshing) FROM feed_sources").pluck().get(),
       ).toBe(1);
