@@ -24,6 +24,7 @@ import { feedRoutes } from "./features/feeds/routes.js";
 import { folderRoutes } from "./features/folders/routes.js";
 import { opmlRoutes } from "./features/opml/routes.js";
 import { refreshRoutes } from "./features/refresh/routes.js";
+import { browserDeviceId } from "./features/routes.js";
 import { ruleRoutes } from "./features/rules/routes.js";
 import { settingsRoutes } from "./features/settings/routes.js";
 import { registerOperationalLogging } from "./logging.js";
@@ -186,6 +187,15 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
       return;
     const user = services.authService.userForToken(sessionToken(request.headers.cookie));
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
+    const browserAccount = request.headers["x-feedfold-account"];
+    if (browserAccount !== undefined && browserAccount !== user.publicId) {
+      return reply
+        .code(401)
+        .send({ error: "The signed-in account changed. Sign in again to continue." });
+    }
+    if (request.method === "POST" && path === "/api/auth/logout") {
+      ai.deleteDeviceKeys(user.id, browserDeviceId(request));
+    }
     requestUsers.set(request, user);
     const sensitive =
       (request.method === "POST" &&

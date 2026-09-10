@@ -1497,6 +1497,24 @@ const migrations: Migration[] = [
       DROP INDEX pending_registrations_username_idx;
     `,
   },
+  {
+    sql: `
+      ALTER TABLE ai_credentials RENAME TO previous_ai_credentials;
+      CREATE TABLE ai_credentials (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        device_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        encrypted_api_key TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(user_id, device_id, provider)
+      );
+      INSERT INTO ai_credentials
+        SELECT user_id, 'desktop', provider, encrypted_api_key, created_at, updated_at
+        FROM previous_ai_credentials WHERE encrypted_api_key LIKE 'desktop-v1.%';
+      DROP TABLE previous_ai_credentials;
+    `,
+  },
 ];
 
 export function migrateDatabase(

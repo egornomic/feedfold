@@ -18,6 +18,7 @@ const SENSITIVE_LOG_FIELDS = [
   "cookie",
   "authorization",
   "credentials",
+  "credential",
   "password",
   "token",
   "apiKey",

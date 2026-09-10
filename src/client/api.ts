@@ -1,6 +1,8 @@
 import type { DesktopOperation } from "../shared/desktop.js";
+import type { AiProvider } from "../shared/types.js";
 import { createApiClient } from "./api-client.js";
 import { ApiError, AUTH_REQUIRED_EVENT, appUrl } from "./api-contract.js";
+import { createBrowserRequest } from "./browser-api.js";
 import { invokeDesktop, isDesktopApp } from "./desktop.js";
 
 export type {
@@ -60,13 +62,16 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal | null): Promise
   });
 }
 
+const browserRequest = createBrowserRequest(httpRequest);
+
 async function request<T>(
   operation: DesktopOperation,
   payload: unknown,
   path: string,
   init?: RequestInit,
+  aiProvider?: AiProvider | null,
 ): Promise<T> {
-  if (!isDesktopApp()) return httpRequest<T>(path, init);
+  if (!isDesktopApp()) return browserRequest<T>(operation, payload, path, init, aiProvider);
   try {
     return await abortable(invokeDesktop<T>(operation, payload), init?.signal);
   } catch (error) {

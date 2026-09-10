@@ -8,6 +8,7 @@ import type {
   AiFeature,
   AiFeatureSetting,
   AiProvider,
+  AiRequestCredential,
   AiSettings,
   ArticleAiSummary,
   ArticleAiTranslation,
@@ -107,13 +108,13 @@ export class AiService {
     this.currentDate = options.currentDate ?? (() => new Date());
   }
 
-  getSettings(userId: number): AiSettings {
-    const configured = new Set(this.database.ai.listConfiguredAiProviders(userId));
+  getSettings(userId: number, deviceId?: string): AiSettings {
+    const configured = new Set(this.database.ai.listConfiguredAiProviders(userId, deviceId));
     const articleSummary = this.validFeatureSetting(
       this.database.ai.getAiFeatureSetting(userId, "article_summary"),
     );
     return {
-      credentialStorageAvailable: this.options.credentialCipher !== null,
+      credentialStorageAvailable: deviceId !== undefined || this.options.credentialCipher !== null,
       providers: [...this.providers.values()].map((provider) => ({
         id: provider.id,
         label: provider.label,
@@ -130,6 +131,7 @@ export class AiService {
     feature: AiFeature,
     providerId: AiProvider,
     model?: string,
+    deviceId?: string,
   ): AiSettings {
     const provider = this.providers.get(providerId);
     if (!provider) {
@@ -140,7 +142,7 @@ export class AiService {
       provider: providerId,
       model: selectedModel,
     });
-    return this.getSettings(userId);
+    return this.getSettings(userId, deviceId);
   }
 
   setApiKey(userId: number, provider: AiProvider, apiKey: string): AiSettings {
@@ -149,7 +151,7 @@ export class AiService {
       throw new AiError(
         "AI_CREDENTIAL_STORAGE_UNAVAILABLE",
         503,
-        "API key storage is unavailable. Set AI_CREDENTIALS_KEY on the server, then restart feedfold.",
+        "Secure API-key storage is unavailable on this Mac.",
       );
     }
     const encrypted = cipher.encrypt(userId, provider, apiKey.trim());
@@ -157,15 +159,34 @@ export class AiService {
     return this.getSettings(userId);
   }
 
-  deleteApiKey(userId: number, provider: AiProvider): AiSettings {
-    this.database.ai.deleteAiCredential(userId, provider);
-    return this.getSettings(userId);
+  setBrowserKey(
+    userId: number,
+    deviceId: string,
+    provider: AiProvider,
+    encryptedApiKey: string,
+  ): AiSettings {
+    this.database.ai.setEncryptedAiCredential(userId, provider, encryptedApiKey, deviceId);
+    return this.getSettings(userId, deviceId);
+  }
+
+  browserKey(userId: number, deviceId: string, provider: AiProvider): string | null {
+    return this.database.ai.getEncryptedAiCredential(userId, provider, deviceId);
+  }
+
+  deleteDeviceKeys(userId: number, deviceId: string): void {
+    this.database.ai.deleteDeviceAiCredentials(userId, deviceId);
+  }
+
+  deleteApiKey(userId: number, provider: AiProvider, deviceId?: string): AiSettings {
+    this.database.ai.deleteAiCredential(userId, provider, deviceId);
+    return this.getSettings(userId, deviceId);
   }
 
   async generateText(
     userId: number,
     feature: AiFeature,
     request: FeatureGenerationRequest,
+    credential?: AiRequestCredential,
   ): Promise<FeatureGenerationResult> {
     const setting = this.validFeatureSetting(this.database.ai.getAiFeatureSetting(userId, feature));
     if (!setting) {
@@ -175,7 +196,7 @@ export class AiService {
         "Choose an AI provider and model in Settings, then try again.",
       );
     }
-    return this.generateWithProvider(userId, setting.provider, setting.model, request);
+    return this.generateWithProvider(userId, setting.provider, setting.model, request, credential);
   }
 
   private async generateWithProvider(
@@ -183,31 +204,34 @@ export class AiService {
     providerId: AiProvider,
     model: string,
     request: FeatureGenerationRequest,
+    credential?: AiRequestCredential,
     missingKeyMessage?: string,
   ): Promise<FeatureGenerationResult> {
     const provider = this.providers.get(providerId);
     if (!provider) {
       throw new AiError("AI_NOT_CONFIGURED", 422, "Choose an AI provider in Settings.");
     }
-    const encryptedKey = this.database.ai.getEncryptedAiCredential(userId, providerId);
-    if (!encryptedKey) {
+    const cipher = this.options.credentialCipher;
+    const encryptedKey = cipher
+      ? this.database.ai.getEncryptedAiCredential(userId, providerId)
+      : null;
+    const apiKey =
+      credential?.provider === providerId
+        ? credential.apiKey
+        : encryptedKey && cipher
+          ? cipher.decrypt(userId, providerId, encryptedKey)
+          : null;
+    if (!apiKey) {
       throw new AiError(
         "AI_KEY_MISSING",
         422,
-        missingKeyMessage ?? `Add an API key for ${provider.label} in Settings, then try again.`,
-      );
-    }
-    const cipher = this.options.credentialCipher;
-    if (!cipher) {
-      throw new AiError(
-        "AI_CREDENTIAL_STORAGE_UNAVAILABLE",
-        503,
-        "The server cannot decrypt saved API keys. Set AI_CREDENTIALS_KEY, then restart feedfold.",
+        missingKeyMessage ??
+          `Add an API key for ${provider.label} on this device in Settings, then try again.`,
       );
     }
     const result = await this.database.quotas.runOutbound(() =>
       provider.generateText({
-        apiKey: cipher.decrypt(userId, providerId, encryptedKey),
+        apiKey,
         model,
         ...request,
         signal: AbortSignal.timeout(
@@ -223,6 +247,7 @@ export class AiService {
     userId: number,
     setting: AiFeatureSetting | null,
     request: FeatureGenerationRequest,
+    credential?: AiRequestCredential,
   ): Promise<FeatureGenerationResult> {
     const gemini = this.providers.get("gemini");
     if (!gemini) {
@@ -234,6 +259,7 @@ export class AiService {
       "gemini",
       model,
       request,
+      credential,
       "Add a Google Gemini API key in Settings to summarize YouTube videos.",
     );
   }
@@ -243,6 +269,7 @@ export class AiService {
     articleId: number,
     customPromptId: string | null,
     regenerate = false,
+    credential?: AiRequestCredential,
   ): Promise<ArticleAiSummary | null> {
     const { summaryPrompt, customPrompts } = this.database.settings.getSettings(userId);
     const customPrompt = customPromptId
@@ -271,6 +298,7 @@ export class AiService {
       prompt,
       customPromptId,
       version,
+      credential,
     ).finally(() => {
       this.summariesInFlight.delete(key);
     });
@@ -282,6 +310,7 @@ export class AiService {
     userId: number,
     articleId: number,
     sourceKind: AiArticleSourceKind,
+    credential?: AiRequestCredential,
   ): Promise<ArticleAiTranslation | null> {
     const { translationLanguage: language, translationPrompt } =
       this.database.settings.getSettings(userId);
@@ -300,6 +329,7 @@ export class AiService {
       language,
       translationPrompt,
       version,
+      credential,
     ).finally(() => {
       this.translationsInFlight.delete(key);
     });
@@ -314,6 +344,7 @@ export class AiService {
     prompt: string,
     promptId: string | null,
     version: number,
+    credential?: AiRequestCredential,
   ): Promise<ArticleAiSummary | null> {
     const article = this.database.ai.getArticleForAi(userId, articleId);
     if (!article) return null;
@@ -350,8 +381,8 @@ export class AiService {
       webSearch: useWebSearch,
     };
     const generated = videoUrl
-      ? await this.generateYouTubeSummary(userId, setting, request)
-      : await this.generateText(userId, "article_summary", request);
+      ? await this.generateYouTubeSummary(userId, setting, request, credential)
+      : await this.generateText(userId, "article_summary", request, credential);
     if (useWebSearch) {
       return {
         text: generated.text,
@@ -390,6 +421,7 @@ export class AiService {
     language: string,
     prompt: string,
     version: number,
+    credential?: AiRequestCredential,
   ): Promise<ArticleAiTranslation | null> {
     const article = this.database.ai.getArticleForAi(userId, articleId);
     if (!article) return null;
@@ -403,12 +435,17 @@ export class AiService {
       return publicTranslation(current);
     }
     const prepared = prepareArticleTranslation(article, language, sourceKind);
-    const generated = await this.generateText(userId, "article_summary", {
-      system: prompt,
-      input: prepared.input,
-      maxOutputTokens: ARTICLE_TRANSLATION_MAX_OUTPUT_TOKENS,
-      webSearch: false,
-    });
+    const generated = await this.generateText(
+      userId,
+      "article_summary",
+      {
+        system: prompt,
+        input: prepared.input,
+        maxOutputTokens: ARTICLE_TRANSLATION_MAX_OUTPUT_TOKENS,
+        webSearch: false,
+      },
+      credential,
+    );
     const html = renderArticleTranslation(prepared, generated.text);
     const saved = this.database.ai.saveArticleAiTranslation(userId, articleId, article.revision, {
       promptVersion: version,

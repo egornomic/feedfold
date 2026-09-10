@@ -211,15 +211,21 @@ export async function articleRoutes(
 
   app.post("/api/articles/:id/summary", async (request, reply) => {
     const { id } = idParams.parse(request.params);
-    const { promptId, regenerate } = inputs.summarizeArticle.parse(request.body ?? {});
-    const summary = await ai.summarizeArticle(userId(request), id, promptId, regenerate);
+    const { promptId, regenerate, credential } = inputs.summarizeArticle.parse(request.body ?? {});
+    const summary = await ai.summarizeArticle(
+      userId(request),
+      id,
+      promptId,
+      regenerate,
+      credential,
+    );
     return summary ?? missing(reply, "Article");
   });
 
   app.post("/api/articles/:id/translation", async (request, reply) => {
     const { id } = idParams.parse(request.params);
-    const { sourceKind } = inputs.translateArticle.parse(request.body);
-    const translation = await ai.translateArticle(userId(request), id, sourceKind);
+    const { sourceKind, credential } = inputs.translateArticle.parse(request.body);
+    const translation = await ai.translateArticle(userId(request), id, sourceKind, credential);
     return translation ?? missing(reply, "Article");
   });
 }

@@ -4,6 +4,11 @@ import { resourceId } from "../../shared/api-inputs.js";
 
 export type UserId = (request: FastifyRequest) => number;
 
+export function browserDeviceId(request: FastifyRequest, required = false): string {
+  const value = request.headers["x-feedfold-device"];
+  return value === undefined && !required ? "unregistered" : z.uuid().parse(value);
+}
+
 export const idParams = z.object({ id: z.coerce.number().pipe(resourceId) });
 
 export function missing(reply: FastifyReply, resource: string): FastifyReply {

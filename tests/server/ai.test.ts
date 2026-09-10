@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
+import { decryptAiKey, encryptAiKey } from "../../src/client/ai-vault.js";
 import {
   ARTICLE_SUMMARY_PROMPT_VERSION,
   prepareArticleSummary,
@@ -10,7 +11,6 @@ import {
   prepareArticleTranslation,
   renderArticleTranslation,
 } from "../../src/server/ai/article-translation.js";
-import { CredentialCipher } from "../../src/server/ai/credential-cipher.js";
 import { AiError } from "../../src/server/ai/errors.js";
 import { createAiProviders } from "../../src/server/ai/providers.js";
 import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
@@ -18,9 +18,9 @@ import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import { DEFAULT_FACTCHECK_PROMPT } from "../../src/shared/ai-prompts.js";
+import type { AiRequestCredential } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
-const CREDENTIAL_KEY = "11".repeat(32);
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -286,14 +286,20 @@ async function liveGeminiProvider(): Promise<{
 describe("AI article summaries", () => {
   it("encrypts provider keys per account and never exposes them through settings", async () => {
     const { database, readerId, partnerId } = await databaseWithUsers();
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
-    const service = new AiService(database, { credentialCipher: cipher });
+    const service = new AiService(database, { credentialCipher: null });
 
-    service.setApiKey(readerId, "openai", "reader-secret-key");
+    const device = {
+      id: crypto.randomUUID(),
+      key: await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, [
+        "encrypt",
+        "decrypt",
+      ]),
+    };
+    const encrypted = await encryptAiKey(device, String(readerId), "openai", "reader-secret-key");
+    service.setBrowserKey(readerId, device.id, "openai", encrypted);
     service.setFeatureSetting(readerId, "article_summary", "openai");
 
-    const readerSettings = service.getSettings(readerId);
+    const readerSettings = service.getSettings(readerId, device.id);
     expect(readerSettings).toMatchObject({
       credentialStorageAvailable: true,
       features: { articleSummary: { provider: "openai", model: "gpt-5.6-luna" } },
@@ -305,17 +311,25 @@ describe("AI article summaries", () => {
       defaultModel: "gemini-3.6-flash",
       models: [{ id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" }],
     });
-    const partnerSettings = service.getSettings(partnerId);
+    const partnerSettings = service.getSettings(partnerId, device.id);
     expect(partnerSettings).toMatchObject({
       features: { articleSummary: null },
     });
     expect(partnerSettings.providers.find((provider) => provider.id === "openai")).toMatchObject({
       configured: false,
     });
-    const stored = database.ai.getEncryptedAiCredential(readerId, "openai");
+    const stored = database.ai.getEncryptedAiCredential(readerId, "openai", device.id);
     expect(stored).not.toBeNull();
     expect(stored).not.toContain("reader-secret-key");
-    expect(() => cipher.decrypt(partnerId, "openai", stored ?? "")).toThrow(AiError);
+    expect(await decryptAiKey(device, String(readerId), "openai", stored ?? "")).toBe(
+      "reader-secret-key",
+    );
+    await expect(decryptAiKey(device, String(partnerId), "openai", stored ?? "")).rejects.toThrow();
+    expect(
+      service
+        .getSettings(readerId, crypto.randomUUID())
+        .providers.every((provider) => !provider.configured),
+    ).toBe(true);
   });
 
   it("prefers full article text and keeps both ends of oversized sources", () => {
@@ -345,14 +359,17 @@ describe("AI article summaries", () => {
   it("requires a Google Gemini key for YouTube summaries", async () => {
     const { database, readerId } = await databaseWithUsers();
     const articleId = addYouTubeArticle(database, readerId);
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
     const { providers, requests } = await liveGeminiProvider();
-    const service = new AiService(database, { credentialCipher: cipher, providers });
-    service.setApiKey(readerId, "openai", "openai-key");
+    const service = new AiService(database, { credentialCipher: null, providers });
+    const credential: AiRequestCredential | undefined = {
+      provider: "openai",
+      apiKey: "openai-key",
+    };
     service.setFeatureSetting(readerId, "article_summary", "openai");
 
-    await expect(service.summarizeArticle(readerId, articleId, null)).rejects.toMatchObject({
+    await expect(
+      service.summarizeArticle(readerId, articleId, null, false, credential),
+    ).rejects.toMatchObject({
       code: "AI_KEY_MISSING",
       statusCode: 422,
       message: "Add a Google Gemini API key in Settings to summarize YouTube videos.",
@@ -364,13 +381,14 @@ describe("AI article summaries", () => {
   it("sends the native YouTube video to Gemini when its key is configured", async () => {
     const { database, readerId } = await databaseWithUsers();
     const articleId = addYouTubeArticle(database, readerId);
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
     const { providers, requests } = await liveGeminiProvider();
-    const service = new AiService(database, { credentialCipher: cipher, providers });
-    service.setApiKey(readerId, "gemini", "gemini-key");
+    const service = new AiService(database, { credentialCipher: null, providers });
+    const credential: AiRequestCredential | undefined = {
+      provider: "gemini",
+      apiKey: "gemini-key",
+    };
 
-    const summary = await service.summarizeArticle(readerId, articleId, null);
+    const summary = await service.summarizeArticle(readerId, articleId, null, false, credential);
 
     expect(summary).toMatchObject({
       provider: "gemini",
@@ -475,15 +493,16 @@ describe("AI article summaries", () => {
   it("uses the summary model for cached translations in the configured account language", async () => {
     const { database, readerId } = await databaseWithUsers();
     const { articleId } = addArticle(database, readerId);
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
     const { providers, requests } = await liveOpenAiProvider();
-    const service = new AiService(database, { credentialCipher: cipher, providers });
-    service.setApiKey(readerId, "openai", "live-provider-test-key");
+    const service = new AiService(database, { credentialCipher: null, providers });
+    let credential: AiRequestCredential | undefined = {
+      provider: "openai",
+      apiKey: "live-provider-test-key",
+    };
     service.setFeatureSetting(readerId, "article_summary", "openai", "shared-reader-model");
     database.settings.updateSettings(readerId, { translationLanguage: "Polish" });
 
-    const first = await service.translateArticle(readerId, articleId, "feed");
+    const first = await service.translateArticle(readerId, articleId, "feed", credential);
     expect(first).toMatchObject({
       html: "<article><p>Polski fragment 0</p></article>",
       language: "Polish",
@@ -499,16 +518,16 @@ describe("AI article summaries", () => {
       input: expect.stringContaining("Target language: Polish"),
     });
 
-    expect(await service.translateArticle(readerId, articleId, "feed")).toEqual(first);
+    expect(await service.translateArticle(readerId, articleId, "feed", credential)).toEqual(first);
     expect(requests).toHaveLength(1);
 
-    service.deleteApiKey(readerId, "openai");
-    expect(await service.translateArticle(readerId, articleId, "feed")).toEqual(first);
+    credential = undefined;
+    expect(await service.translateArticle(readerId, articleId, "feed", credential)).toEqual(first);
     expect(requests).toHaveLength(1);
 
-    service.setApiKey(readerId, "openai", "live-provider-test-key");
+    credential = { provider: "openai", apiKey: "live-provider-test-key" };
     database.settings.updateSettings(readerId, { translationLanguage: "French" });
-    expect(await service.translateArticle(readerId, articleId, "feed")).toMatchObject({
+    expect(await service.translateArticle(readerId, articleId, "feed", credential)).toMatchObject({
       html: "<article><p>Français fragment 0</p></article>",
       language: "French",
       model: "shared-reader-model",
@@ -519,22 +538,23 @@ describe("AI article summaries", () => {
   it("uses live Google Search for fact-checks without caching grounded results", async () => {
     const { database, readerId } = await databaseWithUsers();
     const { articleId } = addArticle(database, readerId);
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
     const { providers, requests } = await liveGeminiProvider();
     const service = new AiService(database, {
-      credentialCipher: cipher,
+      credentialCipher: null,
       currentDate: () => new Date("2026-07-30T12:00:00.000Z"),
       providers,
     });
-    service.setApiKey(readerId, "gemini", "live-provider-test-key");
+    const credential: AiRequestCredential | undefined = {
+      provider: "gemini",
+      apiKey: "live-provider-test-key",
+    };
     service.setFeatureSetting(readerId, "article_summary", "gemini", "grounded-model");
     const promptId = "e12ad47d-efab-4a43-a930-3b0bca4f63dc";
     database.settings.updateSettings(readerId, {
       customPrompts: [{ id: promptId, name: "Factcheck", prompt: "Factcheck the article." }],
     });
 
-    const first = await service.summarizeArticle(readerId, articleId, promptId);
+    const first = await service.summarizeArticle(readerId, articleId, promptId, false, credential);
 
     expect(first).toMatchObject({
       text: "The product was released in July 2026.",
@@ -560,10 +580,10 @@ describe("AI article summaries", () => {
     });
     expect(database.articles.getArticle(readerId, articleId)?.aiSummary).toBeNull();
 
-    await service.summarizeArticle(readerId, articleId, promptId);
+    await service.summarizeArticle(readerId, articleId, promptId, false, credential);
     expect(requests).toHaveLength(2);
 
-    const summary = await service.summarizeArticle(readerId, articleId, null);
+    const summary = await service.summarizeArticle(readerId, articleId, null, false, credential);
     expect(summary?.grounding).toBeNull();
     expect(requests).toHaveLength(3);
     expect(requests[2]).not.toHaveProperty("tools");
@@ -581,18 +601,25 @@ describe("AI article summaries", () => {
   it("uses native OpenAI web search for fact-checks", async () => {
     const { database, readerId } = await databaseWithUsers();
     const { articleId } = addArticle(database, readerId);
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
     const { providers, requests } = await liveOpenAiProvider();
     const service = new AiService(database, {
-      credentialCipher: cipher,
+      credentialCipher: null,
       currentDate: () => new Date("2026-07-30T12:00:00.000Z"),
       providers,
     });
-    service.setApiKey(readerId, "openai", "live-provider-test-key");
+    const credential: AiRequestCredential | undefined = {
+      provider: "openai",
+      apiKey: "live-provider-test-key",
+    };
     service.setFeatureSetting(readerId, "article_summary", "openai", "grounded-model");
 
-    const result = await service.summarizeArticle(readerId, articleId, DEFAULT_FACTCHECK_PROMPT.id);
+    const result = await service.summarizeArticle(
+      readerId,
+      articleId,
+      DEFAULT_FACTCHECK_PROMPT.id,
+      false,
+      credential,
+    );
 
     expect(result).toMatchObject({
       provider: "openai",
@@ -624,14 +651,21 @@ describe("AI article summaries", () => {
   it("uses native Anthropic web search and continues paused fact-checks", async () => {
     const { database, readerId } = await databaseWithUsers();
     const { articleId } = addArticle(database, readerId);
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
     const { providers, requests } = await liveAnthropicProvider();
-    const service = new AiService(database, { credentialCipher: cipher, providers });
-    service.setApiKey(readerId, "anthropic", "live-provider-test-key");
+    const service = new AiService(database, { credentialCipher: null, providers });
+    const credential: AiRequestCredential | undefined = {
+      provider: "anthropic",
+      apiKey: "live-provider-test-key",
+    };
     service.setFeatureSetting(readerId, "article_summary", "anthropic", "grounded-model");
 
-    const result = await service.summarizeArticle(readerId, articleId, DEFAULT_FACTCHECK_PROMPT.id);
+    const result = await service.summarizeArticle(
+      readerId,
+      articleId,
+      DEFAULT_FACTCHECK_PROMPT.id,
+      false,
+      credential,
+    );
 
     expect(result).toMatchObject({
       provider: "anthropic",
@@ -671,15 +705,16 @@ describe("AI article summaries", () => {
   it("wraps account prompts in the shared harness and regenerates after prompt changes", async () => {
     const { database, readerId } = await databaseWithUsers();
     const { articleId } = addArticle(database, readerId);
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
     const { providers, requests } = await liveOpenAiProvider();
     const service = new AiService(database, {
-      credentialCipher: cipher,
+      credentialCipher: null,
       currentDate: () => new Date("2026-07-30T12:00:00.000Z"),
       providers,
     });
-    service.setApiKey(readerId, "openai", "live-provider-test-key");
+    const credential: AiRequestCredential | undefined = {
+      provider: "openai",
+      apiKey: "live-provider-test-key",
+    };
     service.setFeatureSetting(readerId, "article_summary", "openai", "shared-reader-model");
     database.settings.updateSettings(readerId, {
       translationLanguage: "Polish",
@@ -687,8 +722,8 @@ describe("AI article summaries", () => {
       translationPrompt: "Translate every marked fragment and return one JSON object.",
     });
 
-    await service.summarizeArticle(readerId, articleId, null);
-    await service.translateArticle(readerId, articleId, "feed");
+    await service.summarizeArticle(readerId, articleId, null, false, credential);
+    await service.translateArticle(readerId, articleId, "feed", credential);
     expect(requests).toHaveLength(2);
     const summaryInstructions = String(requests[0]?.instructions);
     expect(summaryInstructions).toContain("Current date (UTC): 2026-07-30.");
@@ -700,8 +735,8 @@ describe("AI article summaries", () => {
       instructions: "Translate every marked fragment and return one JSON object.",
     });
 
-    await service.summarizeArticle(readerId, articleId, null);
-    await service.translateArticle(readerId, articleId, "feed");
+    await service.summarizeArticle(readerId, articleId, null, false, credential);
+    await service.translateArticle(readerId, articleId, "feed", credential);
     expect(requests).toHaveLength(2);
 
     database.settings.updateSettings(readerId, {
@@ -710,8 +745,8 @@ describe("AI article summaries", () => {
     });
     expect(database.articles.getArticle(readerId, articleId)?.aiSummary).toBeNull();
 
-    await service.summarizeArticle(readerId, articleId, null);
-    await service.translateArticle(readerId, articleId, "feed");
+    await service.summarizeArticle(readerId, articleId, null, false, credential);
+    await service.translateArticle(readerId, articleId, "feed", credential);
     expect(requests).toHaveLength(4);
     expect(String(requests[2]?.instructions)).toContain(
       "Task:\nWrite a detailed summary with key points.",
@@ -733,13 +768,15 @@ describe("AI article summaries", () => {
     expect(database.articles.getArticle(readerId, articleId)?.aiSummary).toMatchObject({
       promptId: null,
     });
-    expect(await service.summarizeArticle(readerId, articleId, customPromptId)).toMatchObject({
+    expect(
+      await service.summarizeArticle(readerId, articleId, customPromptId, false, credential),
+    ).toMatchObject({
       promptId: customPromptId,
     });
     expect(String(requests[4]?.instructions)).toContain(
       "Task:\nList the decisions in this article and identify who made each one.",
     );
-    await service.summarizeArticle(readerId, articleId, customPromptId);
+    await service.summarizeArticle(readerId, articleId, customPromptId, false, credential);
     expect(requests).toHaveLength(5);
 
     database.settings.updateSettings(readerId, {
@@ -752,12 +789,18 @@ describe("AI article summaries", () => {
       ],
     });
     expect(database.articles.getArticle(readerId, articleId)?.aiSummary).toBeNull();
-    await service.summarizeArticle(readerId, articleId, customPromptId);
+    await service.summarizeArticle(readerId, articleId, customPromptId, false, credential);
     expect(String(requests[5]?.instructions)).toContain(
       "Task:\nReturn only a bullet list of decisions and their owners.",
     );
     await expect(
-      service.summarizeArticle(readerId, articleId, "dfd3e6da-9d4f-4401-8e30-76b4013d5959"),
+      service.summarizeArticle(
+        readerId,
+        articleId,
+        "dfd3e6da-9d4f-4401-8e30-76b4013d5959",
+        false,
+        credential,
+      ),
     ).rejects.toMatchObject({ code: "CUSTOM_PROMPT_NOT_FOUND", statusCode: 404 });
   });
 
@@ -818,9 +861,7 @@ describe("AI article summaries", () => {
   it("explains whether the provider selection or its API key is missing", async () => {
     const { database, readerId } = await databaseWithUsers();
     const { articleId } = addArticle(database, readerId);
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
-    const service = new AiService(database, { credentialCipher: cipher });
+    const service = new AiService(database, { credentialCipher: null });
 
     await expect(service.summarizeArticle(readerId, articleId, null)).rejects.toMatchObject({
       code: "AI_NOT_CONFIGURED",
@@ -847,9 +888,7 @@ describe("AI article summaries", () => {
 
   it("stores any provider model ID entered by the user", async () => {
     const { database, readerId } = await databaseWithUsers();
-    const cipher = CredentialCipher.fromHex(CREDENTIAL_KEY);
-    if (!cipher) throw new Error("Credential cipher was not created");
-    const service = new AiService(database, { credentialCipher: cipher });
+    const service = new AiService(database, { credentialCipher: null });
 
     const settings = service.setFeatureSetting(
       readerId,

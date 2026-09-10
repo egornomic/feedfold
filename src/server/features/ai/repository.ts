@@ -50,44 +50,61 @@ export class AiRepository {
     return this.getAiFeatureSetting(userId, feature) as AiFeatureSetting;
   }
 
-  listConfiguredAiProviders(userId: number): AiProvider[] {
+  listConfiguredAiProviders(userId: number, deviceId = "desktop"): AiProvider[] {
     return (
       this.sqlite
-        .prepare("SELECT provider FROM ai_credentials WHERE user_id = ? ORDER BY provider")
-        .all(userId) as Array<{ provider: AiProvider }>
+        .prepare(
+          "SELECT provider FROM ai_credentials WHERE user_id = ? AND device_id = ? ORDER BY provider",
+        )
+        .all(userId, deviceId) as Array<{ provider: AiProvider }>
     ).map((row) => row.provider);
   }
 
-  getEncryptedAiCredential(userId: number, provider: AiProvider): string | null {
+  getEncryptedAiCredential(
+    userId: number,
+    provider: AiProvider,
+    deviceId = "desktop",
+  ): string | null {
     const row = this.sqlite
       .prepare(
         `SELECT encrypted_api_key AS encryptedApiKey
-         FROM ai_credentials WHERE user_id = ? AND provider = ?`,
+         FROM ai_credentials WHERE user_id = ? AND provider = ? AND device_id = ?`,
       )
-      .get(userId, provider) as { encryptedApiKey: string } | undefined;
+      .get(userId, provider, deviceId) as { encryptedApiKey: string } | undefined;
     return row?.encryptedApiKey ?? null;
   }
 
-  setEncryptedAiCredential(userId: number, provider: AiProvider, encryptedApiKey: string): void {
+  setEncryptedAiCredential(
+    userId: number,
+    provider: AiProvider,
+    encryptedApiKey: string,
+    deviceId = "desktop",
+  ): void {
     const timestamp = now();
     this.sqlite
       .prepare(
         `INSERT INTO ai_credentials (
-           user_id, provider, encrypted_api_key, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(user_id, provider) DO UPDATE SET
+           user_id, provider, encrypted_api_key, device_id, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, device_id, provider) DO UPDATE SET
            encrypted_api_key = excluded.encrypted_api_key,
            updated_at = excluded.updated_at`,
       )
-      .run(userId, provider, encryptedApiKey, timestamp, timestamp);
+      .run(userId, provider, encryptedApiKey, deviceId, timestamp, timestamp);
   }
 
-  deleteAiCredential(userId: number, provider: AiProvider): boolean {
+  deleteAiCredential(userId: number, provider: AiProvider, deviceId = "desktop"): boolean {
     return (
       this.sqlite
-        .prepare("DELETE FROM ai_credentials WHERE user_id = ? AND provider = ?")
-        .run(userId, provider).changes > 0
+        .prepare("DELETE FROM ai_credentials WHERE user_id = ? AND provider = ? AND device_id = ?")
+        .run(userId, provider, deviceId).changes > 0
     );
+  }
+
+  deleteDeviceAiCredentials(userId: number, deviceId: string): void {
+    this.sqlite
+      .prepare("DELETE FROM ai_credentials WHERE user_id = ? AND device_id = ?")
+      .run(userId, deviceId);
   }
 
   deleteDefaultArticleSummaries(userId: number): void {

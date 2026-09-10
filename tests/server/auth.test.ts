@@ -1,4 +1,7 @@
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
+import { createApiClient } from "../../src/client/api-client.js";
+import { createBrowserRequest } from "../../src/client/browser-api.js";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
@@ -39,6 +42,42 @@ function cookieFrom(setCookie: string | string[] | undefined): string {
 }
 
 describe("hosted account authentication", () => {
+  it("keeps reading and logout available when device key storage is unavailable", async () => {
+    const { app, database } = await authApp();
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
+    let cookie = "";
+    const request = createBrowserRequest(
+      async <T>(path: string, init?: RequestInit): Promise<T> => {
+        const headers = new Headers(init?.headers);
+        if (cookie) headers.set("cookie", cookie);
+        if (init?.body) headers.set("content-type", "application/json");
+        const response = await fetch(base + path, { ...init, headers });
+        if (response.headers.has("set-cookie"))
+          cookie = cookieFrom(response.headers.get("set-cookie") ?? undefined);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.status === 204 ? (undefined as T) : response.json();
+      },
+    );
+    const api = createApiClient({
+      request,
+      subscribeReaderDataInvalidations: () => () => {},
+      exportOpml: async () => {},
+    });
+    await api.register("storage-unavailable", "reader-password");
+    expect((await api.session()).username).toBe("storage-unavailable");
+    expect((await api.bootstrap()).aiSettings.credentialStorageAvailable).toBe(false);
+    expect((await api.aiSettings()).credentialStorageAvailable).toBe(false);
+    await expect(api.saveAiProviderKey("openai", "must-not-be-stored")).rejects.toThrow(
+      "Secure key storage is unavailable",
+    );
+    expect(database.connection.prepare("SELECT COUNT(*) FROM ai_credentials").pluck().get()).toBe(
+      0,
+    );
+    await api.logout();
+    await expect(api.session()).rejects.toThrow("HTTP 401");
+  });
+
   it("uses opaque public account IDs and atomically enforces the account cap", async () => {
     const { app, database } = await authApp(undefined, { maxAccounts: 2 });
     const attempts = await Promise.all(
@@ -479,8 +518,8 @@ describe("hosted account authentication", () => {
     database.connection
       .prepare(
         `INSERT INTO ai_credentials (
-           user_id, provider, encrypted_api_key, created_at, updated_at
-         ) VALUES (?, 'openai', 'encrypted-key', ?, ?)`,
+           user_id, device_id, provider, encrypted_api_key, created_at, updated_at
+         ) VALUES (?, 'desktop', 'openai', 'encrypted-key', ?, ?)`,
       )
       .run(userId, timestamp, timestamp);
     database.connection

@@ -429,7 +429,12 @@ export function useArticleActions({
         promptId,
       });
       try {
-        const summary = await api.summarizeArticle(article.id, promptId, regenerate);
+        const summary = await api.summarizeArticle(
+          article.id,
+          promptId,
+          regenerate,
+          isYouTubeVideo ? "gemini" : feature?.provider,
+        );
         if (!isCurrent("summary", article.id, requestId)) return;
         queue.setArticles((current) =>
           current.map((item) => (item.id === article.id ? { ...item, aiSummary: summary } : item)),
@@ -509,7 +514,11 @@ export function useArticleActions({
         configurationMissing: false,
       });
       try {
-        const translation = await api.translateArticle(article.id, sourceKind);
+        const translation = await api.translateArticle(
+          article.id,
+          sourceKind,
+          bootstrap?.aiSettings.features.articleSummary?.provider,
+        );
         if (!isCurrent("translation", article.id, requestId)) return;
         const currentArticle = queue.articlesRef.current.find((item) => item.id === article.id);
         const currentSourceKind = currentArticle
@@ -542,7 +551,14 @@ export function useArticleActions({
         finish("translation", article.id, requestId);
       }
     },
-    [finish, isCurrent, patchArticleTranslationState, queue.articlesRef, start],
+    [
+      bootstrap?.aiSettings,
+      finish,
+      isCurrent,
+      patchArticleTranslationState,
+      queue.articlesRef,
+      start,
+    ],
   );
 
   const toggleArticleTranslation = useCallback(

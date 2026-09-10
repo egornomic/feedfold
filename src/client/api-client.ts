@@ -40,6 +40,7 @@ export interface ApiRuntime {
     payload: unknown,
     path: string,
     init?: RequestInit,
+    aiProvider?: AiProvider | null,
   ): Promise<T>;
   subscribeReaderDataInvalidations(listener: () => void): () => void;
   exportOpml(): Promise<void>;
@@ -276,7 +277,12 @@ export function createApiClient(runtime: ApiRuntime) {
         method: "POST",
       }),
 
-    summarizeArticle: (id: number, promptId: string | null, regenerate = false) =>
+    summarizeArticle: (
+      id: number,
+      promptId: string | null,
+      regenerate = false,
+      provider?: AiProvider | null,
+    ) =>
       request<ArticleAiSummary>(
         "summarizeArticle",
         { id, promptId, regenerate },
@@ -285,9 +291,10 @@ export function createApiClient(runtime: ApiRuntime) {
           method: "POST",
           body: JSON.stringify({ promptId, regenerate }),
         },
+        provider,
       ),
 
-    translateArticle: (id: number, sourceKind: AiArticleSourceKind) =>
+    translateArticle: (id: number, sourceKind: AiArticleSourceKind, provider?: AiProvider | null) =>
       request<ArticleAiTranslation>(
         "translateArticle",
         { id, sourceKind },
@@ -296,6 +303,7 @@ export function createApiClient(runtime: ApiRuntime) {
           method: "POST",
           body: JSON.stringify({ sourceKind }),
         },
+        provider,
       ),
 
     updateArticleState: (id: number, state: { isRead?: boolean; isStarred?: boolean }) =>

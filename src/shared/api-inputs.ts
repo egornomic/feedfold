@@ -77,6 +77,9 @@ const ruleFields = z
   })
   .strict();
 const aiProvider = z.enum(["gemini", "openai", "anthropic"]);
+const aiRequestCredential = z
+  .object({ provider: aiProvider, apiKey: z.string().trim().min(1).max(10_000) })
+  .strict();
 
 export const inputs = {
   url: z.object({ url: httpUrl }).strict(),
@@ -117,8 +120,19 @@ export const inputs = {
         .optional(),
     })
     .strict(),
-  summarizeArticle: z.object({ promptId: z.uuid().nullable(), regenerate: z.boolean() }).strict(),
-  translateArticle: z.object({ sourceKind: z.enum(["full", "feed", "excerpt"]) }).strict(),
+  summarizeArticle: z
+    .object({
+      promptId: z.uuid().nullable(),
+      regenerate: z.boolean(),
+      credential: aiRequestCredential.optional(),
+    })
+    .strict(),
+  translateArticle: z
+    .object({
+      sourceKind: z.enum(["full", "feed", "excerpt"]),
+      credential: aiRequestCredential.optional(),
+    })
+    .strict(),
   refresh: z.object({ feedIds: z.array(resourceId).max(1_000).optional() }).strict(),
   createFeed: z.discriminatedUnion("sourceKind", [
     feedFields.extend({ sourceKind: z.literal("published"), paused: z.boolean().optional() }),
@@ -173,6 +187,14 @@ export const inputs = {
     .object({ provider: aiProvider, model: z.string().trim().min(1).max(200).optional() })
     .strict(),
   saveAiProviderKey: z.object({ apiKey: z.string().trim().min(1).max(10_000) }).strict(),
+  saveBrowserAiKey: z
+    .object({
+      encryptedApiKey: z
+        .string()
+        .max(20_000)
+        .regex(/^browser-v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{23,}$/),
+    })
+    .strict(),
   importOpml: z.object({ opml: z.string().min(1) }).strict(),
 };
 

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { AiService } from "../ai/service.js";
-import type { UserId } from "../routes.js";
+import { browserDeviceId, type UserId } from "../routes.js";
 import type { BootstrapService } from "./service.js";
 
 export async function bootstrapRoutes(
@@ -11,7 +11,7 @@ export async function bootstrapRoutes(
     const accountId = userId(request);
     return {
       ...bootstrap.getBootstrap(accountId),
-      aiSettings: ai.getSettings(accountId),
+      aiSettings: ai.getSettings(accountId, browserDeviceId(request)),
     };
   });
 }

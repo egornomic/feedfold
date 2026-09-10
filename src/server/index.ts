@@ -1,7 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CredentialCipher } from "./ai/credential-cipher.js";
 import { createApp } from "./app.js";
 import { AppDatabase } from "./database.js";
 import {
@@ -179,7 +178,7 @@ const refreshService = new FeedRefreshService(
   webFeedService,
 );
 const aiService = new AiService(database, {
-  credentialCipher: CredentialCipher.fromHex(process.env.AI_CREDENTIALS_KEY),
+  credentialCipher: null,
   requestTimeoutMs: aiRequestTimeoutMs,
 });
 const app = await createApp({

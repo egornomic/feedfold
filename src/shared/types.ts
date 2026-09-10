@@ -37,6 +37,10 @@ export type RuleField = "title" | "author" | "summary" | "content" | "media" | "
 export type RuleAction = "hide" | "keep" | "mark_read";
 export type RuleConditionOperator = "and" | "or";
 export type AiProvider = "gemini" | "openai" | "anthropic";
+export interface AiRequestCredential {
+  provider: AiProvider;
+  apiKey: string;
+}
 export type AiFeature = "article_summary";
 export type AiArticleSourceKind = "full" | "feed" | "excerpt";
 export const MARK_READ_AGE_DAYS = [1, 2, 3, 7, 14] as const;

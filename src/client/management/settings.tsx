@@ -675,7 +675,7 @@ function AiSettingsSection({
   const removeKey = async () => {
     if (
       !window.confirm(
-        `Remove the ${provider.label} API key? Summaries and translations will stop until you save another key.`,
+        `Remove the ${provider.label} API key from this device? Summaries and translations on this device will stop until you save another key.`,
       )
     ) {
       return;
@@ -812,14 +812,9 @@ function AiSettingsSection({
         <div className="ai-settings-warning" role="alert">
           <AlertTriangle aria-hidden="true" size={17} />
           <span>
-            {isDesktopApp() ? (
-              "Secure API-key storage is unavailable on this Mac."
-            ) : (
-              <>
-                To save provider keys, set <code>AI_CREDENTIALS_KEY</code>, then restart or recreate
-                the server.
-              </>
-            )}
+            {isDesktopApp()
+              ? "Secure API-key storage is unavailable on this Mac."
+              : "Secure key storage is unavailable in this browser. Use HTTPS and allow site storage."}
           </span>
         </div>
       ) : null}
@@ -888,8 +883,10 @@ function AiSettingsSection({
           <strong>{provider.label} API key</strong>
           <p id="ai-api-key-help">
             {provider.configured
-              ? "A key is saved. Enter a new key only if you want to replace it."
-              : "feedfold encrypts this key on the server and does not show it again."}
+              ? "A key is saved on this device. Enter a new key only if you want to replace it."
+              : isDesktopApp()
+                ? "Your key is protected by this Mac’s Keychain."
+                : "Your browser encrypts this key before saving it. AI works automatically here; enter the key again on another browser or after signing out."}
           </p>
         </div>
         <form className="ai-key-form" onSubmit={(event) => void saveKey(event)}>

@@ -27,6 +27,43 @@ afterEach(async () => {
 });
 
 describe("database migrations", () => {
+  it("requires browser keys to be re-entered while retaining Mac-protected keys and AI preferences", () => {
+    const database = new AppDatabase(":memory:");
+    try {
+      database.ai.setAiFeatureSetting(1, "article_summary", {
+        provider: "openai",
+        model: "chosen-model",
+      });
+      database.connection.exec(`
+        DROP TABLE ai_credentials;
+        CREATE TABLE ai_credentials (
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          provider TEXT NOT NULL,
+          encrypted_api_key TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY(user_id, provider)
+        );
+        INSERT INTO ai_credentials VALUES (1, 'openai', 'v1.old-server-encrypted-key', '2026-09-10', '2026-09-10');
+        INSERT INTO ai_credentials VALUES (1, 'gemini', 'desktop-v1.mac-encrypted-key', '2026-09-10', '2026-09-10');
+        DELETE FROM migrations WHERE version = 46;
+      `);
+      migrateDatabase(database.connection, 20);
+      expect(database.ai.getEncryptedAiCredential(1, "openai")).toBeNull();
+      expect(database.ai.getEncryptedAiCredential(1, "gemini")).toBe(
+        "desktop-v1.mac-encrypted-key",
+      );
+      expect(database.ai.getEncryptedAiCredential(1, "gemini", crypto.randomUUID())).toBeNull();
+      expect(database.ai.getAiFeatureSetting(1, "article_summary")).toEqual({
+        provider: "openai",
+        model: "chosen-model",
+      });
+      expect(database.connection.pragma("integrity_check", { simple: true })).toBe("ok");
+    } finally {
+      database.close();
+    }
+  });
+
   it("updates stored X URL labels without changing descriptive citations or article state", () => {
     const database = new AppDatabase(":memory:");
     try {
