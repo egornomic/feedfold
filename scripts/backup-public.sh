@@ -5,7 +5,7 @@ exec 8>/run/lock/feedfold-backup.lock
 flock 8
 mkdir -p /srv/feedfold/backups
 volume=$(docker volume inspect feedfold_feedfold-data --format '{{.Mountpoint}}')
-backup="/srv/feedfold/backups/feedfold-$(date -u +%Y%m%dT%H%M%SZ).db"
+backup="/srv/feedfold/backups/feedfold-$(date -u +%Y%m%dT%H%M%S%NZ).db"
 sqlite3 "$volume/feedfold.db" ".backup '$backup'"
 if [[ $(sqlite3 "$backup" 'PRAGMA integrity_check;') != ok ]]; then
   echo 'Database backup failed its integrity check.' >&2
@@ -17,3 +17,9 @@ mapfile -t backups < <(find /srv/feedfold/backups -maxdepth 1 -name 'feedfold-*.
 for old_backup in "${backups[@]:2}"; do
   rm -- "$old_backup"
 done
+
+if [[ ${1:-} == export ]]; then
+  tar -czf - -C /srv/feedfold/backups "${backup##*/}.gz" \
+    -C /etc/feedfold feedfold.env -C /srv/feedfold revision \
+    | age --recipients-file /etc/feedfold/backup-recipient.txt
+fi

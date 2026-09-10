@@ -1,0 +1,43 @@
+name: Database backup
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download encrypted database backup
+        env:
+          BACKUP_KEY: ${{ secrets.FEEDFOLD_BACKUP_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.FEEDFOLD_DEPLOY_HOST_KEY }}
+          DEPLOY_HOST: ${{ vars.FEEDFOLD_DEPLOY_HOST }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$BACKUP_KEY" > ~/.ssh/feedfold
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/feedfold ~/.ssh/known_hosts
+          ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" > feedfold-backup.tar.gz.age
+          test -s feedfold-backup.tar.gz.age
+
+      - name: Retain encrypted backup
+        uses: actions/upload-artifact@v7
+        with:
+          name: feedfold-backup-${{ github.run_id }}
+          path: feedfold-backup.tar.gz.age
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove backup SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/feedfold
