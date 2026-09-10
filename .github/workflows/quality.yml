@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: quality-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
@@ -65,20 +65,15 @@ jobs:
           path: coverage/
           retention-days: 14
 
-      - name: Upload verified demo
-        uses: actions/upload-artifact@v7
-        with:
-          name: demo
-          path: dist/demo/
-          if-no-files-found: error
-          retention-days: 1
-
   deploy:
-    name: Deploy to Cloudflare
+    name: Deploy to DigitalOcean
     needs: quality
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     environment:
       name: production
       url: https://feedfold.com/
@@ -86,23 +81,29 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-          cache: npm
+      - name: Build production image
+        run: docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" --tag "feedfold:$GITHUB_SHA" .
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Download verified demo
-        uses: actions/download-artifact@v8
-        with:
-          name: demo
-          path: dist/demo/
-
-      - name: Deploy static demo
-        run: npx wrangler deploy
+      - name: Install deployment SSH credentials
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEPLOY_KEY: ${{ secrets.FEEDFOLD_DEPLOY_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.FEEDFOLD_DEPLOY_HOST_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/feedfold
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/feedfold ~/.ssh/known_hosts
+
+      - name: Deploy verified image
+        env:
+          DEPLOY_HOST: ${{ vars.FEEDFOLD_DEPLOY_HOST }}
+        run: docker save "feedfold:$GITHUB_SHA" | gzip -1 | ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "$GITHUB_SHA"
+
+      - name: Verify public service
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-all-errors https://feedfold.com/health
+          curl --fail --silent --show-error https://feedfold.com/api/auth/config | jq --exit-status '.registrationMode == "invite"'
+
+      - name: Remove deployment SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/feedfold

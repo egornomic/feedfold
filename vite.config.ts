@@ -31,12 +31,12 @@ function staticDemoPlugin(): Plugin {
       return demoHtml.replace(
         "</head>",
         [
-          '    <link rel="canonical" href="https://feedfold.com/" />',
+          '    <link rel="canonical" href="https://feedfold.com/demo/" />',
           '    <meta property="og:type" content="website" />',
           '    <meta property="og:title" content="feedfold" />',
           '    <meta property="og:description" content="A quiet place for the web you follow." />',
-          '    <meta property="og:url" content="https://feedfold.com/" />',
-          '    <meta property="og:image" content="https://feedfold.com/og.png" />',
+          '    <meta property="og:url" content="https://feedfold.com/demo/" />',
+          '    <meta property="og:image" content="https://feedfold.com/demo/og.png" />',
           '    <meta property="og:image:width" content="1730" />',
           '    <meta property="og:image:height" content="909" />',
           '    <meta property="og:image:alt" content="The feedfold reader in its quiet dark theme" />',
@@ -115,9 +115,14 @@ export default defineConfig({
       },
       workbox: {
         clientsClaim: true,
+        // Replace the former root-scoped demo worker during the public app cutover.
+        skipWaiting: !demoMode,
         globPatterns: ["**/*.{js,css,html,png,webp}"],
         navigateFallback: appUrl("/index.html"),
-        navigateFallbackDenylist: [new RegExp(`^${apiPathPattern}`)],
+        navigateFallbackDenylist: [
+          new RegExp(`^${apiPathPattern}`),
+          ...(!demoMode ? [/^\/demo(?:\/|$)/] : []),
+        ],
       },
     }),
     ...(demoMode ? [staticDemoPlugin()] : []),

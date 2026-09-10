@@ -1,0 +1,6 @@
+[Unit]
+Description=Back up the feedfold database
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/feedfold-backup

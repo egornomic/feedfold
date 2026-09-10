@@ -4,7 +4,7 @@ services:
       context: .
       args:
         FEEDFOLD_BASE_PATH: "${FEEDFOLD_BASE_PATH:-/}"
-    image: feedfold:local
+    image: "${FEEDFOLD_IMAGE:-feedfold:local}"
     restart: unless-stopped
     init: true
     read_only: true

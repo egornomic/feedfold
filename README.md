@@ -1,6 +1,6 @@
 # feedfold
 
-feedfold is the feed reader I built for myself. Try demo at https://feedfold.com.
+feedfold is the feed reader I built for myself. Try demo at https://feedfold.com/demo/.
 
 ## See feedfold
 

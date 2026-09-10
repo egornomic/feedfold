@@ -103,6 +103,7 @@ const aiRequestTimeoutMs = positiveInteger(
   "AI_REQUEST_TIMEOUT_MS",
 );
 const staticDir = fileURLToPath(new URL("../client", import.meta.url));
+const demoDir = fileURLToPath(new URL("../demo", import.meta.url));
 const publicOrigin = configuredPublicOrigin(process.env.FEEDFOLD_PUBLIC_ORIGIN);
 const policy = deploymentPolicy(process.env.FEEDFOLD_DEPLOYMENT_MODE, quotaOverrides(process.env));
 const registrationCooldownMinutes = positiveInteger(
@@ -190,6 +191,7 @@ const app = await createApp({
   aiService,
   feedDiscoveryTimeoutMs: feedFetchTimeoutMs,
   staticDir,
+  demoDir,
   logger: process.env.NODE_ENV === "production" ? productionLogger() : false,
   publicOrigin,
 });

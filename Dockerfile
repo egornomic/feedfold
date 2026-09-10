@@ -8,7 +8,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm run build:demo && npm prune --omit=dev
 
 FROM node:24.18.0-bookworm-slim AS runtime
 

@@ -4,6 +4,7 @@ import fastifyStatic from "@fastify/static";
 import { SqliteError } from "better-sqlite3";
 import Fastify, {
   type FastifyInstance,
+  type FastifyReply,
   type FastifyRequest,
   type FastifyServerOptions,
   LogController,
@@ -44,8 +45,15 @@ export interface AppServices {
   xMediaService?: XMediaService;
   feedDiscoveryTimeoutMs?: number;
   staticDir?: string;
+  demoDir?: string;
   logger?: FastifyServerOptions["logger"];
   publicOrigin?: string;
+}
+
+function staticHeaders(reply: FastifyReply, path: string): void {
+  if (path.endsWith("sw.js") || path.endsWith("index.html")) {
+    reply.header("Cache-Control", "no-cache");
+  }
 }
 
 export async function createApp(services: AppServices): Promise<FastifyInstance> {
@@ -246,16 +254,31 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   });
 
   if (services.staticDir && existsSync(join(services.staticDir, "index.html"))) {
+    const demoDir =
+      services.demoDir && existsSync(join(services.demoDir, "index.html"))
+        ? services.demoDir
+        : undefined;
+    if (demoDir) {
+      app.get("/demo", (_request, reply) => reply.redirect("/demo/", 308));
+      await app.register(fastifyStatic, {
+        root: demoDir,
+        prefix: "/demo/",
+        wildcard: false,
+        decorateReply: false,
+        setHeaders: staticHeaders,
+      });
+    }
     await app.register(fastifyStatic, {
       root: services.staticDir,
       wildcard: false,
-      setHeaders(response, path) {
-        if (path.endsWith("sw.js")) response.header("Cache-Control", "no-cache");
-      },
+      setHeaders: staticHeaders,
     });
     app.setNotFoundHandler((request, reply) => {
       if (request.url.startsWith("/api/") || request.url === "/health") {
         return reply.code(404).send({ error: "This page does not exist." });
+      }
+      if (demoDir && request.url.startsWith("/demo/")) {
+        return reply.sendFile("index.html", demoDir);
       }
       return reply.sendFile("index.html");
     });
