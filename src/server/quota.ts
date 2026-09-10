@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import type Sqlite from "better-sqlite3";
 import type { DeploymentPolicy } from "./deployment-policy.js";
 
@@ -180,7 +181,7 @@ export class QuotaService {
   }
 
   async runOutbound<T>(task: () => Promise<T>): Promise<T> {
-    const release = this.startOutboundRequest();
+    const release = await this.startOutboundRequest();
     try {
       return await task();
     } finally {
@@ -188,15 +189,24 @@ export class QuotaService {
     }
   }
 
-  startOutboundRequest(): () => void {
-    this.consumeDaily("outbound_request", "global");
-    const release = this.acquire("outbound_request", 120_000);
-    if (!release) {
-      throw new QuotaExceededError(
-        "The server is handling too many outbound requests. Try again shortly.",
-      );
+  async startOutboundRequest(signal?: AbortSignal): Promise<() => void> {
+    const timeout = AbortSignal.timeout(120_000);
+    const waiting = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    waiting.throwIfAborted();
+    let release = this.acquire("outbound_request", 120_000);
+    while (!release) {
+      // Leases are shared through SQLite, including with other server processes.
+      await delay(50, undefined, { signal: waiting });
+      waiting.throwIfAborted();
+      release = this.acquire("outbound_request", 120_000);
     }
-    return release;
+    try {
+      this.consumeDaily("outbound_request", "global");
+      return release;
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   assertOpmlUpload(source: string, feedCount: number): void {

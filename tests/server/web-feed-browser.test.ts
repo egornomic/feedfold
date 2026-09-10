@@ -2,6 +2,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { type Browser, chromium } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
+import { AppDatabase } from "../../src/server/database.js";
+import { deploymentPolicy } from "../../src/server/deployment-policy.js";
 import { PublicNetworkError } from "../../src/server/public-network.js";
 import {
   isBlockedNetworkAddress,
@@ -100,6 +102,87 @@ function fixturePage(broken: boolean): string {
 }
 
 describe("web-feed browser loading and network security", () => {
+  it("loads all page resources while keeping outbound requests within the shared limit", async () => {
+    const database = new AppDatabase(
+      ":memory:",
+      20,
+      deploymentPolicy("public", { outboundRequestsConcurrent: 2 }),
+    );
+    cleanups.push(async () => database.close());
+    let active = 0;
+    let peak = 0;
+    let completed = 0;
+    const server = createServer((request, response) => {
+      if (request.url?.startsWith("/script/")) {
+        active += 1;
+        peak = Math.max(peak, active);
+        setTimeout(() => {
+          active -= 1;
+          completed += 1;
+          response.writeHead(200, { "Content-Type": "text/javascript" });
+          response.end(`document.querySelector('main').insertAdjacentHTML('beforeend',
+            '<article><a href="/entry/${completed}">Release ${completed}</a></article>');`);
+        }, 100);
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end(
+        `<title>Releases</title><main></main>${Array.from(
+          { length: 12 },
+          (_, i) => `<script defer src="/script/${i}"></script>`,
+        ).join("")}`,
+      );
+    });
+    const baseUrl = await listen(server);
+    const service = new WebFeedService({ allowPrivateNetworks: true, quotas: database.quotas });
+    cleanups.push(() => service.close());
+    const analysis = await service.analyze("1", baseUrl);
+    expect(analysis.candidates.some((candidate) => candidate.itemCount === 12)).toBe(true);
+    expect(completed).toBe(12);
+    expect(peak).toBe(2);
+    expect(database.connection.prepare("SELECT COUNT(*) FROM quota_leases").pluck().get()).toBe(0);
+  }, 15_000);
+
+  it("cancels queued resources and releases capacity when the browser closes", async () => {
+    const database = new AppDatabase(
+      ":memory:",
+      20,
+      deploymentPolicy("public", { outboundRequestsConcurrent: 1 }),
+    );
+    cleanups.push(async () => database.close());
+    let scriptRequests = 0;
+    let scriptStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      scriptStarted = resolve;
+    });
+    const server = createServer((request, response) => {
+      if (request.url?.startsWith("/script/")) {
+        scriptRequests += 1;
+        scriptStarted();
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end(
+        `<title>Releases</title><main></main>${Array.from(
+          { length: 12 },
+          (_, i) => `<script defer src="/script/${i}"></script>`,
+        ).join("")}`,
+      );
+    });
+    const baseUrl = await listen(server);
+    const service = new WebFeedService({ allowPrivateNetworks: true, quotas: database.quotas });
+    cleanups.push(() => service.close());
+    const analysis = service.analyze("1", baseUrl);
+    const rejected = expect(analysis).rejects.toBeInstanceOf(Error);
+    await started;
+    await service.close();
+    await rejected;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(scriptRequests).toBe(1);
+    expect(database.connection.prepare("SELECT COUNT(*) FROM quota_leases").pluck().get()).toBe(0);
+    await expect(database.quotas.runOutbound(async () => "available")).resolves.toBe("available");
+  });
+
   it("allows public addresses while rejecting private and reserved networks", () => {
     expect(isBlockedNetworkAddress("140.82.121.3")).toBe(false);
     expect(isBlockedNetworkAddress("104.18.37.130")).toBe(false);

@@ -374,6 +374,41 @@ describe("deployment policy", () => {
     await expect(second.quotas.runChromium(async () => "available")).resolves.toBe("available");
   });
 
+  it("waits for outbound capacity across server instances and cancels without spending quota", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "feedfold-outbound-"));
+    const policy = deploymentPolicy("public", {
+      outboundRequestsConcurrent: 1,
+      outboundRequestsPerDay: 2,
+    });
+    const first = new AppDatabase(join(directory, "feedfold.db"), 20, policy);
+    const second = new AppDatabase(join(directory, "feedfold.db"), 20, policy);
+    cleanups.push(() => rmSync(directory, { force: true, recursive: true }));
+    cleanups.push(() => first.close());
+    cleanups.push(() => second.close());
+    const releaseFirst = await first.quotas.startOutboundRequest();
+    const cancelled = new AbortController();
+    const waiting = second.quotas.startOutboundRequest(cancelled.signal);
+    const rejection = expect(waiting).rejects.toMatchObject({ name: "AbortError" });
+    cancelled.abort();
+    await rejection;
+
+    let started = false;
+    const next = second.quotas.startOutboundRequest().then((release) => {
+      started = true;
+      return release;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(started).toBe(false);
+    releaseFirst();
+    const releaseNext = await next;
+    expect(started).toBe(true);
+    releaseNext();
+    await expect(first.quotas.startOutboundRequest()).rejects.toThrow(
+      "today's outbound request limit",
+    );
+    expect(first.connection.prepare("SELECT COUNT(*) FROM quota_leases").pluck().get()).toBe(0);
+  });
+
   it("rejects oversized OPML and too many imported feeds before storing anything", () => {
     const database = new AppDatabase(
       ":memory:",

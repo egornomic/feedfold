@@ -565,6 +565,7 @@ export class WebFeedBrowserLoader {
     let transferredResourceBytes = 0;
     let contentRequestFailure: ContentRequestFailure | null = null;
     const pendingContentRequests = new Set<Request>();
+    const requests = new AbortController();
     const outboundRequests = new Map<Request, () => void>();
     const releaseOutbound = (request: Request): void => {
       const release = outboundRequests.get(request);
@@ -582,6 +583,7 @@ export class WebFeedBrowserLoader {
         viewport: { width: 900, height: 900 },
       });
       page = await context.newPage();
+      page.once("close", () => requests.abort());
       await page.exposeFunction(pendingRequestBinding, () => pendingContentRequests.size);
       page.on("request", (request) => {
         if (CONTENT_REQUEST_TYPES.has(request.resourceType())) {
@@ -656,8 +658,9 @@ export class WebFeedBrowserLoader {
               validationCache,
               this.#addressResolver,
             );
-            const release = this.#quotas?.startOutboundRequest();
+            const release = await this.#quotas?.startOutboundRequest(requests.signal);
             if (release) outboundRequests.set(request, release);
+            requests.signal.throwIfAborted();
           }
           await route.continue();
         } catch (error) {
@@ -680,8 +683,9 @@ export class WebFeedBrowserLoader {
             validationCache,
             this.#addressResolver,
           );
-          const release = this.#quotas?.startOutboundRequest();
+          const release = await this.#quotas?.startOutboundRequest(requests.signal);
           release?.();
+          requests.signal.throwIfAborted();
           socket.connectToServer();
         } catch {
           await socket.close({ code: 1008, reason: "Private network connections are blocked" });
@@ -849,6 +853,7 @@ export class WebFeedBrowserLoader {
       if (error instanceof QuotaExceededError) throw error;
       throw browserFailure(error);
     } finally {
+      requests.abort();
       for (const release of outboundRequests.values()) release();
       outboundRequests.clear();
       await context?.close().catch(() => undefined);
