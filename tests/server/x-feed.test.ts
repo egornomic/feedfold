@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
 import { discoverFeed } from "../../src/server/feed-discovery.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { fetchXFeed, nitterBaseUrls, xContentHtml } from "../../src/server/x-feed.js";
 import { xFeedUrl, xVideoPostId } from "../../src/shared/x.js";
@@ -195,7 +196,16 @@ describe("X RSS instances", () => {
     );
     vi.stubEnv("NITTER_BASE_URLS", [notice, disabled].join(","));
     const database = new AppDatabase(":memory:");
-    const refresh = new FeedRefreshService(database.feeds, 1, 500, undefined, fetch);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        500,
+        undefined,
+        fetch,
+      ),
+      1,
+    );
     cleanups.push(
       () => database.close(),
       () => refresh.stop(),
@@ -237,7 +247,16 @@ describe("X RSS instances", () => {
     });
     vi.stubEnv("NITTER_BASE_URLS", [primary, fallback].join(","));
     const database = new AppDatabase(":memory:");
-    const refresh = new FeedRefreshService(database.feeds, 1, 500, undefined, fetch);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        500,
+        undefined,
+        fetch,
+      ),
+      1,
+    );
     cleanups.push(
       () => database.close(),
       () => refresh.stop(),

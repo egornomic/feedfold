@@ -7,6 +7,7 @@ import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { TelegramMediaService } from "../../src/server/telegram-media.js";
 import { WebFeedService } from "../../src/server/web-feed.js";
@@ -64,7 +65,16 @@ describe("feed subscription workflow", () => {
       settleTimeoutMs: 1_000,
     });
     cleanups.push(() => webFeedService.close());
-    const refreshService = new FeedRefreshService(database.feeds, 1, 2_000, webFeedService, fetch);
+    const refreshService = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        2_000,
+        webFeedService,
+        fetch,
+      ),
+      1,
+    );
     cleanups.push(() => refreshService.stop());
     const services = {
       database,

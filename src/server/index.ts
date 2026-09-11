@@ -12,6 +12,7 @@ import {
 import { ExtractionQueue } from "./extraction.js";
 import { AiService } from "./features/ai/service.js";
 import { AuthService } from "./features/auth/service.js";
+import { DefaultFeedSourceLoader } from "./feed-source-loader.js";
 import { productionListenMessage, productionLogger } from "./logging.js";
 import { closePublicNetwork } from "./public-network.js";
 import { FeedRefreshService } from "./refresh.js";
@@ -173,9 +174,12 @@ const webFeedService = new WebFeedService({
 });
 const refreshService = new FeedRefreshService(
   database.feeds,
+  new DefaultFeedSourceLoader(
+    (task) => database.feeds.runOutbound(task),
+    feedFetchTimeoutMs,
+    webFeedService,
+  ),
   3,
-  feedFetchTimeoutMs,
-  webFeedService,
 );
 const aiService = new AiService(database, {
   credentialCipher: null,

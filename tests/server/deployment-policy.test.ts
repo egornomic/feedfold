@@ -12,6 +12,7 @@ import {
 } from "../../src/server/deployment-policy.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { WebFeedService } from "../../src/server/web-feed.js";
 
@@ -68,10 +69,19 @@ describe("deployment policy", () => {
     const auth = new AuthService(database.auth, 20, { maxAccounts: 100, registrationMode: "open" });
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
     let requests = 0;
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000, undefined, async () => {
-      requests += 1;
-      return new Response(null, { status: 304 });
-    });
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        undefined,
+        async () => {
+          requests += 1;
+          return new Response(null, { status: 304 });
+        },
+      ),
+      1,
+    );
     const app = await createApp({
       database,
       authService: auth,
@@ -132,7 +142,11 @@ describe("deployment policy", () => {
     );
     const auth = new AuthService(database.auth, 20, { registrationMode: "open" });
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+      1,
+    );
     const webFeeds = new WebFeedService({ quotas: database.quotas });
     const app = await createApp({
       database,
@@ -187,10 +201,19 @@ describe("deployment policy", () => {
     const auth = new AuthService(database.auth);
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
     let requests = 0;
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000, undefined, async () => {
-      requests += 1;
-      return new Response(null, { status: 304 });
-    });
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        undefined,
+        async () => {
+          requests += 1;
+          return new Response(null, { status: 304 });
+        },
+      ),
+      1,
+    );
     const app = await createApp({
       database,
       authService: auth,
@@ -308,10 +331,19 @@ describe("deployment policy", () => {
       maxPendingRefreshes: 2,
     });
     let requests = 0;
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000, undefined, async () => {
-      requests += 1;
-      return new Response(null, { status: 304 });
-    });
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        undefined,
+        async () => {
+          requests += 1;
+          return new Response(null, { status: 304 });
+        },
+      ),
+      1,
+    );
     try {
       const feedIds = Array.from(
         { length: 3 },

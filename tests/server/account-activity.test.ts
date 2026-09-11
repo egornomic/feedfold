@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
 import { PUBLIC_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 
 afterEach(() => vi.useRealTimers());
@@ -43,17 +44,26 @@ describe("account activity", () => {
     const second = (await auth.register("second-reader", "reader-password"))?.user;
     if (!first || !second) throw new Error("Test accounts were not created");
     let requests = 0;
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000, undefined, async () => {
-      requests += 1;
-      return new Response(
-        `<?xml version="1.0"?><rss version="2.0"><channel>
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        undefined,
+        async () => {
+          requests += 1;
+          return new Response(
+            `<?xml version="1.0"?><rss version="2.0"><channel>
            <title>Shared source</title><link>https://publisher.example.test/</link>
            <item><guid>one</guid><title>One</title>
              <link>https://publisher.example.test/one</link></item>
          </channel></rss>`,
-        { status: 200, headers: { "content-type": "application/rss+xml" } },
-      );
-    });
+            { status: 200, headers: { "content-type": "application/rss+xml" } },
+          );
+        },
+      ),
+      1,
+    );
     try {
       const feedUrl = "https://publisher.example.test/feed.xml";
       const firstFeed = database.feeds.createFeed(first.id, { feedUrl });

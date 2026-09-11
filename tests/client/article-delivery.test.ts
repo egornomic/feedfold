@@ -6,6 +6,7 @@ import { ApplicationApi, ApplicationApiError } from "../../src/server/applicatio
 import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AiService } from "../../src/server/features/ai/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { TelegramMediaService } from "../../src/server/telegram-media.js";
 import { WebFeedService } from "../../src/server/web-feed.js";
@@ -122,19 +123,25 @@ describe("live article delivery", () => {
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
     const webFeeds = new WebFeedService();
     let feedRefreshCount = 0;
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000, webFeeds, async () => {
-      feedRefreshCount += 1;
-      const latestItem =
-        feedRefreshCount > 1
-          ? `<item>
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        webFeeds,
+        async () => {
+          feedRefreshCount += 1;
+          const latestItem =
+            feedRefreshCount > 1
+              ? `<item>
                 <guid>delivered-expanded</guid>
                 <title>Delivered into expanded view</title>
                 <pubDate>Wed, 12 Aug 2026 12:00:00 GMT</pubDate>
                 <description>Delivered into expanded view summary</description>
               </item>`
-          : "";
-      return new Response(
-        `<?xml version="1.0" encoding="UTF-8"?>
+              : "";
+          return new Response(
+            `<?xml version="1.0" encoding="UTF-8"?>
           <rss version="2.0">
             <channel>
               <title>Live reading</title>
@@ -149,9 +156,12 @@ describe("live article delivery", () => {
               </item>
             </channel>
           </rss>`,
-        { status: 200, headers: { "Content-Type": "application/rss+xml" } },
-      );
-    });
+            { status: 200, headers: { "Content-Type": "application/rss+xml" } },
+          );
+        },
+      ),
+      1,
+    );
     const application = new ApplicationApi({
       database,
       extractionQueue: extraction,

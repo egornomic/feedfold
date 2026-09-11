@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
 import { deploymentPolicy } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -68,17 +69,26 @@ describe("shared feed sources", () => {
     const firstFeed = database.feeds.createFeed(firstUser.id, { feedUrl });
     const secondFeed = database.feeds.createFeed(secondUser.id, { feedUrl });
     let requests = 0;
-    const refresh = new FeedRefreshService(database.feeds, 2, 1_000, undefined, async () => {
-      requests += 1;
-      return new Response(
-        `<?xml version="1.0"?><rss version="2.0"><channel>
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        undefined,
+        async () => {
+          requests += 1;
+          return new Response(
+            `<?xml version="1.0"?><rss version="2.0"><channel>
            <title>Shared publisher</title><link>https://publisher.example.test/</link>
            <item><guid>one</guid><title>One article</title>
              <link>https://publisher.example.test/one</link></item>
          </channel></rss>`,
-        { status: 200, headers: { "content-type": "application/rss+xml" } },
-      );
-    });
+            { status: 200, headers: { "content-type": "application/rss+xml" } },
+          );
+        },
+      ),
+      2,
+    );
     cleanups.push(
       () => database.close(),
       () => refresh.stop(),

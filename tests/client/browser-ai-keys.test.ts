@@ -14,6 +14,7 @@ import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { productionLogger } from "../../src/server/logging.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 
@@ -52,7 +53,11 @@ describe("browser-held AI keys", () => {
     const database = new AppDatabase(join(directory, "app.db"));
     const authService = new AuthService(database.auth, 20, { maxAccounts: 100 });
     const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refreshService = new FeedRefreshService(database.feeds, 1, 1_000);
+    const refreshService = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+      1,
+    );
     let logs = "";
     const app = await createApp({
       database,

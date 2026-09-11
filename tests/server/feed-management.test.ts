@@ -7,6 +7,7 @@ import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import type { Feed, Folder, Rule } from "../../src/shared/types.js";
 
@@ -22,7 +23,11 @@ describe("feed and folder management", () => {
     const database = new AppDatabase(join(directory, "feedfold.db"), 37);
     const authService = new AuthService(database.auth, 37, { maxAccounts: 100 });
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+      1,
+    );
     const app = await createApp({
       database,
       authService,

@@ -4,6 +4,7 @@ import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { productionListenMessage, productionLogger } from "../../src/server/logging.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 
@@ -19,7 +20,11 @@ describe("production logging", () => {
     const database = new AppDatabase(":memory:");
     const authService = new AuthService(database.auth);
     const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refreshService = new FeedRefreshService(database.feeds, 1, 1_000);
+    const refreshService = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+      1,
+    );
     const app = await createApp({
       database,
       authService,

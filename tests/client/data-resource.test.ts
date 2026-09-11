@@ -11,6 +11,7 @@ import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import type { ArticlePage, BootstrapData, Feed, Rule } from "../../src/shared/types.js";
 
@@ -619,7 +620,16 @@ describe("reader data resource", () => {
         headers: { "Content-Type": "application/rss+xml" },
       });
     };
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000, undefined, feedFetcher);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        undefined,
+        feedFetcher,
+      ),
+      1,
+    );
     const app = await createApp({
       database,
       authService,

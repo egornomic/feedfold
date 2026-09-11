@@ -10,6 +10,7 @@ import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { TelegramMediaService } from "../../src/server/telegram-media.js";
 import { WebFeedService } from "../../src/server/web-feed.js";
@@ -26,7 +27,11 @@ afterEach(async () => {
 function applicationServices(database: AppDatabase): ApplicationApiServices {
   const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
   const webFeedService = new WebFeedService();
-  const refreshService = new FeedRefreshService(database.feeds, 1, 1_000, webFeedService);
+  const refreshService = new FeedRefreshService(
+    database.feeds,
+    new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000, webFeedService),
+    1,
+  );
   cleanups.push(
     () => database.close(),
     () => webFeedService.close(),

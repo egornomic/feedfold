@@ -9,6 +9,7 @@ import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
 import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
 import { ExtractionQueue, extractArticle } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -54,7 +55,16 @@ describe("feed refresh and full-text extraction", () => {
     });
     const feedUrl = await listen(server);
     const database = await temporaryDatabase();
-    const refresh = new FeedRefreshService(database.feeds, 1, 2_000, undefined, fetch);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        2_000,
+        undefined,
+        fetch,
+      ),
+      1,
+    );
     cleanups.push(async () => {
       await refresh.stop();
       database.close();
@@ -164,7 +174,16 @@ describe("feed refresh and full-text extraction", () => {
 
     const database = await temporaryDatabase();
     const extraction = new ExtractionQueue(database.extractions, 2, 2_000, fetch);
-    const refresh = new FeedRefreshService(database.feeds, 2, 2_000, undefined, fetch);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        2_000,
+        undefined,
+        fetch,
+      ),
+      2,
+    );
     const authService = new AuthService(database.auth);
     expect(await authService.register(TEST_ACCOUNT.username, TEST_ACCOUNT.password)).not.toBeNull();
     const app = await createApp({
@@ -384,7 +403,16 @@ describe("feed refresh and full-text extraction", () => {
     const baseUrl = await listen(server);
     const database = await temporaryDatabase();
     const extraction = new ExtractionQueue(database.extractions, 1, 2_000, fetch);
-    const refresh = new FeedRefreshService(database.feeds, 1, 2_000, undefined, fetch);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        2_000,
+        undefined,
+        fetch,
+      ),
+      1,
+    );
     cleanups.push(async () => {
       await Promise.all([refresh.stop(), extraction.stop()]);
       database.close();
@@ -438,7 +466,16 @@ describe("feed refresh and full-text extraction", () => {
     const baseUrl = await listen(server);
     const database = await temporaryDatabase();
     const extraction = new ExtractionQueue(database.extractions, 1, 2_000, fetch);
-    const refresh = new FeedRefreshService(database.feeds, 3, 2_000, undefined, fetch);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        2_000,
+        undefined,
+        fetch,
+      ),
+      3,
+    );
     cleanups.push(async () => {
       await Promise.all([refresh.stop(), extraction.stop()]);
       database.close();
@@ -876,7 +913,16 @@ describe("feed refresh and full-text extraction", () => {
     const baseUrl = await listen(server);
     const database = await temporaryDatabase();
     const extraction = new ExtractionQueue(database.extractions, 1, 2_000, fetch);
-    const refresh = new FeedRefreshService(database.feeds, 1, 2_000, undefined, fetch);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        2_000,
+        undefined,
+        fetch,
+      ),
+      1,
+    );
     const authService = new AuthService(database.auth);
     expect(await authService.register(TEST_ACCOUNT.username, TEST_ACCOUNT.password)).not.toBeNull();
     const app = await createApp({

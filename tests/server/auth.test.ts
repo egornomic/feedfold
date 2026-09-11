@@ -6,6 +6,7 @@ import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { type AuthOptions, AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -18,7 +19,11 @@ async function authApp(publicOrigin?: string, options?: AuthOptions) {
   const database = new AppDatabase(":memory:");
   const authService = new AuthService(database.auth, 20, options);
   const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
-  const refreshService = new FeedRefreshService(database.feeds, 1, 1_000);
+  const refreshService = new FeedRefreshService(
+    database.feeds,
+    new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+    1,
+  );
   const app = await createApp({
     database,
     authService,

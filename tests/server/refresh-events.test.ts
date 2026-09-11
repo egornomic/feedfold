@@ -4,6 +4,7 @@ import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 
 const FEED_SOURCE = `<?xml version="1.0" encoding="UTF-8"?>
@@ -77,8 +78,15 @@ describe("feed refresh delivery events", () => {
       feedUrl: "https://example.test/first.xml",
       folderId: null,
     });
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000, undefined, async () =>
-      feedResponse(),
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        undefined,
+        async () => feedResponse(),
+      ),
+      1,
     );
     cleanups.push(
       () => database.close(),
@@ -106,8 +114,15 @@ describe("feed refresh delivery events", () => {
     const database = new AppDatabase(":memory:");
     const auth = new AuthService(database.auth);
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000, undefined, async () =>
-      feedResponse(),
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        1_000,
+        undefined,
+        async () => feedResponse(),
+      ),
+      1,
     );
     const app = await createApp({
       database,

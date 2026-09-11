@@ -6,6 +6,7 @@ import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { TelegramMediaService } from "../../src/server/telegram-media.js";
 import type { TelegramArticleMedia } from "../../src/shared/types.js";
@@ -66,7 +67,11 @@ describe("Telegram article media", () => {
     if (!article) throw new Error("Expected a stored article");
 
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+      1,
+    );
     const telegramMedia = new TelegramMediaService(1_000, async () =>
       Promise.resolve(new Response(EMBED_HTML, { status: 200 })),
     );

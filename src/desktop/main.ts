@@ -26,6 +26,7 @@ import { InvalidRequestError, OperationForbiddenError } from "../server/errors.j
 import { ExtractionQueue } from "../server/extraction.js";
 import { AiService } from "../server/features/ai/service.js";
 import { FeedDiscoveryError } from "../server/feed-discovery.js";
+import { DefaultFeedSourceLoader } from "../server/feed-source-loader.js";
 import { closePublicNetwork } from "../server/public-network.js";
 import { QuotaExceededError } from "../server/quota.js";
 import { FeedRefreshService } from "../server/refresh.js";
@@ -174,9 +175,12 @@ class DesktopRuntime {
     });
     this.refreshService = new FeedRefreshService(
       this.database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => this.database.feeds.runOutbound(task),
+        feedFetchTimeoutMs,
+        this.webFeedService,
+      ),
       3,
-      feedFetchTimeoutMs,
-      this.webFeedService,
     );
     this.unsubscribeFromRefresh = this.refreshService.subscribe(
       LOCAL_USER_ID,

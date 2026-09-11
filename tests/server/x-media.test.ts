@@ -6,6 +6,7 @@ import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { parseXPostMedia, XMediaService, xSyndicationToken } from "../../src/server/x-media.js";
 import type { XArticleMedia } from "../../src/shared/types.js";
@@ -162,7 +163,11 @@ describe("X article media", () => {
     if (!article) throw new Error("Expected a stored article");
 
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refresh = new FeedRefreshService(database.feeds, 1, 1_000);
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+      1,
+    );
     const xMedia = new XMediaService(1_000, async (url, options) => {
       if (url.startsWith("https://cdn.syndication.twimg.com/")) {
         expect(url).toContain(`id=${VIDEO_POST_ID}`);

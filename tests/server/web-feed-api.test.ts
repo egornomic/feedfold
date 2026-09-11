@@ -7,6 +7,7 @@ import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { WebFeedService } from "../../src/server/web-feed.js";
 import type {
@@ -151,7 +152,15 @@ describe("authenticated web-feed API", () => {
       settleTimeoutMs: 3_000,
     });
     cleanups.push(() => webFeedService.close());
-    const refreshService = new FeedRefreshService(database.feeds, 1, 4_000, webFeedService);
+    const refreshService = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        4_000,
+        webFeedService,
+      ),
+      1,
+    );
     cleanups.push(() => refreshService.stop());
     const app = await createApp({
       database,

@@ -9,6 +9,7 @@ import { PUBLIC_DEPLOYMENT_POLICY, registrationMode } from "../../src/server/dep
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { setInvitationOwner } from "../../src/server/features/auth/repository.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import type { InvitationOverview, RegistrationMode } from "../../src/shared/types.js";
 
@@ -40,7 +41,11 @@ async function fixture() {
       },
     });
     const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refreshService = new FeedRefreshService(database.feeds, 1, 1_000);
+    const refreshService = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+      1,
+    );
     const app = await createApp({ database, authService: auth, extractionQueue, refreshService });
     const origin = (await app.listen({ host: "127.0.0.1", port: 0 })).replace(
       "127.0.0.1",
