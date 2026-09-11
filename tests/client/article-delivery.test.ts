@@ -177,7 +177,10 @@ describe("live article delivery", () => {
         title: feed.title,
         siteUrl: null,
         articles: [
-          parsedArticle("starting", "Starting article", "2026-08-10T12:00:00.000Z"),
+          {
+            ...parsedArticle("starting", "Starting article", "2026-08-10T12:00:00.000Z"),
+            feedContentHtml: "<p><strong>Formatted opening</strong></p><p>Second paragraph.</p>",
+          },
           parsedArticle("last-loaded", "Last loaded article", "2026-08-09T12:00:00.000Z"),
         ],
       },
@@ -190,9 +193,21 @@ describe("live article delivery", () => {
     const delayedArticleResponse = new Promise<void>((resolve) => {
       releaseArticleResponse = resolve;
     });
+    let initialContentRequests = 0;
+    let releaseInitialContent = () => {};
+    const initialContentResponse = new Promise<void>((resolve) => {
+      releaseInitialContent = resolve;
+    });
     const invoke = async (request: DesktopRequest): Promise<DesktopResponse> => {
       try {
         const value = await application.invoke(request);
+        if (
+          request.operation === "article" &&
+          (value as { title: string }).title === "Starting article"
+        ) {
+          initialContentRequests += 1;
+          await initialContentResponse;
+        }
         if (request.operation === "articles" && holdNextArticleResponse) {
           holdNextArticleResponse = false;
           articleResponseHeld = true;
@@ -264,11 +279,28 @@ describe("live article delivery", () => {
         "the initial unread articles",
         () => container.querySelectorAll(".article-open-button").length === 2,
       );
+      await waitFor("the selected article to prefetch", () => initialContentRequests === 1);
+      expect(
+        database.articles.listArticlePage(TEST_USER_ID, { state: "unread" }).articles,
+      ).toHaveLength(2);
       await act(async () => openArticleButton(container, "Starting article").click());
       await waitFor(
         "the first article to open",
         () => articleHeading(container) === "Starting article",
       );
+      const readerContent = () => container.querySelector(".article-swipe-layer.is-active");
+      expect(readerContent()?.textContent).not.toContain("Starting article summary");
+      expect(readerContent()?.querySelector('[aria-label="Loading article"]')).not.toBeNull();
+      expect(initialContentRequests).toBe(1);
+      await act(async () => releaseInitialContent());
+      await waitFor(
+        "formatted article content",
+        () =>
+          readerContent()?.querySelector(".article-content strong")?.textContent ===
+          "Formatted opening",
+      );
+      expect(readerContent()?.querySelectorAll(".article-content p")).toHaveLength(2);
+      expect(readerContent()?.querySelector('[aria-label="Loading article"]')).toBeNull();
       expect(nextArticleButton(container).disabled).toBe(false);
 
       await act(async () => nextArticleButton(container).click());

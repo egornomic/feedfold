@@ -821,6 +821,16 @@ function ReaderApp({
                   />
                   <ReaderPane
                     article={queue.activeArticle}
+                    contentLoaded={
+                      queue.activeArticle !== null &&
+                      queue.fullContentLoadedIds.current.has(queue.activeArticle.id)
+                    }
+                    contentError={
+                      queue.activeArticle
+                        ? (articleActions.articleContentErrors.get(queue.activeArticle.id) ?? null)
+                        : null
+                    }
+                    onRetryContent={articleActions.retryArticleContent}
                     canPrevious={queue.activeArticleIndex > 0}
                     canNext={
                       queue.activeArticleIndex >= 0 &&

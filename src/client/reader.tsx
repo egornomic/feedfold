@@ -1389,6 +1389,7 @@ interface SelectionMenuState {
 function ArticleDocument({
   article,
   titleId,
+  contentPlaceholder,
   fullContentVisible,
   summaryState,
   translationState,
@@ -1403,6 +1404,7 @@ function ArticleDocument({
 }: {
   article: Article;
   titleId: string;
+  contentPlaceholder?: React.ReactNode;
   fullContentVisible: boolean;
   summaryState: ArticleSummaryViewState;
   translationState: ArticleTranslationViewState;
@@ -1558,27 +1560,31 @@ function ArticleDocument({
       <div ref={documentRef} className="article-document">
         <ArticleHeader article={article} id={titleId} onFeedAction={onFeedAction} />
         <div className="article-document-flow">
-          <ArticleSummaryPanel
-            article={article}
-            state={summaryState}
-            customPrompts={customPrompts}
-            onRegenerate={onRegenerateSummary}
-            onOpenSettings={onOpenAiSettings}
-          />
-          <div ref={readingFlowRef} className="article-reading-flow">
-            <ArticleTranslationNotice
-              state={translationState}
-              language={translationLanguage}
-              onOpenSettings={onOpenAiSettings}
-            />
-            <ArticleBody
-              article={article}
-              fullContentVisible={fullContentVisible}
-              translationState={translationState}
-              showYouTubeDescriptions={showYouTubeDescriptions}
-              onToggleFullContent={onToggleFullContent}
-            />
-          </div>
+          {contentPlaceholder ?? (
+            <>
+              <ArticleSummaryPanel
+                article={article}
+                state={summaryState}
+                customPrompts={customPrompts}
+                onRegenerate={onRegenerateSummary}
+                onOpenSettings={onOpenAiSettings}
+              />
+              <div ref={readingFlowRef} className="article-reading-flow">
+                <ArticleTranslationNotice
+                  state={translationState}
+                  language={translationLanguage}
+                  onOpenSettings={onOpenAiSettings}
+                />
+                <ArticleBody
+                  article={article}
+                  fullContentVisible={fullContentVisible}
+                  translationState={translationState}
+                  showYouTubeDescriptions={showYouTubeDescriptions}
+                  onToggleFullContent={onToggleFullContent}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
       {selectionMenuPresence.present && displayedSelectionMenu
@@ -1617,6 +1623,8 @@ function ArticleDocument({
 
 interface ArticleSurfaceSnapshot {
   article: Article;
+  contentLoaded: boolean;
+  contentError: string | null;
   fullContentVisible: boolean;
   summaryState: ArticleSummaryViewState;
   translationState: ArticleTranslationViewState;
@@ -1683,6 +1691,9 @@ function horizontalReleaseVelocity(samples: PointerSample[]): number {
 
 export function ReaderPane({
   article,
+  contentLoaded,
+  contentError,
+  onRetryContent,
   fullContentVisible,
   summaryState,
   translationState,
@@ -1707,6 +1718,9 @@ export function ReaderPane({
   onFilterSelection,
 }: {
   article: Article | null;
+  contentLoaded: boolean;
+  contentError: string | null;
+  onRetryContent: (article: Article) => void;
   fullContentVisible: boolean;
   summaryState: ArticleSummaryViewState;
   translationState: ArticleTranslationViewState;
@@ -1731,7 +1745,7 @@ export function ReaderPane({
   onFilterSelection: (article: Article, text: string) => void;
 }) {
   const initialSurface = article
-    ? { article, fullContentVisible, summaryState, translationState }
+    ? { article, contentLoaded, contentError, fullContentVisible, summaryState, translationState }
     : null;
   const [activeSurface, setActiveSurface] = useState<ArticleSurfaceSnapshot | null>(initialSurface);
   const [outgoingSurface, setOutgoingSurface] = useState<OutgoingArticleSurface | null>(null);
@@ -1877,13 +1891,15 @@ export function ReaderPane({
 
   useLayoutEffect(() => {
     const nextSurface = article
-      ? { article, fullContentVisible, summaryState, translationState }
+      ? { article, contentLoaded, contentError, fullContentVisible, summaryState, translationState }
       : null;
     const currentSurface = activeSurfaceRef.current;
     if (nextSurface?.article.id === currentSurface?.article.id) {
       if (
         nextSurface &&
         (nextSurface.article !== currentSurface?.article ||
+          nextSurface.contentLoaded !== currentSurface.contentLoaded ||
+          nextSurface.contentError !== currentSurface.contentError ||
           nextSurface.fullContentVisible !== currentSurface.fullContentVisible ||
           nextSurface.summaryState !== currentSurface.summaryState ||
           nextSurface.translationState !== currentSurface.translationState)
@@ -1943,7 +1959,15 @@ export function ReaderPane({
     activeSurfaceRef.current = nextSurface;
     setOutgoingSurface(nextOutgoingSurface);
     setActiveSurface(nextSurface);
-  }, [article, fullContentVisible, preserveActivePresentation, summaryState, translationState]);
+  }, [
+    article,
+    contentLoaded,
+    contentError,
+    fullContentVisible,
+    preserveActivePresentation,
+    summaryState,
+    translationState,
+  ]);
 
   useLayoutEffect(() => {
     const setup = transitionSetup.current;
@@ -2244,6 +2268,27 @@ export function ReaderPane({
     <ArticleDocument
       article={surface.article}
       titleId={titleId}
+      contentPlaceholder={
+        surface.contentLoaded ? undefined : surface.contentError ? (
+          <InlineError
+            title="Could not load the article"
+            detail={surface.contentError}
+            retry={() => onRetryContent(surface.article)}
+          />
+        ) : (
+          <div
+            className="article-content"
+            role="status"
+            aria-label="Loading article"
+            aria-busy="true"
+          >
+            <div className="skeleton-line wide" />
+            <div className="skeleton-line" />
+            <div className="skeleton-line short" />
+            <div className="skeleton-block" />
+          </div>
+        )
+      }
       fullContentVisible={surface.fullContentVisible}
       summaryState={surface.summaryState}
       translationState={surface.translationState}

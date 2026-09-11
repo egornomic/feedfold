@@ -91,6 +91,9 @@ export function useArticleActions({
     Map<number, ArticleTranslationViewState>
   >(() => new Map());
   const [markReadPending, setMarkReadPending] = useState(false);
+  const [articleContentErrors, setArticleContentErrors] = useState<Map<number, string>>(
+    () => new Map(),
+  );
   const fullContentVisibleIdsRef = useRef(new Set<number>());
   const fullContentLoadingIds = useRef(new Set<number>());
   const { start, isCurrent, finish, invalidate } = useArticleAiRequestLifecycle();
@@ -104,6 +107,7 @@ export function useArticleActions({
     previousQueryRevision.current = queue.queryRevision;
     fullContentVisibleIdsRef.current = new Set();
     fullContentLoadingIds.current.clear();
+    setArticleContentErrors(new Map());
     invalidate("translation");
     setFullContentVisibleIds(new Set());
     setArticleTranslationStates(new Map());
@@ -121,22 +125,43 @@ export function useArticleActions({
   const loadArticles = queue.loadArticles;
 
   const loadFullArticle = useCallback(
-    async (article: Article) => {
+    async (article: Article, retry = false) => {
       if (queue.fullContentLoadedIds.current.has(article.id)) return;
       if (fullContentLoadingIds.current.has(article.id)) return;
+      if (!retry && articleContentErrors.has(article.id)) return;
 
       fullContentLoadingIds.current.add(article.id);
+      if (retry) {
+        setArticleContentErrors((current) => {
+          if (!current.has(article.id)) return current;
+          const next = new Map(current);
+          next.delete(article.id);
+          return next;
+        });
+      }
       try {
         const fullArticle = await api.article(article.id);
         if (!fullContentVisibleIdsRef.current.has(article.id)) queue.mergeArticle(fullArticle);
       } catch (caught) {
-        showToast(`Could not load the full article: ${errorMessage(caught)}`);
+        setArticleContentErrors((current) =>
+          new Map(current).set(article.id, errorMessage(caught)),
+        );
       } finally {
         fullContentLoadingIds.current.delete(article.id);
       }
     },
-    [queue, showToast],
+    [articleContentErrors, queue],
   );
+
+  useEffect(() => {
+    if (readingMode !== "magazine" || queue.loading || queue.activeArticleIndex < 0) return;
+    for (const article of queue.articles.slice(
+      queue.activeArticleIndex,
+      queue.activeArticleIndex + 2,
+    )) {
+      void loadFullArticle(article);
+    }
+  }, [loadFullArticle, queue, readingMode]);
 
   useEffect(() => {
     if (
@@ -223,7 +248,7 @@ export function useArticleActions({
     (article: Article, keyboardTarget = false) => {
       queue.selectArticle(article.id, keyboardTarget);
       if (!article.isRead) void changeArticleState(article, { isRead: true });
-      void loadFullArticle(article);
+      void loadFullArticle(article, true);
     },
     [changeArticleState, loadFullArticle, queue],
   );
@@ -707,6 +732,8 @@ export function useArticleActions({
   );
 
   return {
+    articleContentErrors,
+    retryArticleContent: (article: Article) => void loadFullArticle(article, true),
     fullContentVisibleIds,
     articleSummaryStates,
     articleTranslationStates,
