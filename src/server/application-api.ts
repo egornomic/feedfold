@@ -8,6 +8,7 @@ import { accountActivityTouchBefore } from "./account-activity.js";
 import type { AppDatabase } from "./database.js";
 import type { ExtractionQueue } from "./extraction.js";
 import type { AiService } from "./features/ai/service.js";
+import { FeedSubscriptionService } from "./features/feeds/subscription-service.js";
 import { discoverFeed } from "./feed-discovery.js";
 import type { FeedRefreshService } from "./refresh.js";
 import type { TelegramMediaService } from "./telegram-media.js";
@@ -58,6 +59,7 @@ export class ApplicationApi {
   readonly #database: AppDatabase;
   readonly #extractionQueue: ExtractionQueue;
   readonly #refreshService: FeedRefreshService;
+  readonly #subscriptions: FeedSubscriptionService;
   readonly #webFeedService: WebFeedService;
   readonly #ai: AiService;
   readonly #telegramMedia: TelegramMediaService;
@@ -72,6 +74,11 @@ export class ApplicationApi {
     }
     this.#extractionQueue = services.extractionQueue;
     this.#refreshService = services.refreshService;
+    this.#subscriptions = new FeedSubscriptionService(
+      services.database.feeds,
+      services.refreshService,
+      services.webFeedService,
+    );
     this.#webFeedService = services.webFeedService;
     this.#ai = services.aiService;
     this.#telegramMedia = services.telegramMediaService;
@@ -210,7 +217,7 @@ export class ApplicationApi {
         return this.#webFeedService.analyze(String(this.#userId), body.url);
       }
       case "createFeed":
-        return this.#createFeed(request.payload);
+        return this.#subscriptions.create(this.#userId, inputs.createFeed.parse(request.payload));
       case "feed": {
         const body = input(z.object({ id }).strict(), request.payload);
         return notFound(this.#database.feeds.getFeed(this.#userId, body.id), "Feed");
@@ -354,28 +361,6 @@ export class ApplicationApi {
   async telegramPreviewUrl(articleId: number): Promise<string> {
     const first = (await this.#telegramItems(articleId))[0];
     return notFound(first?.posterUrl ?? first?.url, "Telegram media");
-  }
-
-  async #createFeed(payload: unknown): Promise<unknown> {
-    const body = inputs.createFeed.parse(payload);
-    if (body.sourceKind === "published") {
-      const feed = this.#database.feeds.createFeed(this.#userId, body);
-      if (!feed.paused && this.#database.feeds.subscriptionNeedsRefresh(feed.id)) {
-        this.#refreshService.request([feed.id]);
-      }
-      return this.#database.feeds.getFeed(this.#userId, feed.id);
-    }
-    const config = body.webConfig;
-    const extracted = await this.#webFeedService.extract(config);
-    const feed = this.#database.feeds.createWebFeed(this.#userId, {
-      title: body.title ?? extracted.parsed.title,
-      pageUrl: body.feedUrl,
-      folderId: body.folderId ?? null,
-      config,
-      parsed: extracted.parsed,
-    });
-    this.#refreshService.notifyDataChanged(this.#userId);
-    return feed;
   }
 
   async #telegramItems(articleId: number) {

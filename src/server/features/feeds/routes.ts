@@ -8,6 +8,7 @@ import type { FeedRefreshService } from "../../refresh.js";
 import { WebFeedError, type WebFeedService } from "../../web-feed.js";
 import { idParams, missing, type UserId } from "../routes.js";
 import type { FeedService } from "./service.js";
+import { FeedSubscriptionService, WebFeedUnavailableError } from "./subscription-service.js";
 
 export async function feedRoutes(
   app: FastifyInstance,
@@ -27,6 +28,8 @@ export async function feedRoutes(
     userId: UserId;
   },
 ): Promise<void> {
+  const subscriptions = new FeedSubscriptionService(feeds, refreshService, webFeedService);
+
   app.get("/api/feeds", async (request) => ({
     feeds: feeds.listFeeds(userId(request)),
   }));
@@ -88,30 +91,14 @@ export async function feedRoutes(
 
   app.post("/api/feeds", async (request, reply) => {
     const body = inputs.createFeed.parse(request.body);
-    const accountId = userId(request);
-    feeds.assertCanCreateFeed(accountId);
-    if (body.sourceKind === "published") {
-      const feed = feeds.createFeed(accountId, body);
-      if (!feed.paused && feeds.subscriptionNeedsRefresh(feed.id)) {
-        refreshService.request([feed.id]);
+    try {
+      return await subscriptions.create(userId(request), body);
+    } catch (error) {
+      if (error instanceof WebFeedUnavailableError) {
+        return reply.code(503).send({ error: error.message });
       }
-      return feeds.getFeed(accountId, feed.id);
+      throw error;
     }
-    if (!webFeedService) {
-      return reply
-        .code(503)
-        .send({ error: "Web feed loading is unavailable. Check the server's Chromium setup." });
-    }
-    const extracted = await webFeedService.extract(body.webConfig as WebFeedConfig);
-    const feed = feeds.createWebFeed(accountId, {
-      title: body.title ?? extracted.parsed.title,
-      pageUrl: body.feedUrl,
-      folderId: body.folderId ?? null,
-      config: body.webConfig as WebFeedConfig,
-      parsed: extracted.parsed,
-    });
-    refreshService.notifyDataChanged(accountId);
-    return feed;
   });
 
   app.post("/api/feeds/:id/web-feed/analyze", async (request, reply) => {
