@@ -41,6 +41,18 @@ export class FeedRepository {
     return this.selectFeeds(userId);
   }
 
+  countFeeds(userId: number): number {
+    return Number(
+      this.sqlite.prepare("SELECT COUNT(*) FROM feeds WHERE user_id = ?").pluck().get(userId),
+    );
+  }
+
+  userIdForFeed(feedId: number): number {
+    return Number(
+      this.sqlite.prepare("SELECT user_id FROM feeds WHERE id = ?").pluck().get(feedId),
+    );
+  }
+
   private selectFeeds(userId: number, feedId?: number): Feed[] {
     const feedIdClause = feedId === undefined ? "" : "AND feeds.id = ?";
     const rows = this.sqlite

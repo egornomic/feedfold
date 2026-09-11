@@ -47,9 +47,7 @@ export class FeedService {
   assertCanCreateFeed(userId: number): void {
     const limit = this.deploymentPolicy.maxFeedsPerAccount;
     if (limit === null) return;
-    const count = Number(
-      this.sqlite.prepare("SELECT COUNT(*) FROM feeds WHERE user_id = ?").pluck().get(userId),
-    );
+    const count = this.repository.countFeeds(userId);
     if (count >= limit) {
       throw new InvalidRequestError(`This account can subscribe to up to ${limit} feeds.`);
     }

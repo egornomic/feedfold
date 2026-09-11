@@ -36,9 +36,7 @@ export class FeedIngestionService {
         undefined,
         INITIAL_ARTICLE_LIMIT,
       );
-      this.quotas.assertAccountStorage(
-        Number(this.sqlite.prepare("SELECT user_id FROM feeds WHERE id = ?").pluck().get(feedId)),
-      );
+      this.quotas.assertAccountStorage(this.feeds.userIdForFeed(feedId));
       this.feeds.markSubscriptionInitialized(feedId, new Date().toISOString());
       this.rules.recomputeRulesForFeedArticles(userId, feedId, delivered);
       return true;
