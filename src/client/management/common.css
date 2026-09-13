@@ -571,14 +571,14 @@
   }
 
   .app-shell.is-management-view .page-header p {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
     align-self: start;
   }
 
   .app-shell.is-management-view .page-header-actions {
     grid-column: 2;
-    grid-row: 1;
+    grid-row: 1 / -1;
     align-self: center;
     margin-left: 0;
   }
