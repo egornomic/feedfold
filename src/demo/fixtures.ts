@@ -198,17 +198,17 @@ export function createDemoData(now = new Date()): DemoData {
     {
       id: DEMO_RELEASE_ARTICLE_ID,
       feedId: 8,
-      title: "feedfold 0.6.0",
-      url: "https://github.com/egornomic/feedfold/releases/tag/v0.6.0",
+      title: "feedfold 0.7.0",
+      url: "https://github.com/egornomic/feedfold/releases/tag/v0.7.0",
       author: "egornomic",
-      publishedAt: "2026-09-09T10:00:00.000Z",
+      publishedAt: "2026-09-14T10:00:00.000Z",
       summary:
-        "Enjoy simpler article image previews, follow feedfold updates automatically with new accounts, and keep your reading state in sync.",
+        "Follow YouTube channels, add subscriptions and folders from the sidebar, and use hosted accounts with encrypted AI keys.",
       contentHtml: `<ul>
-<li>Article image previews are simpler, with restored thumbnails for links shared on X.</li>
-<li>New accounts automatically follow the feedfold release feed.</li>
-<li>Unread counts and reading state stay in sync as feeds update in the background.</li>
-<li>Gemini summaries are more reliable, with clearer messages when regional restrictions apply.</li>
+<li>Subscribe to YouTube channels directly from the subscription menu.</li>
+<li>Add subscriptions and folders from the sidebar.</li>
+<li>Hosted accounts support invitation-based registration and encrypt AI keys using keys held in your browser.</li>
+<li>Articles appear after formatting is ready for a smoother reading experience.</li>
 </ul>`,
       isStarred: true,
     },
