@@ -431,3 +431,72 @@
     padding-top: 12px;
   }
 }
+
+.rules-section {
+  container-type: inline-size;
+}
+
+@container (max-width: 800px) {
+  .table-scroll {
+    overflow: visible;
+    border: 0;
+  }
+  .data-table,
+  .data-table thead,
+  .data-table tbody,
+  .data-table tr,
+  .data-table td {
+    display: block;
+    width: 100%;
+  }
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .data-table tbody {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .data-table tr {
+    padding: 11px;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .data-table td {
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 8px;
+    padding: 6px 0;
+    border: 0;
+  }
+  .data-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: var(--type-label);
+    font-weight: var(--weight-semibold);
+  }
+  .data-table td.row-actions {
+    display: flex;
+    padding-top: 10px;
+  }
+  .rule-name-cell {
+    min-width: 0;
+    align-items: flex-start;
+    overflow-wrap: anywhere;
+  }
+
+  .rules-table .action-badge {
+    justify-self: start;
+  }
+
+  .rules-table .row-actions button {
+    width: 44px;
+    height: 44px;
+  }
+}

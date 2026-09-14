@@ -109,6 +109,7 @@ function RulesPage({
   const [formSession, setFormSession] = useState(0);
   const [editing, setEditing] = useState<Rule | null>(null);
   const formPresence = useMotionPresence(formOpen);
+  const pageRef = useRef<HTMLDivElement>(null);
   const addRuleTriggerRef = useRef<HTMLButtonElement>(null);
   const ruleFormOpenerRef = useRef<HTMLButtonElement | null>(null);
   const retainedRuleForm = useRef<{ editing: Rule | null; draft: RuleFormDraft | null }>({
@@ -120,7 +121,7 @@ function RulesPage({
   const displayedDraft = formOpen ? draft : retainedRuleForm.current.draft;
 
   return (
-    <div className="management-page">
+    <div className="management-page" ref={pageRef}>
       <PageHeader
         title="Rules"
         description="Filter articles by their text or media type, then choose what happens to matches."
@@ -136,6 +137,7 @@ function RulesPage({
               setEditing(null);
               setFormSession((current) => current + 1);
               setFormOpen(true);
+              pageRef.current?.scrollTo({ top: 0 });
             }}
           >
             <Plus aria-hidden="true" size={16} />
@@ -222,6 +224,7 @@ function RulesPage({
                 setEditing(null);
                 setFormSession((current) => current + 1);
                 setFormOpen(true);
+                pageRef.current?.scrollTo({ top: 0 });
               }}
             >
               Create your first rule
@@ -255,7 +258,7 @@ function RulesPage({
                       setEditing(rule);
                       setFormSession((current) => current + 1);
                       setFormOpen(true);
-                      window.scrollTo({ top: 0 });
+                      pageRef.current?.scrollTo({ top: 0 });
                     }}
                     showToast={showToast}
                   />
@@ -734,6 +737,7 @@ function RuleRow({
             className={`switch ${rule.enabled ? "is-on" : ""}`}
             type="button"
             role="switch"
+            aria-label={`Enable ${rule.name}`}
             aria-checked={rule.enabled}
             disabled={busy}
             onClick={() => void toggle()}

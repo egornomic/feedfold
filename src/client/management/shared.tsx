@@ -9,7 +9,6 @@ import {
 import { api, appUrl, errorMessage } from "../api";
 import type { ReaderDataMutations } from "../data-resource";
 import { isDesktopApp } from "../desktop";
-import "./common.css";
 
 export function formatDate(value: string | null): string {
   if (!value) return "Never";

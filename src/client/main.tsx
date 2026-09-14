@@ -6,6 +6,7 @@ import "@fontsource-variable/ibm-plex-sans/wght-italic.css";
 import { App } from "./App";
 import { isDesktopApp } from "./desktop";
 import { PwaUpdate } from "./pwa-update";
+import "./management/common.css";
 import "./styles.css";
 
 const root = document.getElementById("root");
