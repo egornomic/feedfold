@@ -1495,17 +1495,12 @@ kbd {
   z-index: var(--z-context-menu);
   width: min(214px, calc(100vw - 16px));
   opacity: 1;
-  transform: translateY(0) scale(1);
-  transform-origin: top left;
-  transition:
-    opacity var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 @starting-style {
   .sidebar-context-menu {
     opacity: 0;
-    transform: translateY(-4px) scale(0.95);
   }
 
   .article-source-menu:popover-open,

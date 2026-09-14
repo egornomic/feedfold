@@ -30,6 +30,7 @@ import type {
   FolderManagementAction,
   ManagementRequest,
 } from "./feed-management";
+import type { AddFeedSourceType } from "./feed-source";
 import { folderPathLabel } from "./folder-hierarchy";
 import type { RuleFormDraft } from "./management/rules";
 import { type AppView, ReaderToolbar, Sidebar } from "./navigation";
@@ -705,6 +706,11 @@ function ReaderApp({
         onSelectState={(state) => selectScope(null, null, state)}
         onSelectScope={selectScope}
         onAddFeed={openAddFeed}
+        onAddSubscription={(sourceType: AddFeedSourceType) => {
+          route.navigate({ kind: "add-feed", sourceUrl: "", sourceType });
+          setNavOpen(false);
+        }}
+        onAddFolder={() => setManagementRequest({ kind: "create-folder" })}
         onNavigate={navigateTo}
         onFeedAction={openFeedManagement}
         onFolderAction={openFolderManagement}
@@ -928,6 +934,7 @@ function ReaderApp({
             <AddFeedPage
               bootstrap={bootstrap}
               initialSourceUrl={route.route.sourceUrl}
+              initialSourceType={route.route.sourceType}
               mutations={dataResource}
               onMenu={() => setNavOpen(true)}
               onBack={() => route.navigate({ kind: "feeds" }, "replace")}

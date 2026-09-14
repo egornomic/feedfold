@@ -1,4 +1,5 @@
 import type { ArticleState } from "../shared/types.js";
+import type { AddFeedSourceType } from "./feed-source.js";
 
 export interface ReaderRoute {
   kind: "reader";
@@ -16,6 +17,7 @@ interface ArticleRoute {
 interface AddFeedRoute {
   kind: "add-feed";
   sourceUrl: string;
+  sourceType?: AddFeedSourceType;
 }
 
 interface ManagementRoute {
@@ -78,7 +80,17 @@ export function parseAppRoute(pathname: string, search: string, basePath: string
   const query = new URLSearchParams(search).get("q")?.trim() ?? "";
 
   if (segments[0] === "feeds" && segments[1] === "add" && segments.length === 2) {
-    return { kind: "add-feed", sourceUrl: "" };
+    const sourceType = new URLSearchParams(search).get("type");
+    return {
+      kind: "add-feed",
+      sourceUrl: "",
+      ...(sourceType === "rss" ||
+      sourceType === "web" ||
+      sourceType === "telegram" ||
+      sourceType === "x"
+        ? { sourceType }
+        : {}),
+    };
   }
 
   if (segments[0] === "feeds" && segments[1] === "add" && segments.length >= 3) {
@@ -131,7 +143,11 @@ export function parseAppRoute(pathname: string, search: string, basePath: string
 export function appRoutePath(route: AppRoute): string {
   if (route.kind === "article") return `/articles/${route.articleId}`;
   if (route.kind === "add-feed") {
-    return route.sourceUrl ? `/feeds/add/${encodeURIComponent(route.sourceUrl)}` : "/feeds/add";
+    return route.sourceUrl
+      ? `/feeds/add/${encodeURIComponent(route.sourceUrl)}`
+      : route.sourceType
+        ? `/feeds/add?type=${route.sourceType}`
+        : "/feeds/add";
   }
   if (route.kind === "settings") {
     return route.category === "appearance" ? "/settings" : `/settings/${route.category}`;

@@ -53,6 +53,8 @@ import {
   type FolderManagementAction,
   handleActionMenuKeyDown,
 } from "./feed-management";
+import type { AddFeedSourceType } from "./feed-source";
+import { ADD_FEED_SOURCE_OPTIONS } from "./feed-source-options";
 import { useMotionPresence } from "./motion";
 
 export type AppView = "reader" | "feeds" | "rules" | "settings";
@@ -140,6 +142,8 @@ interface SidebarProps {
   onSelectState: (state: ArticleState) => void;
   onSelectScope: (feedId: number | null, folderId: number | null) => void;
   onAddFeed: () => void;
+  onAddSubscription: (sourceType: AddFeedSourceType) => void;
+  onAddFolder: () => void;
   onNavigate: (view: AppView) => void;
   onFeedAction: (feed: Feed, action: FeedManagementAction) => void;
   onFolderAction: (folder: FolderType, action: FolderManagementAction) => void;
@@ -149,6 +153,7 @@ interface SidebarProps {
 }
 
 type SidebarContextMenuState =
+  | { kind: "add"; trigger: HTMLButtonElement; left: number; top: number; keyboard: boolean }
   | {
       kind: "feed";
       feed: Feed;
@@ -180,6 +185,8 @@ export function Sidebar({
   onSelectState,
   onSelectScope,
   onAddFeed,
+  onAddSubscription,
+  onAddFolder,
   onNavigate,
   onFeedAction,
   onFolderAction,
@@ -320,7 +327,32 @@ export function Sidebar({
                   <RefreshCw className={refreshing ? "spin" : ""} aria-hidden="true" size={14} />
                 </button>
               ) : null}
-              <button type="button" onClick={onAddFeed} aria-label="Add feed" title="Add feed">
+              <button
+                type="button"
+                aria-label="Add subscription or folder"
+                title="Add subscription or folder"
+                aria-haspopup="menu"
+                aria-expanded={contextMenu?.kind === "add"}
+                aria-controls={contextMenu?.kind === "add" ? "sidebar-add-menu" : undefined}
+                onClick={(event) => {
+                  const trigger = event.currentTarget;
+                  const bounds = trigger.getBoundingClientRect();
+                  if (contextMenu?.kind === "add") closeContextMenu();
+                  else
+                    setContextMenu({
+                      kind: "add",
+                      trigger,
+                      left: bounds.left,
+                      top: bounds.bottom + 4,
+                      keyboard: event.detail === 0,
+                    });
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                  event.preventDefault();
+                  event.currentTarget.click();
+                }}
+              >
                 <Plus aria-hidden="true" size={15} />
               </button>
             </span>
@@ -436,6 +468,14 @@ export function Sidebar({
         <SidebarContextMenu
           state={contextMenu}
           onClose={closeContextMenu}
+          onAddSubscription={(sourceType) => {
+            closeContextMenu();
+            onAddSubscription(sourceType);
+          }}
+          onAddFolder={() => {
+            closeContextMenu();
+            onAddFolder();
+          }}
           onFeedAction={(feed, action) => {
             closeContextMenu();
             onFeedAction(feed, action);
@@ -453,10 +493,14 @@ export function Sidebar({
 function SidebarContextMenu({
   state,
   onClose,
+  onAddSubscription,
+  onAddFolder,
   onFeedAction,
   onFolderAction,
 }: {
   state: SidebarContextMenuState;
+  onAddSubscription: (sourceType: AddFeedSourceType) => void;
+  onAddFolder: () => void;
   onClose: () => void;
   onFeedAction: (feed: Feed, action: FeedManagementAction) => void;
   onFolderAction: (folder: FolderType, action: FolderManagementAction) => void;
@@ -467,10 +511,9 @@ function SidebarContextMenu({
   useLayoutEffect(() => {
     const menu = menuRef.current;
     if (!menu) return;
-    const bounds = menu.getBoundingClientRect();
     setPosition({
-      left: Math.max(8, Math.min(state.left, window.innerWidth - bounds.width - 8)),
-      top: Math.max(8, Math.min(state.top, window.innerHeight - bounds.height - 8)),
+      left: Math.max(8, Math.min(state.left, window.innerWidth - menu.offsetWidth - 8)),
+      top: Math.max(8, Math.min(state.top, window.innerHeight - menu.offsetHeight - 8)),
     });
   }, [state]);
 
@@ -479,7 +522,11 @@ function SidebarContextMenu({
       menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
     });
     const dismissPointer = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) onClose();
+      if (
+        !menuRef.current?.contains(event.target as Node) &&
+        !state.trigger.contains(event.target as Node)
+      )
+        onClose();
     };
     const dismissFocus = (event: FocusEvent) => {
       const target = event.target as Node;
@@ -501,17 +548,44 @@ function SidebarContextMenu({
   return createPortal(
     <div
       ref={menuRef}
+      id={state.kind === "add" ? "sidebar-add-menu" : undefined}
       className="sidebar-context-menu context-action-menu"
       role="menu"
-      aria-label={`${state.kind === "feed" ? state.feed.title : state.folder.name} actions`}
-      style={position}
+      aria-label={
+        state.kind === "add"
+          ? "Add subscription or folder"
+          : `${state.kind === "feed" ? state.feed.title : state.folder.name} actions`
+      }
+      style={{
+        ...position,
+        ...(state.kind === "add" && state.keyboard ? { transition: "none" } : {}),
+      }}
       onContextMenu={(event) => event.preventDefault()}
       onKeyDown={(event) => {
         event.stopPropagation();
         handleActionMenuKeyDown(event, onClose);
       }}
     >
-      {state.kind === "feed" ? (
+      {state.kind === "add" ? (
+        <>
+          {ADD_FEED_SOURCE_OPTIONS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              type="button"
+              role="menuitem"
+              onClick={() => onAddSubscription(value)}
+            >
+              <Icon aria-hidden="true" size={16} />
+              {label}
+            </button>
+          ))}
+          <hr className="context-menu-separator" />
+          <button type="button" role="menuitem" onClick={onAddFolder}>
+            <Folder aria-hidden="true" size={16} />
+            New folder
+          </button>
+        </>
+      ) : state.kind === "feed" ? (
         <FeedActionMenuItems
           feed={state.feed}
           onAction={(action) => onFeedAction(state.feed, action)}

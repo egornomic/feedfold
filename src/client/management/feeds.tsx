@@ -18,13 +18,11 @@ import {
   RefreshCw,
   Rss,
   Search,
-  Send,
   X,
 } from "lucide-react";
 import {
   type FormEvent,
   type ReactNode,
-  type SVGProps,
   useCallback,
   useEffect,
   useId,
@@ -65,6 +63,7 @@ import {
   TELEGRAM_HANDLE_PATTERN,
   X_HANDLE_PATTERN,
 } from "../feed-source";
+import { ADD_FEED_SOURCE_OPTIONS } from "../feed-source-options";
 import { folderBranchFeedCount, folderHierarchy, folderPathLabel } from "../folder-hierarchy";
 import type { MotionState } from "../motion";
 import { WebFeedSetup } from "../web-feed-setup";
@@ -80,50 +79,6 @@ import {
 import "./feeds.css";
 
 type FeedsPageTab = "subscriptions" | "folders";
-
-function XLogo({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
-  return (
-    <svg {...props} width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <title>X</title>
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-    </svg>
-  );
-}
-
-const ADD_FEED_SOURCE_OPTIONS = [
-  {
-    value: "rss",
-    label: "Website or feed",
-    description: "Find the published feed for a website, or use a direct feed address.",
-    detail: "RSS, Atom, or JSON Feed",
-    recommended: true,
-    icon: Rss,
-  },
-  {
-    value: "web",
-    label: "Web page",
-    description: "Turn repeated links on one public page into a feed.",
-    detail: "Articles, releases, listings, and more",
-    recommended: false,
-    icon: Globe2,
-  },
-  {
-    value: "telegram",
-    label: "Telegram channel",
-    description: "Follow posts from a public Telegram channel.",
-    detail: "Public channels only",
-    recommended: false,
-    icon: Send,
-  },
-  {
-    value: "x",
-    label: "X profile",
-    description: "Follow a public X profile through Nitter RSS.",
-    detail: "Public profiles only",
-    recommended: false,
-    icon: XLogo,
-  },
-] as const;
 
 const ADD_FEED_INPUTS: Record<
   AddFeedSourceType,
@@ -827,6 +782,7 @@ function AddFeedForm({
   feeds,
   folders,
   initialSourceUrl,
+  initialSourceType,
   mutations,
   onCancel,
   onSaved,
@@ -834,12 +790,13 @@ function AddFeedForm({
   feeds: Feed[];
   folders: Folder[];
   initialSourceUrl: string;
+  initialSourceType?: AddFeedSourceType;
   mutations: ReaderDataMutations;
   onCancel: () => void;
   onSaved: (feed: Feed) => Promise<void> | void;
 }) {
   const [sourceType, setSourceType] = useState<AddFeedSourceType | null>(
-    initialSourceUrl ? "rss" : null,
+    initialSourceType ?? (initialSourceUrl ? "rss" : null),
   );
   const [sourceInputs, setSourceInputs] = useState<Record<AddFeedSourceType, string>>({
     rss: initialSourceUrl,
@@ -1339,6 +1296,7 @@ function AddFeedForm({
 export function AddFeedPage({
   bootstrap,
   initialSourceUrl,
+  initialSourceType,
   mutations,
   onMenu,
   onBack,
@@ -1346,6 +1304,7 @@ export function AddFeedPage({
 }: {
   bootstrap: BootstrapData;
   initialSourceUrl: string;
+  initialSourceType?: AddFeedSourceType;
   mutations: ReaderDataMutations;
   onMenu: () => void;
   onBack: () => void;
@@ -1370,6 +1329,8 @@ export function AddFeedPage({
         }
       />
       <AddFeedForm
+        key={`${initialSourceType ?? "choose"}:${initialSourceUrl}`}
+        initialSourceType={initialSourceType}
         feeds={bootstrap.feeds}
         folders={bootstrap.folders}
         initialSourceUrl={initialSourceUrl}
