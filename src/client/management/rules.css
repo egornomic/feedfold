@@ -331,3 +331,103 @@
   gap: 10px;
   color: var(--danger);
 }
+
+@media (max-width: 760px) {
+  .rule-condition-columns {
+    display: none;
+  }
+  .rule-condition-list {
+    border-radius: var(--radius-md);
+  }
+  .rule-condition-row {
+    grid-template-areas:
+      "logic field field remove"
+      ". comparator value .";
+    grid-template-columns: 70px 76px minmax(190px, 1fr) 36px;
+    gap: 7px 8px;
+    padding: 10px;
+  }
+  .rule-condition-connector,
+  .rule-condition-operator {
+    grid-area: logic;
+    justify-self: stretch;
+  }
+  .rule-condition-connector {
+    align-self: center;
+    padding-left: 2px;
+  }
+  .rule-condition-field-control {
+    grid-area: field;
+  }
+  .rule-condition-comparator {
+    grid-area: comparator;
+  }
+  .rule-condition-value-control {
+    grid-area: value;
+  }
+  .rule-condition-remove,
+  .rule-condition-remove-spacer {
+    grid-area: remove;
+  }
+  .rule-action-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .rule-basics-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rule-form-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .rule-condition-row {
+    grid-template-areas:
+      "logic remove"
+      "field field"
+      "comparator comparator"
+      "value value";
+    grid-template-columns: minmax(0, 1fr) 36px;
+    gap: 7px 8px;
+    padding: 10px;
+  }
+  .rule-condition-connector,
+  .rule-condition-operator {
+    grid-area: logic;
+    justify-self: start;
+  }
+  .rule-condition-connector {
+    align-self: center;
+    padding-left: 0;
+  }
+  .rule-condition-operator {
+    width: 92px;
+  }
+  .rule-condition-field-control {
+    grid-area: field;
+  }
+  .rule-condition-comparator {
+    grid-area: comparator;
+    justify-self: start;
+    padding-left: 2px;
+    color: var(--muted);
+    font-size: var(--type-label);
+  }
+  .rule-condition-value-control {
+    grid-area: value;
+  }
+  .rule-condition-remove,
+  .rule-condition-remove-spacer {
+    grid-area: remove;
+  }
+  .rule-condition-actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .rule-enabled-field {
+    padding-top: 12px;
+  }
+}

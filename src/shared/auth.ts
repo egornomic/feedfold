@@ -1,6 +1,6 @@
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 32;
-export const USERNAME_PATTERN_SOURCE = "[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?";
+export const USERNAME_PATTERN_SOURCE = "[A-Za-z0-9](?:[A-Za-z0-9._\\-]*[A-Za-z0-9])?";
 export const USERNAME_PATTERN = new RegExp(`^${USERNAME_PATTERN_SOURCE}$`);
 
 export const INVITE_CODE_LENGTH = 6;
