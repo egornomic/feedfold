@@ -16,6 +16,7 @@ describe("application routes", () => {
     [{ kind: "add-feed", sourceUrl: "" }, "/feeds/add"],
     [{ kind: "add-feed", sourceUrl: "", sourceType: "rss" }, "/feeds/add?type=rss"],
     [{ kind: "add-feed", sourceUrl: "", sourceType: "web" }, "/feeds/add?type=web"],
+    [{ kind: "add-feed", sourceUrl: "", sourceType: "youtube" }, "/feeds/add?type=youtube"],
     [{ kind: "add-feed", sourceUrl: "", sourceType: "telegram" }, "/feeds/add?type=telegram"],
     [{ kind: "add-feed", sourceUrl: "", sourceType: "x" }, "/feeds/add?type=x"],
     [

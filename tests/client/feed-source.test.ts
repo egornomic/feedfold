@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { feedSourceUrl } from "../../src/client/feed-source.js";
 
 describe("add feed source input", () => {
+  it("turns YouTube channel handles into discoverable channel URLs", () => {
+    expect(feedSourceUrl("youtube", " @kurzgesagt ")).toBe("https://www.youtube.com/@kurzgesagt");
+    expect(feedSourceUrl("youtube", "kurzgesagt")).toBe("https://www.youtube.com/@kurzgesagt");
+  });
+
   it("keeps published and web feed URLs unchanged", () => {
     expect(feedSourceUrl("rss", " https://example.com/feed.xml ")).toBe(
       "https://example.com/feed.xml",
@@ -19,6 +24,9 @@ describe("add feed source input", () => {
   });
 
   it("rejects profile URLs where the form requires a handle", () => {
+    expect(() => feedSourceUrl("youtube", "https://www.youtube.com/@kurzgesagt")).toThrow(
+      "Enter a YouTube channel handle",
+    );
     expect(() => feedSourceUrl("telegram", "https://t.me/example")).toThrow(
       "Enter a Telegram handle",
     );

@@ -62,6 +62,7 @@ import {
   feedSourceUrl,
   TELEGRAM_HANDLE_PATTERN,
   X_HANDLE_PATTERN,
+  YOUTUBE_HANDLE_PATTERN,
 } from "../feed-source";
 import { ADD_FEED_SOURCE_OPTIONS } from "../feed-source-options";
 import { folderBranchFeedCount, folderHierarchy, folderPathLabel } from "../folder-hierarchy";
@@ -113,6 +114,17 @@ const ADD_FEED_INPUTS: Record<
     action: "Find entries",
     loading: "Finding entries",
     add: "Add web feed",
+  },
+  youtube: {
+    label: "YouTube channel handle",
+    heading: "Which YouTube channel?",
+    placeholder: "@kurzgesagt",
+    help: "Enter the channel handle, with or without @. Links aren't supported.",
+    prefix: "youtube.com/",
+    pattern: YOUTUBE_HANDLE_PATTERN,
+    action: "Preview channel",
+    loading: "Loading channel",
+    add: "Add YouTube feed",
   },
   telegram: {
     label: "Telegram channel handle",
@@ -801,6 +813,7 @@ function AddFeedForm({
   const [sourceInputs, setSourceInputs] = useState<Record<AddFeedSourceType, string>>({
     rss: initialSourceUrl,
     web: initialSourceUrl,
+    youtube: "",
     telegram: "",
     x: "",
   });
@@ -1044,11 +1057,13 @@ function AddFeedForm({
           <p>
             {analyzingWebPage
               ? "Feedfold is loading the page and looking for groups of links that repeat."
-              : sourceType === "telegram"
-                ? "Loading the public channel and its latest posts."
-                : sourceType === "x"
-                  ? "Loading the profile through Nitter RSS."
-                  : "Checking the website for a published feed and loading its latest entries."}
+              : sourceType === "youtube"
+                ? "Loading the channel's feed and its latest videos."
+                : sourceType === "telegram"
+                  ? "Loading the public channel and its latest posts."
+                  : sourceType === "x"
+                    ? "Loading the profile through Nitter RSS."
+                    : "Checking the website for a published feed and loading its latest entries."}
           </p>
           <div className="feed-preview-loading-lines" aria-hidden="true">
             <div className="skeleton-line wide" />

@@ -86,6 +86,7 @@ export function parseAppRoute(pathname: string, search: string, basePath: string
       sourceUrl: "",
       ...(sourceType === "rss" ||
       sourceType === "web" ||
+      sourceType === "youtube" ||
       sourceType === "telegram" ||
       sourceType === "x"
         ? { sourceType }

@@ -1,4 +1,4 @@
-import { Globe2, Rss, Send } from "lucide-react";
+import { Globe2, Rss, Send, SquarePlay } from "lucide-react";
 import type { SVGProps } from "react";
 
 function XLogo({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
@@ -26,6 +26,14 @@ export const ADD_FEED_SOURCE_OPTIONS = [
     detail: "Articles, releases, listings, and more",
     recommended: false,
     icon: Globe2,
+  },
+  {
+    value: "youtube",
+    label: "YouTube channel",
+    description: "Follow new videos from a YouTube channel.",
+    detail: "Channel videos",
+    recommended: false,
+    icon: SquarePlay,
   },
   {
     value: "telegram",
