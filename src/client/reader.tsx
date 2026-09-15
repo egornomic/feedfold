@@ -51,7 +51,7 @@ import type {
   TelegramArticleMedia,
   XArticleMedia,
 } from "../shared/types";
-import { withXVideoPlaceholder, xPostId, xVideoPlaceholderId, xVideoPostId } from "../shared/x";
+import { withXVideoPlaceholder, xPostId, xVideoPlaceholderId, xVideoPostIds } from "../shared/x";
 import { AiMarkdown } from "./ai-markdown";
 import { api, appUrl, errorMessage } from "./api";
 import { articleContentView, shouldShowArticleDescription } from "./article-content";
@@ -2498,16 +2498,13 @@ function ArticleBody({
   showYouTubeDescriptions: boolean;
   onToggleFullContent: (article: Article) => void;
 }) {
-  const xPostId = xVideoPostId(article.url, article.feedContentHtml);
+  const videoPostIds = xVideoPostIds(article.url, article.feedContentHtml);
   const translation = shouldShowArticleDescription(article, showYouTubeDescriptions)
     ? translationState.translation
     : null;
   const translationVisible = Boolean(translationState.visible && translation);
   const contentView = articleContentView(article, fullContentVisible);
-  const xVideoTargetId =
-    xPostId && contentView !== "full" && !translationVisible
-      ? xVideoPlaceholderId(article.id)
-      : null;
+  const inlineXVideos = contentView !== "full" && !translationVisible;
 
   return (
     <>
@@ -2542,7 +2539,14 @@ function ArticleBody({
         ) : null}
       </div>
       {telegramPostIdentity(article.url) ? <TelegramPostMedia article={article} /> : null}
-      {xPostId ? <XPostVideo article={article} postId={xPostId} targetId={xVideoTargetId} /> : null}
+      {videoPostIds.map((postId) => (
+        <XPostVideo
+          key={postId}
+          article={article}
+          postId={postId}
+          targetId={inlineXVideos ? xVideoPlaceholderId(article.id, postId) : null}
+        />
+      ))}
     </>
   );
 }
@@ -2571,14 +2575,14 @@ function XPostVideo({
     requestController.current = controller;
     setState({ status: "loading" });
     void api
-      .xArticleMedia(article.id, controller.signal)
+      .xArticleMedia(article.id, postId, controller.signal)
       .then((media) => setState({ status: "ready", media }))
       .catch((error) => {
         if (!controller.signal.aborted) {
           setState({ status: "error", message: errorMessage(error) });
         }
       });
-  }, [article.id]);
+  }, [article.id, postId]);
 
   useEffect(() => {
     loadMedia();
@@ -2840,10 +2844,10 @@ function FeedArticleText({
 }) {
   if (!shouldShowArticleDescription(article, showYouTubeDescriptions)) return null;
   if (article.feedContentHtml) {
-    const xPostId = xVideoPostId(article.url, article.feedContentHtml);
-    const html = xPostId
-      ? withXVideoPlaceholder(article.feedContentHtml, xPostId, article.id)
-      : article.feedContentHtml;
+    const html = xVideoPostIds(article.url, article.feedContentHtml).reduce(
+      (html, postId) => withXVideoPlaceholder(html, postId, article.id),
+      article.feedContentHtml,
+    );
     return <ArticleHtml sanitizedHtml={html} />;
   }
   return article.summary ? (

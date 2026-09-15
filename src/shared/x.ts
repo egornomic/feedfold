@@ -57,28 +57,35 @@ function isVideoAnchor(anchor: string): boolean {
   return /^Video$/i.test(text) && /<img\b/i.test(anchor);
 }
 
-export function xVideoPostId(
+export function xVideoPostIds(
   articleUrl: string | null | undefined,
   feedContentHtml: string | null | undefined,
-): string | null {
+): string[] {
+  const postIds = new Set<string>();
   if (feedContentHtml) {
     for (const match of feedContentHtml.matchAll(ANCHOR)) {
       const anchor = match[0];
       const postId = xPostId(match[2]);
-      if (postId && isVideoAnchor(anchor)) return postId;
+      if (postId && isVideoAnchor(anchor)) postIds.add(postId);
     }
   }
-  return feedContentHtml && /(?:amplify|ext_tw)_video_thumb/i.test(feedContentHtml)
-    ? xPostId(articleUrl)
-    : null;
+  if (
+    postIds.size === 0 &&
+    feedContentHtml &&
+    /(?:amplify|ext_tw)_video_thumb/i.test(feedContentHtml)
+  ) {
+    const postId = xPostId(articleUrl);
+    if (postId) postIds.add(postId);
+  }
+  return [...postIds];
 }
 
-export function xVideoPlaceholderId(articleId: number): string {
-  return `article-${articleId}-x-video`;
+export function xVideoPlaceholderId(articleId: number, postId: string): string {
+  return `article-${articleId}-x-video-${postId}`;
 }
 
 export function withXVideoPlaceholder(html: string, postId: string, articleId: number): string {
-  const placeholder = `<div id="${xVideoPlaceholderId(articleId)}"></div>`;
+  const placeholder = `<div id="${xVideoPlaceholderId(articleId, postId)}"></div>`;
   return html.replace(ANCHOR, (anchor, _quote: string, href: string) =>
     xPostId(href) === postId && isVideoAnchor(anchor) ? placeholder : anchor,
   );

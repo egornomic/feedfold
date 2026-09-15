@@ -269,8 +269,13 @@ export function createApiClient(runtime: ApiRuntime) {
         { signal },
       ),
 
-    xArticleMedia: (id: number, signal?: AbortSignal) =>
-      request<XArticleMedia>("xArticleMedia", { id }, `/api/articles/${id}/x-media`, { signal }),
+    xArticleMedia: (id: number, postId: string, signal?: AbortSignal) =>
+      request<XArticleMedia>(
+        "xArticleMedia",
+        { id, postId },
+        `/api/articles/${id}/x-media/${postId}`,
+        { signal },
+      ),
 
     loadFullContent: (id: number) =>
       request<Article>("loadFullContent", { id }, `/api/articles/${id}/extract`, {

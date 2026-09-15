@@ -12,7 +12,7 @@ import {
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
   DEFAULT_CUSTOM_PROMPTS,
 } from "../../src/shared/ai-prompts.js";
-import { xVideoPostId } from "../../src/shared/x.js";
+import { xVideoPostIds } from "../../src/shared/x.js";
 
 const directories: string[] = [];
 
@@ -230,7 +230,9 @@ describe("database migrations", () => {
         url: "https://x.com/person/status/2095678312773554533#m",
         imageUrl: "https://pbs.twimg.com/media/poster.jpg",
       });
-      expect(xVideoPostId(migrated?.url, migrated?.feedContentHtml)).toBe("2095678312773554533");
+      expect(xVideoPostIds(migrated?.url, migrated?.feedContentHtml)).toEqual([
+        "2095678312773554533",
+      ]);
       expect(articleBody(migrated?.feedContentHtml ?? "").querySelector("img")?.src).toBe(
         "https://pbs.twimg.com/media/poster.jpg",
       );

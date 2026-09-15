@@ -7,7 +7,7 @@ import { discoverFeed } from "../../src/server/feed-discovery.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { FeedRefreshService } from "../../src/server/refresh.js";
 import { fetchXFeed, nitterBaseUrls, xContentHtml } from "../../src/server/x-feed.js";
-import { xFeedUrl, xVideoPostId } from "../../src/shared/x.js";
+import { xFeedUrl, xVideoPostIds } from "../../src/shared/x.js";
 
 const cleanups: Array<() => void | Promise<void>> = [];
 const POST_ID = "2095678312773554533";
@@ -178,9 +178,9 @@ describe("X RSS instances", () => {
     working = await serve((_request, response) => response.end(rss(working)));
     const parsed = await fetchXFeed(FEED_URL, 100, fetch, undefined, [stalled, working]);
     expect(parsed.articles).toHaveLength(1);
-    expect(xVideoPostId(parsed.articles[0]?.url, parsed.articles[0]?.feedContentHtml)).toBe(
+    expect(xVideoPostIds(parsed.articles[0]?.url, parsed.articles[0]?.feedContentHtml)).toEqual([
       POST_ID,
-    );
+    ]);
   });
 
   it("reports failure without importing an RSS whitelist notice when all instances fail", async () => {

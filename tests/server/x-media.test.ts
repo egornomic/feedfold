@@ -211,16 +211,16 @@ describe("X article media", () => {
     const cookie = `feedfold_session=${reader.token}`;
     const request = (url: string) => app.inject({ method: "GET", url, headers: { cookie } });
 
-    const metadata = await request(`/api/articles/${article.id}/x-media`);
+    const metadata = await request(`/api/articles/${article.id}/x-media/${VIDEO_POST_ID}`);
     expect(metadata.statusCode).toBe(200);
     expect(metadata.json<XArticleMedia>()).toEqual({
-      sourceUrl: `/api/articles/${article.id}/x-media/source`,
-      posterUrl: `/api/articles/${article.id}/x-media/poster`,
+      sourceUrl: `/api/articles/${article.id}/x-media/${VIDEO_POST_ID}/source`,
+      posterUrl: `/api/articles/${article.id}/x-media/${VIDEO_POST_ID}/poster`,
       aspectRatio: 17 / 30,
     });
     const source = await app.inject({
       method: "GET",
-      url: `/api/articles/${article.id}/x-media/source`,
+      url: `/api/articles/${article.id}/x-media/${VIDEO_POST_ID}/source`,
       headers: { cookie, range: "bytes=0-1" },
     });
     expect(source.statusCode).toBe(206);
@@ -233,18 +233,23 @@ describe("X article media", () => {
     expect(source.rawPayload).toEqual(Buffer.from([0, 1]));
     const unsatisfiable = await app.inject({
       method: "GET",
-      url: `/api/articles/${article.id}/x-media/source`,
+      url: `/api/articles/${article.id}/x-media/${VIDEO_POST_ID}/source`,
       headers: { cookie, range: "bytes=300-400" },
     });
     expect(unsatisfiable.statusCode).toBe(416);
     expect(unsatisfiable.headers["content-range"]).toBe("bytes */200");
-    expect((await request(`/api/articles/${article.id}/x-media/poster`)).headers.location).toBe(
-      POSTER_URL,
+    expect(
+      (await request(`/api/articles/${article.id}/x-media/${VIDEO_POST_ID}/poster`)).headers
+        .location,
+    ).toBe(POSTER_URL);
+
+    expect((await request(`/api/articles/${article.id}/x-media/${OUTER_POST_ID}`)).statusCode).toBe(
+      404,
     );
 
     const hidden = await app.inject({
       method: "GET",
-      url: `/api/articles/${article.id}/x-media`,
+      url: `/api/articles/${article.id}/x-media/${VIDEO_POST_ID}`,
       headers: { cookie: `feedfold_session=${otherReader.token}` },
     });
     expect(hidden.statusCode).toBe(404);

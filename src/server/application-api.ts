@@ -3,7 +3,7 @@ import { resourceId as id, inputs } from "../shared/api-inputs.js";
 import type { DesktopRequest } from "../shared/desktop.js";
 import { telegramPostIdentity } from "../shared/telegram.js";
 import type { MarkReadRequest } from "../shared/types.js";
-import { xVideoPostId } from "../shared/x.js";
+import { xVideoPostIds } from "../shared/x.js";
 import { accountActivityTouchBefore } from "./account-activity.js";
 import type { AppDatabase } from "./database.js";
 import type { ExtractionQueue } from "./extraction.js";
@@ -158,8 +158,11 @@ export class ApplicationApi {
         };
       }
       case "xArticleMedia": {
-        const body = input(z.object({ id }).strict(), request.payload);
-        const media = await this.#xMediaForArticle(body.id);
+        const body = input(
+          z.object({ id, postId: z.string().regex(/^\d{1,30}$/) }).strict(),
+          request.payload,
+        );
+        const media = await this.#xMediaForArticle(body.id, body.postId);
         return {
           sourceUrl: media.url,
           posterUrl: media.posterUrl,
@@ -375,10 +378,10 @@ export class ApplicationApi {
     }
   }
 
-  async #xMediaForArticle(articleId: number) {
+  async #xMediaForArticle(articleId: number, postId: string) {
     const article = this.#database.articles.getArticle(this.#userId, articleId);
-    const postId = article ? xVideoPostId(article.url, article.feedContentHtml) : null;
-    if (!postId) throw new ApplicationApiError(404, "X video was not found.");
+    const postIds = article ? xVideoPostIds(article.url, article.feedContentHtml) : [];
+    if (!postIds.includes(postId)) throw new ApplicationApiError(404, "X video was not found.");
     try {
       return await this.#xMedia.mediaForPost(postId);
     } catch {
