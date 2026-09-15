@@ -195,6 +195,16 @@ export function Sidebar({
   onLogout,
 }: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
+  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 1020px)").matches);
+
+  useEffect(() => {
+    const viewport = window.matchMedia("(max-width: 1020px)");
+    const update = () => setCompact(viewport.matches);
+    viewport.addEventListener("change", update);
+    update();
+    return () => viewport.removeEventListener("change", update);
+  }, []);
+
   const rootFolders = bootstrap.folders.filter((folder) => folder.parentId === null);
   const uncategorized = bootstrap.feeds.filter((feed) => feed.folderId === null);
   const feedDrag = useFeedDrag(bootstrap.feeds, onMoveFeed);
@@ -236,6 +246,7 @@ export function Sidebar({
     <aside
       className={`sidebar${open ? " is-open" : ""}${collapsed ? " is-collapsed" : ""}${draggedFeed ? " is-dragging-feed" : ""}`}
       aria-label="Primary navigation"
+      inert={compact && !open}
     >
       <div className="brand-row">
         <button className="brand" type="button" onClick={() => onSelectScope(null, null)}>
