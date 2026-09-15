@@ -3,6 +3,7 @@
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0 34px 64px;
   background: var(--paper-canvas);
   background-blend-mode: var(--paper-blend);

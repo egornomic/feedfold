@@ -150,8 +150,18 @@ body,
   margin: 0;
 }
 
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+html,
 body {
-  min-height: 100vh;
+  overscroll-behavior: none;
+}
+
+body {
+  min-height: 100dvh;
   overflow: hidden;
   background: var(--paper-canvas);
   background-blend-mode: var(--paper-blend);
@@ -169,8 +179,29 @@ textarea {
 }
 
 button,
-a {
-  -webkit-tap-highlight-color: transparent;
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+button,
+[role="button"],
+a:is(.primary-button, .secondary-button, .quiet-button, .icon-button) {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Keep press feedback on controls that have no component-specific active state. */
+:where(button, a, [role="button"]):active:not(:disabled, [aria-disabled="true"]) {
+  opacity: 0.75;
+}
+
+/* A font floor prevents focus zoom, including on tablets with a trackpad. */
+@media (any-pointer: coarse) {
+  :root :is(input, textarea, select):not([type="checkbox"], [type="radio"], [type="range"]) {
+    font-size: 16px;
+  }
 }
 
 button {
@@ -520,6 +551,7 @@ kbd {
   min-height: 0;
   flex: 1;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 0 12px 12px;
 }
 
@@ -721,18 +753,26 @@ kbd {
   opacity: 0;
 }
 
-.feed-tree-row:hover .feed-menu-button,
 .feed-tree-row:has(:focus-visible) .feed-menu-button,
-.tree-row:hover .folder-menu-button,
 .tree-row:has(:focus-visible) .folder-menu-button {
   opacity: 1;
 }
 
-.feed-tree-row:hover .nav-count,
 .feed-tree-row:has(:focus-visible) .nav-count,
-.tree-row:hover .nav-count,
 .tree-row:has(:focus-visible) .nav-count {
   opacity: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .feed-tree-row:hover .feed-menu-button,
+  .tree-row:hover .folder-menu-button {
+    opacity: 1;
+  }
+
+  .feed-tree-row:hover .nav-count,
+  .tree-row:hover .nav-count {
+    opacity: 0;
+  }
 }
 
 .status-dot {
@@ -838,11 +878,13 @@ kbd {
 .auth-page {
   display: flex;
   width: 100%;
-  min-height: 100dvh;
-  align-items: center;
+  height: 100dvh;
+  align-items: safe center;
   justify-content: center;
-  padding: 24px;
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px))
+    max(24px, env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
   overflow: auto;
+  overscroll-behavior: contain;
   background: var(--paper-canvas);
   background-blend-mode: var(--paper-blend);
 }
@@ -1660,6 +1702,7 @@ kbd {
   background: var(--paper-canvas);
   background-blend-mode: var(--paper-blend);
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .article-list {
@@ -1668,6 +1711,7 @@ kbd {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   scroll-padding-top: 14px;
   background: var(--paper-canvas);
   background-blend-mode: var(--paper-blend);
@@ -3141,7 +3185,7 @@ kbd {
   color: white;
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .image-lightbox-close:hover {
     background: oklch(0 0 0 / 0.75);
     color: white;
@@ -3592,7 +3636,7 @@ kbd {
 }
 
 .startup-state {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--paper-canvas);
   background-blend-mode: var(--paper-blend);
 }

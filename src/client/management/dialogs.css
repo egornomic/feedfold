@@ -3,6 +3,7 @@
   max-height: min(820px, calc(100dvh - 28px));
   padding: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--paper-raised);

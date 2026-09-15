@@ -70,6 +70,12 @@ export function useReaderPreferences(userId: string) {
     const colorScheme = window.matchMedia("(prefers-color-scheme: light)");
     const applyTheme = () => {
       document.documentElement.dataset.theme = resolveTheme(theme, colorScheme.matches);
+      document
+        .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+        ?.setAttribute(
+          "content",
+          getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(),
+        );
     };
 
     applyTheme();

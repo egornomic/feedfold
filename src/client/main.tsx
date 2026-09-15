@@ -13,6 +13,12 @@ const root = document.getElementById("root");
 if (!root) throw new Error("The feedfold root element is missing.");
 
 const POINTER_MOVE_THRESHOLD = 4;
+const TOASTER_OFFSET = {
+  top: "max(18px, env(safe-area-inset-top, 0px))",
+  right: "max(18px, env(safe-area-inset-right, 0px))",
+  bottom: "max(18px, env(safe-area-inset-bottom, 0px))",
+  left: "max(18px, env(safe-area-inset-left, 0px))",
+};
 const TOASTER_STYLE = {
   "--width": "min(430px, calc(100vw - 36px))",
   "--border-radius": "var(--radius-md)",
@@ -75,8 +81,8 @@ createRoot(root).render(
     <Toaster
       theme="system"
       position="bottom-right"
-      offset={18}
-      mobileOffset={18}
+      offset={TOASTER_OFFSET}
+      mobileOffset={TOASTER_OFFSET}
       duration={2800}
       gap={8}
       style={TOASTER_STYLE}
