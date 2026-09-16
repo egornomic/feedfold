@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import type { ReadingMode } from "../shared/types.js";
+import { type ColorPalette, DEFAULT_COLOR_PALETTE } from "./color-palettes.js";
 
 export type Theme = "auto" | "dark" | "light";
-type ResolvedTheme = Exclude<Theme, "auto">;
+export type ResolvedTheme = Exclude<Theme, "auto">;
+export type ColorPalettes = Record<ResolvedTheme, ColorPalette>;
 
 export const ARTICLE_FONT_MIN = 16;
 export const ARTICLE_FONT_MAX = 23;
@@ -34,6 +36,8 @@ export function clearReaderPreferences(userId: string): void {
   for (const setting of [
     "reading-mode",
     "theme",
+    "color-palette-light",
+    "color-palette-dark",
     "article-font-size",
     "desktop-sidebar-collapsed",
   ]) {
@@ -46,6 +50,11 @@ export function resolveTheme(theme: Theme, prefersLight: boolean): ResolvedTheme
   return prefersLight ? "light" : "dark";
 }
 
+export function resolveAppearance(theme: Theme, palettes: ColorPalettes, prefersLight: boolean) {
+  const mode = resolveTheme(theme, prefersLight);
+  return { mode, palette: palettes[mode] };
+}
+
 export function useReaderPreferences(userId: string) {
   const [readingMode, setReadingMode] = useState<ReadingMode>(() =>
     storedValue<ReadingMode>(accountStorageKey(userId, "reading-mode"), "magazine"),
@@ -53,6 +62,16 @@ export function useReaderPreferences(userId: string) {
   const [theme, setTheme] = useState<Theme>(() =>
     storedValue<Theme>(accountStorageKey(userId, "theme"), "dark"),
   );
+  const [colorPalettes, setColorPalettes] = useState<ColorPalettes>(() => ({
+    light: storedValue<ColorPalette>(
+      accountStorageKey(userId, "color-palette-light"),
+      DEFAULT_COLOR_PALETTE,
+    ),
+    dark: storedValue<ColorPalette>(
+      accountStorageKey(userId, "color-palette-dark"),
+      DEFAULT_COLOR_PALETTE,
+    ),
+  }));
   const [articleFontSize, setArticleFontSize] = useState(() =>
     Math.min(
       ARTICLE_FONT_MAX,
@@ -66,25 +85,30 @@ export function useReaderPreferences(userId: string) {
     storedBoolean(accountStorageKey(userId, "desktop-sidebar-collapsed"), false),
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const colorScheme = window.matchMedia("(prefers-color-scheme: light)");
     const applyTheme = () => {
-      document.documentElement.dataset.theme = resolveTheme(theme, colorScheme.matches);
+      const appearance = resolveAppearance(theme, colorPalettes, colorScheme.matches);
+      document.documentElement.dataset.theme = appearance.mode;
+      document.documentElement.dataset.palette = appearance.palette;
       document
         .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-        ?.setAttribute(
-          "content",
-          getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(),
-        );
+        ?.setAttribute("content", getComputedStyle(document.body).backgroundColor);
     };
 
     applyTheme();
     window.localStorage.setItem(accountStorageKey(userId, "theme"), theme);
+    for (const mode of ["light", "dark"] as const) {
+      window.localStorage.setItem(
+        accountStorageKey(userId, `color-palette-${mode}`),
+        colorPalettes[mode],
+      );
+    }
 
     if (theme !== "auto") return;
     colorScheme.addEventListener("change", applyTheme);
     return () => colorScheme.removeEventListener("change", applyTheme);
-  }, [theme, userId]);
+  }, [theme, colorPalettes, userId]);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--article-font-size", `${articleFontSize}px`);
@@ -110,6 +134,9 @@ export function useReaderPreferences(userId: string) {
     setReadingMode,
     theme,
     setTheme,
+    colorPalettes,
+    setColorPalette: (mode: ResolvedTheme, palette: ColorPalette) =>
+      setColorPalettes((current) => ({ ...current, [mode]: palette })),
     articleFontSize,
     setArticleFontSize,
     desktopSidebarCollapsed,
