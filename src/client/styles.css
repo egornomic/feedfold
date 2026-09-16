@@ -45,7 +45,12 @@
   --radius-sm: 5px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --control-height: 38px;
+  /* Compact desktop controls; touch targets occupy real, non-overlapping space. */
+  --control-target-min: 0px;
+  --control-size: max(2.25rem, var(--control-target-min));
+  --control-size-compact: max(1.875rem, var(--control-target-min));
+  --control-height: max(2.375rem, var(--control-target-min));
+  --control-size-touch: 2.75rem;
   --paper-image: url("/textures/pressed-paper-dark.webp");
   --paper-size: 720px 720px;
   --paper-blend: normal;
@@ -167,10 +172,25 @@ a:is(.primary-button, .secondary-button, .quiet-button, .icon-button) {
 /* Keep press feedback on controls that have no component-specific active state. */
 :where(button, a, [role="button"]):active:not(:disabled, [aria-disabled="true"]) {
   opacity: 0.75;
+  transition-duration: 0s;
 }
 
-/* A font floor prevents focus zoom, including on tablets with a trackpad. */
+/* Size by touch capability, including tablets with a trackpad attached. */
 @media (any-pointer: coarse) {
+  :root {
+    --control-target-min: var(--control-size-touch);
+  }
+
+  :root
+    :is(
+      button,
+      [role="button"],
+      a:is(.primary-button, .secondary-button, .quiet-button, .icon-button)
+    ) {
+    min-width: var(--control-target-min);
+    min-height: var(--control-target-min);
+  }
+
   :root :is(input, textarea, select):not([type="checkbox"], [type="radio"], [type="range"]) {
     font-size: 16px;
   }
@@ -291,7 +311,7 @@ kbd {
 .quiet-button,
 .icon-button {
   display: inline-flex;
-  min-height: 36px;
+  min-height: var(--control-size);
   align-items: center;
   justify-content: center;
   gap: 7px;
@@ -315,11 +335,6 @@ kbd {
 }
 
 .danger-button {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
   padding: 7px 12px;
   border: 1px solid var(--danger);
   border-radius: var(--radius-sm);
@@ -341,7 +356,7 @@ kbd {
 }
 
 .icon-button {
-  min-width: 36px;
+  min-width: var(--control-size);
   padding: 6px;
   border: 1px solid transparent;
   background: transparent;
@@ -458,7 +473,7 @@ kbd {
 
 .brand {
   display: flex;
-  min-height: 38px;
+  min-height: var(--control-height);
   align-items: center;
   padding: 4px 7px;
   border: 0;
@@ -530,7 +545,7 @@ kbd {
 .nav-item {
   display: flex;
   width: 100%;
-  min-height: 34px;
+  min-height: var(--control-size);
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
@@ -612,8 +627,8 @@ kbd {
 
 .sidebar-section-heading button {
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: var(--control-size-compact);
+  height: var(--control-size-compact);
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -633,13 +648,13 @@ kbd {
 .tree-row {
   position: relative;
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-columns: max(22px, var(--control-target-min)) minmax(0, 1fr);
 }
 
 .tree-toggle {
   display: flex;
-  width: 22px;
-  min-height: 34px;
+  width: max(22px, var(--control-target-min));
+  min-height: var(--control-size);
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -702,7 +717,7 @@ kbd {
 
 .feed-tree-row .feed-nav-item {
   display: grid;
-  height: 36px;
+  height: var(--control-size);
   grid-template-columns: 7px minmax(0, 1fr) auto;
   gap: 8px;
 }
@@ -714,8 +729,8 @@ kbd {
   right: 3px;
   z-index: 2;
   display: inline-grid;
-  width: 30px;
-  height: 30px;
+  width: var(--control-size-compact);
+  height: var(--control-size-compact);
   padding: 0;
   place-items: center;
   border: 0;
@@ -776,7 +791,7 @@ kbd {
 .sidebar-empty {
   display: flex;
   width: 100%;
-  min-height: 38px;
+  min-height: var(--control-height);
   align-items: center;
   gap: 8px;
   padding: 7px;
@@ -910,7 +925,7 @@ kbd {
 
 .login-field input {
   width: 100%;
-  height: 38px;
+  height: var(--control-height);
   padding: 7px 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -963,7 +978,7 @@ kbd {
 }
 
 .auth-switch button {
-  min-height: 32px;
+  min-height: var(--control-size-compact);
   padding: 4px;
   border: 0;
   background: transparent;
@@ -1013,6 +1028,7 @@ kbd {
 
 .reader-title-row {
   display: flex;
+  flex-wrap: wrap;
   min-height: 54px;
   align-items: center;
   gap: 8px;
@@ -1051,7 +1067,7 @@ kbd {
   min-width: 180px;
   width: min(280px, 32vw);
   max-width: 280px;
-  height: 34px;
+  height: calc(var(--control-size-compact) + 4px);
   flex: 0 1 280px;
   align-items: center;
   gap: 7px;
@@ -1093,8 +1109,8 @@ kbd {
 
 .search-form > button:not(.search-submit) {
   display: flex;
-  width: 28px;
-  height: 28px;
+  width: var(--control-size-compact);
+  height: var(--control-size-compact);
   align-items: center;
   justify-content: center;
   border: 0;
@@ -1136,8 +1152,8 @@ kbd {
 }
 
 .mark-read-split-button .icon-button {
-  min-width: 34px;
-  min-height: 34px;
+  min-width: var(--control-size);
+  min-height: var(--control-size);
   border: 0;
   border-radius: 0;
 }
@@ -1147,7 +1163,7 @@ kbd {
 }
 
 .mark-read-split-button .mark-read-menu-trigger {
-  min-width: 28px;
+  min-width: var(--control-size-compact);
   padding-inline: 4px;
   border-left: 1px solid var(--border);
   border-radius: 0 6px 6px 0;
@@ -1308,7 +1324,7 @@ kbd {
 .dropdown-select-option {
   display: grid;
   width: 100%;
-  min-height: 38px;
+  min-height: var(--control-height);
   grid-template-columns: minmax(0, 1fr) 16px;
   align-items: center;
   gap: 10px;
@@ -1454,7 +1470,7 @@ kbd {
 .context-action-menu > button {
   display: flex;
   width: 100%;
-  min-height: 38px;
+  min-height: var(--control-height);
   align-items: center;
   gap: 9px;
   padding: 7px 10px;
@@ -1549,7 +1565,7 @@ kbd {
 .view-switcher button,
 .theme-options button {
   display: inline-flex;
-  min-height: 30px;
+  min-height: var(--control-size-compact);
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -1606,8 +1622,8 @@ kbd {
 }
 
 .reader-title-row > .view-switcher button {
-  width: 29px;
-  min-height: 29px;
+  width: var(--control-size-compact);
+  min-height: var(--control-size-compact);
   padding: 0;
 }
 
@@ -1705,8 +1721,8 @@ kbd {
 
 :where(.mode-magazine.is-reading-article) .reader-back-button {
   display: inline-flex;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: var(--control-size);
+  min-height: var(--control-size);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -1967,8 +1983,8 @@ kbd {
 .list-read-button,
 .list-star-button {
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: var(--control-size-compact);
+  height: var(--control-size-compact);
   align-items: center;
   justify-content: center;
   border: 0;
@@ -2085,6 +2101,7 @@ kbd {
 
 .article-actions {
   display: flex;
+  flex-wrap: wrap;
   min-height: 48px;
   align-items: center;
   gap: 3px;
@@ -2094,9 +2111,9 @@ kbd {
 
 .article-actions button {
   display: inline-flex;
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
+  width: var(--control-size);
+  min-width: var(--control-size);
+  height: var(--control-size);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -2146,8 +2163,8 @@ kbd {
 }
 
 .article-actions .summary-action {
-  width: 42px;
-  min-width: 42px;
+  width: auto;
+  min-width: var(--control-size);
   gap: 1px;
   padding-inline: 5px;
 }
@@ -2161,7 +2178,7 @@ kbd {
   width: 100%;
   min-width: 0;
   height: auto;
-  min-height: 38px;
+  min-height: var(--control-height);
   flex: 0 0 auto;
   justify-content: flex-start;
   gap: 9px;
@@ -2329,7 +2346,7 @@ kbd {
 
 .article-selection-menu button {
   display: flex;
-  min-height: 32px;
+  min-height: var(--control-size-compact);
   align-items: center;
   gap: 7px;
   padding: 5px 9px;
@@ -2377,7 +2394,7 @@ kbd {
 .article-source-trigger {
   display: inline-flex;
   min-width: 0;
-  min-height: 24px;
+  min-height: var(--control-size-compact);
   align-items: center;
   gap: 3px;
   margin-inline-start: -4px;
@@ -2527,7 +2544,7 @@ kbd {
 }
 
 .article-ai-summary-heading {
-  min-height: 30px;
+  min-height: var(--control-size-compact);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -2548,7 +2565,7 @@ kbd {
 }
 
 .article-summary-regenerate {
-  min-height: 30px;
+  min-height: var(--control-size-compact);
   padding: 4px 8px;
   font-size: var(--type-label);
 }
@@ -2805,7 +2822,7 @@ kbd {
 }
 
 .article-summary-error .secondary-button {
-  min-height: 30px;
+  min-height: var(--control-size-compact);
   flex: 0 0 auto;
   padding-block: 4px;
   color: var(--text);
@@ -2862,7 +2879,7 @@ kbd {
 }
 
 .telegram-media-state .secondary-button {
-  min-height: 30px;
+  min-height: var(--control-size-compact);
   margin-inline-start: 4px;
   padding-block: 4px;
 }
@@ -2940,7 +2957,7 @@ kbd {
 }
 
 .x-media-state .secondary-button {
-  min-height: 30px;
+  min-height: var(--control-size-compact);
   margin-inline-start: 4px;
   padding-block: 4px;
 }
@@ -3724,13 +3741,13 @@ kbd {
 }
 
 .pwa-update .secondary-button {
-  min-height: 32px;
+  min-height: var(--control-size-compact);
   padding: 6px 10px;
 }
 
 .pwa-update .icon-button {
-  width: 32px;
-  height: 32px;
+  width: var(--control-size);
+  height: var(--control-size);
 }
 
 .nav-scrim {
@@ -4019,54 +4036,54 @@ kbd {
   }
   .close-nav,
   .sidebar-section-heading button {
-    width: 40px;
-    height: 40px;
+    width: var(--control-size-touch);
+    height: var(--control-size-touch);
   }
   .brand {
-    min-height: 40px;
+    min-height: var(--control-size-touch);
   }
   .sidebar-account .icon-button {
-    width: 40px;
-    min-width: 40px;
-    height: 40px;
+    width: var(--control-size-touch);
+    min-width: var(--control-size-touch);
+    height: var(--control-size-touch);
   }
   .nav-item {
-    min-height: 40px;
+    min-height: var(--control-size-touch);
   }
   .tree-row {
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: var(--control-size-touch) minmax(0, 1fr);
   }
   .tree-toggle {
-    width: 40px;
-    min-height: 40px;
+    width: var(--control-size-touch);
+    min-height: var(--control-size-touch);
   }
   .feed-tree-row .feed-nav-item {
-    height: 40px;
+    height: var(--control-size-touch);
   }
   .feed-menu-button,
   .folder-menu-button {
     top: 0;
     right: 0;
-    width: 40px;
-    height: 40px;
+    width: var(--control-size-touch);
+    height: var(--control-size-touch);
   }
   .reader-title-row {
     display: grid;
     grid-template-areas: "menu title options" "search search search";
-    grid-template-columns: 40px minmax(0, 1fr) 40px;
+    grid-template-columns: var(--control-size-touch) minmax(0, 1fr) var(--control-size-touch);
     gap: 8px;
     padding: 6px 9px 7px;
   }
   :where(.reader-toolbar.is-reading-article) .reader-title-row {
     grid-template-areas: "menu title";
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: var(--control-size-touch) minmax(0, 1fr);
     padding-block: 4px;
   }
   .menu-button {
     grid-area: menu;
-    width: 40px;
-    min-width: 40px;
-    min-height: 40px;
+    width: var(--control-size-touch);
+    min-width: var(--control-size-touch);
+    min-height: var(--control-size-touch);
   }
   .scope-title {
     grid-area: title;
@@ -4077,12 +4094,12 @@ kbd {
     grid-area: search;
     width: 100%;
     max-width: none;
-    height: 40px;
+    height: var(--control-size-touch);
     margin-left: 0;
   }
   .reader-title-row > .search-form > button:not(.search-submit) {
-    width: 40px;
-    height: 40px;
+    width: var(--control-size-touch);
+    height: var(--control-size-touch);
   }
   .reader-title-row > .toolbar-actions {
     display: none;
@@ -4095,9 +4112,9 @@ kbd {
   }
   .reader-title-row > .reader-options-trigger {
     display: inline-flex;
-    width: 40px;
-    min-width: 40px;
-    min-height: 40px;
+    width: var(--control-size-touch);
+    min-width: var(--control-size-touch);
+    min-height: var(--control-size-touch);
     grid-area: options;
   }
   .reader-options-menu {
@@ -4106,7 +4123,7 @@ kbd {
     margin: 0;
   }
   .reader-options-menu .dropdown-select-option {
-    min-height: 44px;
+    min-height: var(--control-size-touch);
   }
   .article-actions {
     padding-inline: 7px;
@@ -4116,9 +4133,9 @@ kbd {
   }
   :where(.mode-magazine.is-reading-article) .reader-back-button,
   .article-actions button.article-navigation-action {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: var(--control-size-touch);
+    min-width: var(--control-size-touch);
+    height: var(--control-size-touch);
   }
   .article-list ol {
     gap: 0;
@@ -4199,14 +4216,14 @@ kbd {
   }
   :where(.mode-magazine.is-reading-article) .reader-back-button,
   :where(.mode-magazine.is-reading-article) .article-actions > button {
-    width: 44px;
-    min-width: 44px;
-    max-width: 44px;
-    height: 44px;
-    flex: 0 0 44px;
+    width: var(--control-size-touch);
+    min-width: var(--control-size-touch);
+    max-width: var(--control-size-touch);
+    height: var(--control-size-touch);
+    flex: 0 0 var(--control-size-touch);
   }
   :where(.mode-magazine.is-reading-article) .reader-back-button {
-    flex: 0 0 44px;
+    flex: 0 0 var(--control-size-touch);
   }
   :where(.mode-magazine.is-reading-article)
     .article-actions
@@ -4233,7 +4250,7 @@ kbd {
     .article-actions
     :is(.summary-prompt-menu, .article-more-menu)
     > button {
-    min-height: 44px;
+    min-height: var(--control-size-touch);
   }
   :where(.mode-magazine.is-reading-article) .reader-back-button > svg,
   :where(.mode-magazine.is-reading-article)
@@ -4274,7 +4291,6 @@ kbd {
     line-height: 1.3;
   }
   .mode-magazine.is-reading-article .article-source-trigger {
-    min-height: 22px;
     padding-block: 0;
   }
   .mode-magazine.is-reading-article .article-header h2 {
@@ -4429,6 +4445,37 @@ kbd {
 
 .check-check svg + svg {
   margin-left: -9px;
+}
+
+/* Reserve space for every touch target instead of overlaying neighboring actions. */
+@media (any-pointer: coarse) {
+  .tree-row {
+    grid-template-columns: var(--control-size) minmax(0, 1fr) var(--control-size);
+  }
+
+  .feed-tree-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--control-size);
+  }
+
+  .feed-menu-button,
+  .folder-menu-button {
+    position: static;
+    width: var(--control-size);
+    height: var(--control-size);
+    background: transparent;
+    opacity: 1;
+  }
+}
+
+@media (any-pointer: coarse) and (min-width: 621px) {
+  .article-list-copy {
+    padding-right: calc(2 * var(--control-size) + 8px);
+  }
+
+  .reader-title-row {
+    flex-wrap: wrap;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
