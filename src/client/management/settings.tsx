@@ -41,11 +41,17 @@ import type {
 } from "../../shared/types";
 import { DUPLICATE_ARTICLE_WINDOW_DAYS } from "../../shared/types";
 import { ApiError, api, errorMessage } from "../api";
+import { COLOR_PALETTES, type ColorPalette } from "../color-palettes";
 import type { ReaderDataMutations } from "../data-resource";
 import { isDesktopApp } from "../desktop";
 import { DropdownCombobox, DropdownSelect } from "../dropdown";
 import { useAnimatedDialog } from "../motion";
-import { clearReaderPreferences, type Theme } from "../reader-preferences";
+import {
+  type ColorPalettes,
+  clearReaderPreferences,
+  type ResolvedTheme,
+  type Theme,
+} from "../reader-preferences";
 import type { SettingsCategory } from "../routes";
 import { InvitationsSection } from "./invitations";
 import {
@@ -1272,11 +1278,13 @@ function SettingsPage({
   settings,
   aiSettings,
   theme,
+  colorPalettes,
   fontSize,
   mutations,
   onMenu,
   onCategory,
   onTheme,
+  onColorPalette,
   onFontSize,
   onSettings,
   onAiSettings,
@@ -1288,11 +1296,13 @@ function SettingsPage({
   settings: AppSettings;
   aiSettings: AiSettings;
   theme: Theme;
+  colorPalettes: ColorPalettes;
   fontSize: number;
   mutations: ReaderDataMutations;
   onMenu: () => void;
   onCategory: (category: SettingsCategory, historyMode?: "push" | "replace") => void;
   onTheme: (theme: Theme) => void;
+  onColorPalette: (mode: ResolvedTheme, palette: ColorPalette) => void;
   onFontSize: (value: number | ((current: number) => number)) => void;
   onSettings: (settings: AppSettings) => void;
   onAiSettings: (settings: AiSettings) => void;
@@ -1489,8 +1499,8 @@ function SettingsPage({
             </div>
             <div className="setting-row">
               <div>
-                <strong>Theme</strong>
-                <p>Choose a theme or follow your device appearance.</p>
+                <strong>Mode</strong>
+                <p>Auto switches between your light and dark themes with your device.</p>
               </div>
               <div className="theme-options">
                 <button
@@ -1519,6 +1529,59 @@ function SettingsPage({
                 </button>
               </div>
             </div>
+            {(["light", "dark"] as const).map((mode) => (
+              <div className="setting-row" key={mode}>
+                <div>
+                  <strong id={`color-palette-${mode}-label`}>
+                    {mode === "light" ? "Light theme" : "Dark theme"}
+                  </strong>
+                  <p>
+                    {mode === "light"
+                      ? "Used in Light mode and when your device is light."
+                      : "Used in Dark mode and when your device is dark."}
+                  </p>
+                </div>
+                <div
+                  className="color-palette-options"
+                  role="radiogroup"
+                  aria-labelledby={`color-palette-${mode}-label`}
+                >
+                  {COLOR_PALETTES.map((palette) => (
+                    <label className="color-palette-option" key={palette.id}>
+                      <input
+                        type="radio"
+                        name={`color-palette-${mode}`}
+                        value={palette.id}
+                        checked={colorPalettes[mode] === palette.id}
+                        onChange={() => onColorPalette(mode, palette.id)}
+                        aria-label={palette.name}
+                      />
+                      <span
+                        className="color-palette-preview"
+                        data-palette={palette.id}
+                        style={{ colorScheme: mode }}
+                        aria-hidden="true"
+                      >
+                        <span className="color-palette-preview-sidebar">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                        <span className="color-palette-preview-page">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      </span>
+                      <span className="color-palette-name">
+                        {palette.name}
+                        <Check size={14} aria-hidden="true" />
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
             <div className="setting-row">
               <div>
                 <strong>Article text size</strong>

@@ -1,25 +1,11 @@
+@import "./color-palettes.css";
+
 :root {
   color-scheme: dark;
-  --bg: #0f1211;
-  --sidebar: #121614;
-  --surface: #171c19;
-  --surface-raised: #1c221f;
-  --surface-hover: #202723;
-  --surface-active: #263029;
-  --border: rgba(220, 235, 226, 0.13);
-  --border-strong: rgba(220, 235, 226, 0.25);
-  --text: #f0f4f1;
-  --text-secondary: #b7c0ba;
-  --muted: #7f8983;
-  --accent: #9bc8a7;
-  --accent-strong: #b6dfbe;
-  --accent-surface: rgba(137, 190, 151, 0.13);
-  --on-accent: oklch(0.12 0.02 130);
   --warning: oklch(0.78 0.14 78);
   --warning-surface: oklch(0.235 0.04 78);
   --danger: oklch(0.72 0.15 25);
   --danger-surface: oklch(0.23 0.045 25);
-  --focus: oklch(0.82 0.13 130);
   --font-ui:
     "IBM Plex Sans Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text",
     "Segoe UI Variable", "Segoe UI", sans-serif;
@@ -110,26 +96,10 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f7f8f5;
-  --sidebar: #e9ede8;
-  --surface: #fdfefb;
-  --surface-raised: #fff;
-  --surface-hover: #edf1ec;
-  --surface-active: #e3ebe4;
-  --border: rgba(20, 40, 27, 0.13);
-  --border-strong: rgba(20, 40, 27, 0.24);
-  --text: #101a13;
-  --text-secondary: #34443a;
-  --muted: #56635a;
-  --accent: #226a45;
-  --accent-strong: #185536;
-  --accent-surface: rgba(34, 106, 69, 0.13);
-  --on-accent: oklch(0.99 0.004 130);
   --warning: oklch(0.52 0.15 78);
   --warning-surface: oklch(0.93 0.05 78);
   --danger: oklch(0.51 0.17 25);
   --danger-surface: oklch(0.93 0.045 25);
-  --focus: oklch(0.48 0.14 130);
   --menu-shadow: 0 8px 24px oklch(0 0 0 / 0.16);
   --paper-image: url("/textures/pressed-paper-light.webp");
   --paper-tint-opacity: 0%;
@@ -180,12 +150,14 @@ textarea {
 
 button,
 a,
-[role="button"] {
+[role="button"],
+.color-palette-option {
   touch-action: manipulation;
 }
 
 button,
 [role="button"],
+.color-palette-option,
 a:is(.primary-button, .secondary-button, .quiet-button, .icon-button) {
   user-select: none;
   -webkit-user-select: none;

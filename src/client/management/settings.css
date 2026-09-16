@@ -524,6 +524,151 @@
 .theme-options button {
   min-width: 82px;
 }
+
+.color-palette-options {
+  display: grid;
+  width: min(100%, 34rem);
+  flex: 0 0 auto;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 1rem;
+}
+
+.color-palette-option {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 120ms ease-out;
+}
+
+.color-palette-option:active {
+  opacity: 0.7;
+  transition: none;
+}
+
+.color-palette-option::after {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5rem;
+  border-radius: var(--radius-md);
+  pointer-events: none;
+  content: "";
+}
+
+.color-palette-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.color-palette-preview {
+  display: flex;
+  height: 5rem;
+  gap: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.color-palette-preview-sidebar {
+  display: grid;
+  width: 28%;
+  flex: 0 0 auto;
+  align-content: start;
+  gap: 6px;
+  padding: 12px 6px;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+}
+
+.color-palette-preview i {
+  display: block;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--muted);
+}
+
+.color-palette-preview-sidebar i:first-child {
+  height: 6px;
+  margin-bottom: 3px;
+  background: var(--accent);
+}
+
+.color-palette-preview-page {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 7px;
+  padding: 15px 12px 0 0;
+}
+
+.color-palette-preview-page i:first-child {
+  height: 5px;
+  background: var(--text);
+}
+
+.color-palette-preview-page i:last-child {
+  width: 65%;
+}
+
+.color-palette-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+  font-size: var(--type-supporting);
+  font-weight: var(--weight-semibold);
+  line-height: 1.4;
+}
+
+.color-palette-name svg {
+  visibility: hidden;
+  color: var(--accent);
+}
+
+.color-palette-option input:checked ~ .color-palette-name svg {
+  visibility: visible;
+}
+
+.color-palette-option:has(input:checked)::after {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.color-palette-option:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .color-palette-option:hover .color-palette-name {
+    color: var(--accent);
+  }
+}
+
+@media (forced-colors: active) {
+  .color-palette-option:has(input:checked)::after,
+  .color-palette-option:has(input:focus-visible) {
+    outline-color: Highlight;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .color-palette-preview {
+    border-color: var(--text);
+  }
+
+  .color-palette-option:has(input:checked)::after {
+    outline-width: 3px;
+  }
+}
+
 .font-stepper {
   display: flex;
   align-items: center;

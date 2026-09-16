@@ -1,0 +1,90 @@
+/* Semantic roles are shared by the app and its live theme previews.
+   Each pair is light, dark; color-scheme chooses the active version. */
+:root,
+[data-palette="moss"] {
+  --bg: light-dark(#f7f8f5, #0f1211);
+  --sidebar: light-dark(#e9ede8, #121614);
+  --surface: light-dark(#fdfefb, #171c19);
+  --surface-raised: light-dark(#fff, #1c221f);
+  --surface-hover: light-dark(#edf1ec, #202723);
+  --surface-active: light-dark(#e3ebe4, #263029);
+  --border: light-dark(rgba(20, 40, 27, 0.13), rgba(220, 235, 226, 0.13));
+  --border-strong: light-dark(rgba(20, 40, 27, 0.24), rgba(220, 235, 226, 0.25));
+  --text: light-dark(#101a13, #f0f4f1);
+  --text-secondary: light-dark(#34443a, #b7c0ba);
+  --muted: light-dark(#56635a, #7f8983);
+  --accent: light-dark(#226a45, #9bc8a7);
+  --accent-strong: light-dark(#185536, #b6dfbe);
+  --accent-surface: light-dark(rgba(34, 106, 69, 0.13), rgba(137, 190, 151, 0.13));
+  --on-accent: light-dark(oklch(0.99 0.004 130), oklch(0.12 0.02 130));
+  --focus: light-dark(oklch(0.48 0.14 130), oklch(0.82 0.13 130));
+}
+
+[data-palette="sand"] {
+  --bg: light-dark(#f7f2e9, #17130f);
+  --sidebar: light-dark(#eee5d7, #1d1812);
+  --surface: light-dark(#fcf7ef, #231d16);
+  --surface-raised: light-dark(#fffbf5, #2b231b);
+  --surface-hover: light-dark(#f0e7d9, #332a20);
+  --surface-active: light-dark(#e8dcc8, #3b3023);
+  --border: light-dark(rgb(62 43 22 / 0.14), rgb(242 220 186 / 0.14));
+  --border-strong: light-dark(rgb(62 43 22 / 0.26), rgb(242 220 186 / 0.27));
+  --text: light-dark(#2b2117, #f4eadb);
+  --text-secondary: light-dark(#514330, #cbbba4);
+  --muted: light-dark(#6e5c44, #b3a28a);
+  --accent: light-dark(#855321, #dbb477);
+  --accent-strong: light-dark(#6c4017, #efc991);
+  --accent-surface: light-dark(rgb(133 83 33 / 0.12), rgb(219 180 119 / 0.13));
+  --on-accent: light-dark(#fffbf5, #21170c);
+  --focus: light-dark(#855321, #dbb477);
+}
+
+[data-palette="slate"] {
+  --bg: light-dark(#f1f5f9, #10151c);
+  --sidebar: light-dark(#e4ebf2, #151c25);
+  --surface: light-dark(#f9fbfd, #1b2430);
+  --surface-raised: light-dark(#ffffff, #222d3b);
+  --surface-hover: light-dark(#e8eff6, #2a3747);
+  --surface-active: light-dark(#dce7f2, #304157);
+  --border: light-dark(rgb(24 47 73 / 0.14), rgb(202 224 250 / 0.14));
+  --border-strong: light-dark(rgb(24 47 73 / 0.26), rgb(202 224 250 / 0.27));
+  --text: light-dark(#17283b, #e9f0f8);
+  --text-secondary: light-dark(#394e65, #b7c8dc);
+  --muted: light-dark(#506780, #a1b5cd);
+  --accent: light-dark(#2b6095, #97bee9);
+  --accent-strong: light-dark(#204c7a, #bdd9f7);
+  --accent-surface: light-dark(rgb(43 96 149 / 0.12), rgb(151 190 233 / 0.13));
+  --on-accent: light-dark(#f9fbfd, #101c2b);
+  --focus: light-dark(#2b6095, #97bee9);
+}
+
+/* Codex Desktop's surface/ink seeds and derived neutral surfaces.
+   The light blue and muted text are deepened for readable links and small labels. */
+[data-palette="codex"] {
+  --bg: light-dark(#ffffff, #181818);
+  --sidebar: light-dark(#f6f6f6, #141414);
+  --surface: light-dark(#ffffff, #242424);
+  --surface-raised: light-dark(#ffffff, #363636);
+  --surface-hover: light-dark(#f1f1f2, #2a2a2a);
+  --surface-active: light-dark(#e8e8e9, #343434);
+  --border: light-dark(rgb(26 28 31 / 0.078), rgb(255 255 255 / 0.084));
+  --border-strong: light-dark(rgb(26 28 31 / 0.117), rgb(255 255 255 / 0.156));
+  --text: light-dark(#1a1c1f, #ffffff);
+  --text-secondary: light-dark(#606163, #bcbcbc);
+  --muted: light-dark(#66686a, #b0b0b0);
+  --accent: light-dark(#0968c1, #83c3ff);
+  --accent-strong: light-dark(#0758a4, #a6d4ff);
+  --accent-surface: light-dark(#e5f2ff, #0d273f);
+  --on-accent: light-dark(#ffffff, #181818);
+  --focus: light-dark(#0968c1, #83c3ff);
+}
+
+:root[data-palette="codex"][data-theme] {
+  --paper-image: none;
+}
+
+/* Tint the shared paper texture so it follows the selected palette. */
+:root[data-palette="sand"][data-theme],
+:root[data-palette="slate"][data-theme] {
+  --paper-tint-opacity: 90%;
+}

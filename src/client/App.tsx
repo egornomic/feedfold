@@ -980,6 +980,7 @@ function ReaderApp({
               settings={bootstrap.settings}
               aiSettings={bootstrap.aiSettings}
               theme={preferences.theme}
+              colorPalettes={preferences.colorPalettes}
               fontSize={preferences.articleFontSize}
               mutations={dataResource}
               onMenu={() => setNavOpen(true)}
@@ -987,6 +988,7 @@ function ReaderApp({
                 route.navigate({ kind: "settings", category }, historyMode)
               }
               onTheme={preferences.setTheme}
+              onColorPalette={preferences.setColorPalette}
               onFontSize={preferences.setArticleFontSize}
               onSettings={articleActions.applySettings}
               onAiSettings={articleActions.applyAiSettings}
