@@ -198,17 +198,16 @@ export function createDemoData(now = new Date()): DemoData {
     {
       id: DEMO_RELEASE_ARTICLE_ID,
       feedId: 8,
-      title: "feedfold 0.7.0",
-      url: "https://github.com/egornomic/feedfold/releases/tag/v0.7.0",
+      title: "feedfold 0.8.0",
+      url: "https://github.com/egornomic/feedfold/releases/tag/v0.8.0",
       author: "egornomic",
-      publishedAt: "2026-09-14T10:00:00.000Z",
+      publishedAt: "2026-09-16T10:00:00.000Z",
       summary:
-        "Follow YouTube channels, add subscriptions and folders from the sidebar, and use hosted accounts with encrypted AI keys.",
+        "Choose a color theme, enjoy smoother reading on mobile, and watch videos from both original and quoted X posts.",
       contentHtml: `<ul>
-<li>Subscribe to YouTube channels directly from the subscription menu.</li>
-<li>Add subscriptions and folders from the sidebar.</li>
-<li>Hosted accounts support invitation-based registration and encrypt AI keys using keys held in your browser.</li>
-<li>Articles appear after formatting is ready for a smoother reading experience.</li>
+<li>Choose from Moss, Sand, Slate, and Codex color themes, each with light and dark appearances.</li>
+<li>Search articles and manage rules more comfortably on mobile, with improved navigation and touch behavior.</li>
+<li>Watch embedded videos from both original and quoted X posts.</li>
 </ul>`,
       isStarred: true,
     },
