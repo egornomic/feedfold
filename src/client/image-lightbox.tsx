@@ -23,8 +23,6 @@ interface Pinch {
   zoom: number;
   imageX: number;
   imageY: number;
-  clientX: number;
-  clientY: number;
 }
 
 function clampZoom(zoom: number): number {
@@ -50,6 +48,7 @@ export function ImageLightbox({
 }) {
   const [index, setIndex] = useState(state.index);
   const [zoom, setZoom] = useState<number | null>(null);
+  const [pinchMidpoint, setPinchMidpoint] = useState<{ x: number; y: number } | null>(null);
   const fittedSize = useRef<{ width: number; height: number } | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "loaded" | "error">("loading");
   const stageRef = useRef<HTMLDivElement>(null);
@@ -66,6 +65,7 @@ export function ImageLightbox({
 
   const resetView = useCallback(() => {
     setZoom(null);
+    setPinchMidpoint(null);
     fittedSize.current = null;
     wheelDelta.current = 0;
     pinch.current = null;
@@ -103,12 +103,12 @@ export function ImageLightbox({
     const stage = stageRef.current;
     const element = imageRef.current;
     const gesture = pinch.current;
-    if (zoom === null || !stage || !element || !gesture) return;
+    if (zoom === null || !stage || !element || !gesture || !pinchMidpoint) return;
     // Keep the same image detail underneath the moving midpoint of the fingers.
     const rect = element.getBoundingClientRect();
-    stage.scrollLeft += rect.left + gesture.imageX * rect.width - gesture.clientX;
-    stage.scrollTop += rect.top + gesture.imageY * rect.height - gesture.clientY;
-  }, [zoom]);
+    stage.scrollLeft += rect.left + gesture.imageX * rect.width - pinchMidpoint.x;
+    stage.scrollTop += rect.top + gesture.imageY * rect.height - pinchMidpoint.y;
+  }, [zoom, pinchMidpoint]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -133,13 +133,10 @@ export function ImageLightbox({
           zoom: rect.width / fittedSize.current.width,
           imageX: (clientX - rect.left) / rect.width,
           imageY: (clientY - rect.top) / rect.height,
-          clientX,
-          clientY,
         };
         return;
       }
-      pinch.current.clientX = clientX;
-      pinch.current.clientY = clientY;
+      setPinchMidpoint({ x: clientX, y: clientY });
       setZoom(clampZoom((pinch.current.zoom * distance) / pinch.current.distance));
     };
     const endTouch = (event: TouchEvent) => {
