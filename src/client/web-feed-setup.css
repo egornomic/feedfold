@@ -102,7 +102,7 @@
 }
 
 .web-feed-other-groups > summary {
-  min-height: 44px;
+  min-height: var(--control-size-touch);
   padding: 12px;
   border-top: 1px solid var(--border);
   color: var(--text-secondary);
@@ -156,7 +156,7 @@
 }
 
 .web-feed-change-groups > summary {
-  min-height: 44px;
+  min-height: var(--control-size-touch);
   padding: 12px;
   border-top: 1px solid var(--border);
   color: var(--text-secondary);
@@ -295,7 +295,7 @@
 
 .web-feed-review-selection .primary-button {
   width: 100%;
-  min-height: 40px;
+  min-height: var(--control-size);
 }
 
 .web-feed-suggestion {
@@ -676,7 +676,7 @@
 }
 
 .feed-repair-button {
-  min-height: 28px;
+  min-height: var(--control-size-compact);
   padding: 3px 7px;
   border: 1px solid color-mix(in oklch, var(--warning) 45%, var(--border));
   border-radius: var(--radius-sm);
@@ -688,12 +688,6 @@
 @media (hover: hover) and (pointer: fine) {
   .feed-repair-button:hover {
     border-color: var(--warning);
-  }
-}
-
-@media (max-width: 620px) {
-  .feed-repair-button {
-    min-height: 40px;
   }
 }
 

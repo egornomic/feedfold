@@ -70,7 +70,7 @@
 .management-tabs button {
   position: relative;
   display: inline-flex;
-  min-height: 43px;
+  min-height: var(--control-size-touch);
   align-items: center;
   gap: 7px;
   flex: 0 0 auto;
@@ -83,6 +83,10 @@
   transition:
     color var(--duration-fast) ease,
     transform var(--duration-fast) var(--ease-out);
+}
+
+.management-tabs button:focus-visible {
+  outline-offset: -3px;
 }
 
 .management-tabs button::after {
@@ -213,8 +217,8 @@
 
 .row-actions button {
   display: inline-flex;
-  width: 31px;
-  height: 31px;
+  width: var(--control-size-compact);
+  height: var(--control-size-compact);
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
@@ -351,7 +355,7 @@
 
 .field input {
   width: 100%;
-  height: 38px;
+  height: var(--control-height);
   padding: 7px 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -370,7 +374,7 @@
 
 .checkbox-field {
   display: flex;
-  min-height: 42px;
+  min-height: max(42px, var(--control-target-min));
   align-items: flex-start;
   gap: 9px;
   padding-top: 20px;
@@ -441,19 +445,31 @@
 
 .switch {
   position: relative;
-  width: 36px;
-  height: 20px;
+  width: var(--control-size);
+  height: var(--control-size);
   flex: 0 0 auto;
   padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.switch::before {
+  position: absolute;
+  top: calc(50% - 10px);
+  left: calc(50% - 18px);
+  width: 36px;
+  height: 20px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface-hover);
+  content: "";
 }
 
 .switch span {
   position: absolute;
-  top: 3px;
-  left: 3px;
+  top: calc(50% - 6px);
+  left: calc(50% - 14px);
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -463,27 +479,13 @@
     background-color var(--duration-fast) ease;
 }
 
-.switch.is-on {
+.switch.is-on::before {
   border-color: var(--accent-strong);
   background: var(--accent-surface);
 }
 .switch.is-on span {
   background: var(--accent);
   transform: translateX(16px);
-}
-
-@media (max-width: 620px), (hover: none) and (pointer: coarse) {
-  .switch {
-    width: 44px;
-    height: 28px;
-  }
-
-  .switch span {
-    top: 4px;
-    left: 4px;
-    width: 18px;
-    height: 18px;
-  }
 }
 
 @media (max-width: 620px) {
@@ -501,7 +503,7 @@
   }
 
   .page-header-actions :is(.secondary-button, .primary-button) {
-    min-height: 44px;
+    min-height: var(--control-size-touch);
     flex: 1 1 auto;
     gap: 5px;
     padding-inline: 7px;
@@ -528,7 +530,6 @@
   }
 
   .management-tabs button {
-    min-height: 44px;
     scroll-snap-align: start;
   }
 }

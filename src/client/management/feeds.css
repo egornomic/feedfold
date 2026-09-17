@@ -153,13 +153,13 @@
   display: grid;
   grid-template-columns:
     minmax(240px, 2.2fr) minmax(120px, 0.85fr) minmax(142px, 1fr)
-    66px minmax(104px, 0.75fr) 78px;
+    66px minmax(104px, 0.75fr) calc(2 * var(--control-size) + 6px);
   align-items: center;
   gap: 12px;
 }
 
 .feed-management-list-header {
-  min-height: 36px;
+  min-height: var(--control-size);
   padding: 7px 12px;
   background: var(--paper-raised);
   background-blend-mode: var(--paper-blend);
@@ -348,7 +348,7 @@
 }
 
 .feed-repair-button {
-  min-height: 26px;
+  min-height: var(--control-size-compact);
   padding: 3px 7px;
   border: 1px solid color-mix(in oklch, var(--warning) 45%, var(--border));
   border-radius: var(--radius-sm);
@@ -383,8 +383,8 @@
 .feed-actions-trigger,
 .folder-actions-trigger {
   display: inline-flex;
-  width: 36px;
-  height: 36px;
+  width: var(--control-size);
+  height: var(--control-size);
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -665,7 +665,7 @@
 
 .field .feed-source-input.has-prefix {
   display: flex;
-  height: 38px;
+  height: var(--control-height);
   align-items: center;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -682,7 +682,7 @@
 }
 
 .field .feed-source-input.has-prefix input {
-  height: 36px;
+  height: var(--control-size);
   min-width: 0;
   padding-left: 3px;
   border: 0;
@@ -709,7 +709,7 @@
 
 .add-feed-address-form > .primary-button {
   width: 100%;
-  min-height: 44px;
+  min-height: var(--control-size-touch);
 }
 
 .feed-discovery-error {
@@ -998,7 +998,7 @@
   display: grid;
   min-width: 0;
   min-height: 58px;
-  grid-template-columns: 36px minmax(0, 1fr) 44px;
+  grid-template-columns: var(--control-size) minmax(0, 1fr) var(--control-size-touch);
   align-items: center;
   gap: 4px;
   margin: 0;
@@ -1011,8 +1011,8 @@
 
 .folder-disclosure {
   display: inline-flex;
-  width: 36px;
-  height: 36px;
+  width: var(--control-size);
+  height: var(--control-size);
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -1070,8 +1070,8 @@
 }
 
 .folder-row-action-space {
-  width: 36px;
-  height: 36px;
+  width: var(--control-size);
+  height: var(--control-size);
 }
 
 .folder-feed-row {
@@ -1089,7 +1089,7 @@
 .folder-feed-drag-region {
   display: grid;
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--control-size-touch);
   grid-template-columns: 16px 24px minmax(0, 1fr);
   align-items: center;
   gap: 9px;
@@ -1334,10 +1334,6 @@
     display: none;
   }
 
-  .feed-repair-button {
-    min-height: 28px;
-  }
-
   .feed-last-post,
   .feed-update-interval {
     display: block;
@@ -1360,17 +1356,6 @@
   .feed-row-actions {
     grid-area: actions;
     align-self: center;
-  }
-
-  .feed-refresh-button,
-  .feed-actions-trigger,
-  .folder-actions-trigger {
-    width: 44px;
-    height: 44px;
-  }
-
-  .context-action-menu > button {
-    min-height: 44px;
   }
 }
 
@@ -1427,7 +1412,7 @@
   }
 
   .feeds-management-page .page-header-actions :is(.secondary-button, .primary-button) {
-    min-height: 40px;
+    min-height: var(--control-size);
     flex: 0 0 auto;
     padding-inline: 10px;
   }
@@ -1437,7 +1422,7 @@
   }
 
   .feed-transfer-trigger {
-    width: 40px;
+    width: var(--control-size);
     padding: 0;
   }
 
@@ -1469,7 +1454,7 @@
 
   .feed-filter-toggle {
     display: inline-flex;
-    min-height: 42px;
+    min-height: var(--control-height);
   }
 
   .feed-filter-panel {
@@ -1548,8 +1533,8 @@
   }
 
   .folder-disclosure {
-    width: 44px;
-    height: 44px;
+    width: var(--control-size);
+    height: var(--control-size);
   }
 
   .folder-management-children {
@@ -1571,8 +1556,8 @@
   }
 
   .add-feed-page .page-header-actions .secondary-button {
-    width: 40px;
-    min-height: 40px;
+    width: var(--control-size);
+    min-height: var(--control-size);
     flex: 0 0 auto;
     padding: 0;
   }
