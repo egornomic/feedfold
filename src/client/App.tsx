@@ -739,6 +739,7 @@ function ReaderApp({
               onSearchInput={route.setSearchInput}
               onSearch={submitSearch}
               onClearSearch={() => {
+                route.setSearchInput("");
                 route.navigate(
                   readerRouteForSelection(
                     route.readerRoute.state,
