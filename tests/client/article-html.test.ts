@@ -102,7 +102,18 @@ describe("article HTML", () => {
       Object.defineProperties(viewerImage, {
         naturalWidth: { configurable: true, value: 800 },
         naturalHeight: { configurable: true, value: 600 },
-        getBoundingClientRect: { value: () => ({ width: 800, height: 600 }) },
+        getBoundingClientRect: {
+          value: () => {
+            const width = Number.parseFloat(viewerImage.style.width) || 800;
+            const height = Number.parseFloat(viewerImage.style.height) || 600;
+            return {
+              width,
+              height,
+              left: Math.max(0, (stage.clientWidth - width) / 2) - stage.scrollLeft,
+              top: Math.max(0, (stage.clientHeight - height) / 2) - stage.scrollTop,
+            };
+          },
+        },
       });
       await act(async () => {
         viewerImage.dispatchEvent(new dom.window.Event("load", { bubbles: true }));
@@ -134,6 +145,49 @@ describe("article HTML", () => {
       expect(viewerImage.style.width).toBe("800px");
       expect(await scrollViewer(100, true)).toBe(false);
       expect(viewerImage.style.width).toBe("760px");
+      const touchViewer = async (
+        type: string,
+        distance: number | null,
+        midpoint = { x: 400, y: 300 },
+      ) => {
+        const touches =
+          distance === null
+            ? []
+            : [
+                { clientX: midpoint.x - distance / 2, clientY: midpoint.y },
+                { clientX: midpoint.x + distance / 2, clientY: midpoint.y },
+              ];
+        const event = new dom.window.TouchEvent(type, {
+          touches: touches as Touch[],
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => stage.dispatchEvent(event));
+        return event.defaultPrevented;
+      };
+      await pressViewerKey("0");
+      expect(await touchViewer("touchstart", 100)).toBe(true);
+      expect(await touchViewer("touchmove", 200)).toBe(true);
+      expect(viewerImage.style.width).toBe("1600px");
+      const panStart = { x: stage.scrollLeft, y: stage.scrollTop };
+      await touchViewer("touchmove", 200, { x: 360, y: 280 });
+      expect(viewerImage.style.width).toBe("1600px");
+      expect(stage.scrollLeft).toBeCloseTo(panStart.x + 40);
+      expect(stage.scrollTop).toBeCloseTo(panStart.y + 20);
+      await touchViewer("touchmove", 50);
+      expect(viewerImage.style.width).toBe("400px");
+      await touchViewer("touchmove", 500);
+      expect(viewerImage.style.width).toBe("3200px");
+      const clampedPanStart = { x: stage.scrollLeft, y: stage.scrollTop };
+      await touchViewer("touchmove", 600, { x: 370, y: 275 });
+      expect(viewerImage.style.width).toBe("3200px");
+      expect(stage.scrollLeft).toBeCloseTo(clampedPanStart.x + 30);
+      expect(stage.scrollTop).toBeCloseTo(clampedPanStart.y + 25);
+      expect(await touchViewer("touchend", null)).toBe(true);
+      await pressViewerKey("0");
+      expect(viewerImage.style.width).toBe("");
+      await touchViewer("touchstart", 100);
+      await touchViewer("touchcancel", null);
       await act(async () => viewerImage.click());
       expect(dialog?.open).toBe(true);
 
