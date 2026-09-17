@@ -593,6 +593,15 @@
   background: var(--bg);
 }
 
+/* Compile each preview's scheme alongside the light-dark() palette colors. */
+.color-palette-preview[data-theme="light"] {
+  color-scheme: light;
+}
+
+.color-palette-preview[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 .color-palette-preview-sidebar {
   display: grid;
   width: 28%;
