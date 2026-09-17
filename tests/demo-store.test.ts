@@ -46,6 +46,22 @@ describe("static demo data", () => {
     expect(store.articles({ state: "all", search: "solar-powered" }).articles).toHaveLength(1);
   });
 
+  it("can reopen a searched article after marking the search results as read", () => {
+    const store = new DemoStore(DEMO_NOW);
+    const results = store.articles({ state: "unread", search: "solar-powered" });
+    expect(results.articles.map((article) => article.id)).toEqual([10]);
+
+    expect(store.markRead({ articleIds: results.articles.map((article) => article.id) })).toEqual({
+      updated: 1,
+    });
+    expect(store.articles({ state: "unread", search: "solar-powered" }).articles).toEqual([]);
+    expect(store.bootstrap().counts.unread).toBe(14);
+
+    const reopened = store.articles({ state: "all", search: "solar-powered", anchorId: 10 });
+    expect(reopened.articles).toMatchObject([{ id: 10, isRead: true }]);
+    expect(reopened.anchorIndex).toBe(0);
+  });
+
   it("starts with an explorable folder hierarchy", () => {
     const store = new DemoStore(DEMO_NOW);
     const bootstrap = store.bootstrap();

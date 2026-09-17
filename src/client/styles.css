@@ -1062,6 +1062,10 @@ kbd {
   gap: 2px;
 }
 
+.search-toggle {
+  margin-left: auto;
+}
+
 .search-form {
   display: flex;
   min-width: 180px;
@@ -1071,16 +1075,38 @@ kbd {
   flex: 0 1 280px;
   align-items: center;
   gap: 7px;
-  margin-left: auto;
+  margin-left: 0;
   padding-left: 10px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface);
   color: var(--muted);
   outline: 1px solid transparent;
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: left center;
   transition:
+    opacity var(--duration-surface) var(--ease-out),
+    transform var(--duration-surface) var(--ease-out),
     border-color var(--duration-fast) ease,
     outline-color var(--duration-fast) ease;
+}
+
+.search-form[data-motion-state="closed"] {
+  opacity: 0;
+  transform: scale(0.97);
+  transition-duration: var(--duration-fast);
+}
+
+@starting-style {
+  .search-form[data-motion-state="open"] {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+:root[data-input-modality="keyboard"] .search-form {
+  transition: none;
 }
 
 .search-form:focus-within {
@@ -1666,6 +1692,7 @@ kbd {
 }
 
 :where(.reader-toolbar.is-reading-article) .search-form,
+:where(.reader-toolbar.is-reading-article) .search-toggle,
 :where(.reader-toolbar.is-reading-article) .view-switcher,
 :where(.reader-toolbar.is-reading-article) .toolbar-actions {
   display: none;
@@ -4034,10 +4061,22 @@ kbd {
   }
   .reader-title-row {
     display: grid;
-    grid-template-areas: "menu title options" "search search search";
-    grid-template-columns: var(--control-size-touch) minmax(0, 1fr) var(--control-size-touch);
+    grid-template-areas: "menu title search-toggle options";
+    grid-template-columns: var(--control-size-touch) minmax(0, 1fr) repeat(
+        2,
+        var(--control-size-touch)
+      );
     gap: 8px;
     padding: 6px 9px 7px;
+  }
+  .reader-toolbar.is-search-open .reader-title-row {
+    grid-template-areas: "menu title search-toggle options" "search search search search";
+  }
+  .search-toggle {
+    grid-area: search-toggle;
+    width: var(--control-size-touch);
+    min-width: var(--control-size-touch);
+    min-height: var(--control-size-touch);
   }
   :where(.reader-toolbar.is-reading-article) .reader-title-row {
     grid-template-areas: "menu title";
@@ -4061,6 +4100,7 @@ kbd {
     max-width: none;
     height: var(--control-size-touch);
     margin-left: 0;
+    transform-origin: top right;
   }
   .reader-title-row > .search-form > button:not(.search-submit) {
     width: var(--control-size-touch);
@@ -4414,6 +4454,18 @@ kbd {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .search-form,
+  .search-form[data-motion-state="closed"] {
+    transform: none;
+    transition: opacity var(--duration-reduced) ease;
+  }
+
+  @starting-style {
+    .search-form[data-motion-state="open"] {
+      transform: none;
+    }
+  }
+
   .app-shell.is-management-view,
   .app-shell .sidebar-collapse-button {
     transition-duration: 0s;
