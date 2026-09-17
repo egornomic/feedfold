@@ -81,7 +81,7 @@ import {
 } from "./text-selection";
 
 const ARTICLE_SWIPE_TARGETS =
-  "a, button, input, select, textarea, summary, video, audio, iframe, pre, .article-table-scroll, [contenteditable], [data-image-lightbox-trigger]";
+  "a, button, input, select, textarea, summary, video, audio, iframe, pre, dialog, .article-table-scroll, [contenteditable], [data-image-lightbox-trigger]";
 const ARTICLE_SWIPE_SURFACE = "[data-article-swipe-surface]";
 const SWIPE_SAMPLE_WINDOW = 100;
 const SWIPE_SAMPLE_LIMIT = 5;
