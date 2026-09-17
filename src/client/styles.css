@@ -3978,41 +3978,6 @@ kbd {
   .compact-form .form-actions {
     grid-column: 1 / -1;
   }
-  .setting-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .custom-prompts-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .ai-prompt-dialog-body {
-    grid-template-columns: 1fr;
-  }
-  .ai-key-form {
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .ai-model-form {
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .translation-language-form {
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .ai-provider-control {
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .settings-actions {
-    justify-content: flex-start;
-  }
-  .shortcut-reference {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 760px) {
@@ -4320,33 +4285,6 @@ kbd {
   .management-page {
     padding-inline: 13px;
   }
-  .ai-key-form {
-    flex-wrap: wrap;
-  }
-  .ai-model-form {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .ai-model-form input,
-  .ai-model-form .secondary-button {
-    width: 100%;
-    max-width: none;
-  }
-  .ai-provider-control {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .ai-provider-control .dropdown-select {
-    width: 100%;
-  }
-  .ai-key-input {
-    min-width: 0;
-    flex-basis: 100%;
-  }
-  .ai-key-form > .primary-button,
-  .ai-key-form > .secondary-button {
-    flex: 1;
-  }
   .page-header {
     margin-inline: -13px;
     padding: 13px;
@@ -4383,9 +4321,6 @@ kbd {
   }
   .folder-management-row {
     grid-template-columns: 1fr auto;
-  }
-  .shortcut-reference.is-compact {
-    margin-inline: 10px;
   }
   .dialog-footer {
     align-items: stretch;
