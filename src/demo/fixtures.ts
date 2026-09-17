@@ -198,16 +198,16 @@ export function createDemoData(now = new Date()): DemoData {
     {
       id: DEMO_RELEASE_ARTICLE_ID,
       feedId: 8,
-      title: "feedfold 0.8.0",
-      url: "https://github.com/egornomic/feedfold/releases/tag/v0.8.0",
+      title: "feedfold 0.9.0",
+      url: "https://github.com/egornomic/feedfold/releases/tag/v0.9.0",
       author: "egornomic",
-      publishedAt: "2026-09-16T10:00:00.000Z",
+      publishedAt: "2026-09-17T14:00:00.000Z",
       summary:
-        "Choose a color theme, enjoy smoother reading on mobile, and watch videos from both original and quoted X posts.",
+        "Zoom images comfortably on mobile, open search from the toolbar, and enjoy clearer settings and more consistent controls.",
       contentHtml: `<ul>
-<li>Choose from Moss, Sand, Slate, and Codex color themes, each with light and dark appearances.</li>
-<li>Search articles and manage rules more comfortably on mobile, with improved navigation and touch behavior.</li>
-<li>Watch embedded videos from both original and quoted X posts.</li>
+<li>Pinch to zoom and pan images on mobile without zooming the page or switching articles.</li>
+<li>Open article search from a compact toolbar control that keeps your reading list uncluttered.</li>
+<li>Use settings more comfortably on smaller screens, with accurate theme previews and more consistent control sizes.</li>
 </ul>`,
       isStarred: true,
     },
