@@ -5,7 +5,6 @@ export function ArticleThumbnailPlaceholder() {
       viewBox="0 0 154 120"
       fill="none"
       aria-hidden="true"
-      preserveAspectRatio="none"
     >
       <g className="thumbnail-grid-field">
         <rect x="38" y="22" width="22" height="22" rx="5" />
