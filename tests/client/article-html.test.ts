@@ -134,6 +134,35 @@ describe("article HTML", () => {
       expect(viewerImage.style.width).toBe("800px");
       expect(await scrollViewer(100, true)).toBe(false);
       expect(viewerImage.style.width).toBe("760px");
+      const touchViewer = async (type: string, distance: number | null) => {
+        const touches =
+          distance === null
+            ? []
+            : [
+                { clientX: 400 - distance / 2, clientY: 300 },
+                { clientX: 400 + distance / 2, clientY: 300 },
+              ];
+        const event = new dom.window.TouchEvent(type, {
+          touches: touches as Touch[],
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => stage.dispatchEvent(event));
+        return event.defaultPrevented;
+      };
+      await pressViewerKey("0");
+      expect(await touchViewer("touchstart", 100)).toBe(true);
+      expect(await touchViewer("touchmove", 200)).toBe(true);
+      expect(viewerImage.style.width).toBe("1600px");
+      await touchViewer("touchmove", 50);
+      expect(viewerImage.style.width).toBe("400px");
+      await touchViewer("touchmove", 500);
+      expect(viewerImage.style.width).toBe("3200px");
+      expect(await touchViewer("touchend", null)).toBe(true);
+      await pressViewerKey("0");
+      expect(viewerImage.style.width).toBe("");
+      await touchViewer("touchstart", 100);
+      await touchViewer("touchcancel", null);
       await act(async () => viewerImage.click());
       expect(dialog?.open).toBe(true);
 

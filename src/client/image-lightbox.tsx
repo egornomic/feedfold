@@ -1,5 +1,5 @@
 import { ExternalLink, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAnimatedDialog } from "./motion.js";
 
 export interface ImageLightboxItem {
@@ -17,6 +17,19 @@ const ZOOM_STEP = 0.05;
 const WHEEL_ZOOM_THRESHOLD = 40;
 const WHEEL_DELTA_LINE = 1;
 const WHEEL_DELTA_PAGE = 2;
+
+interface Pinch {
+  distance: number;
+  zoom: number;
+  imageX: number;
+  imageY: number;
+  clientX: number;
+  clientY: number;
+}
+
+function clampZoom(zoom: number): number {
+  return Math.min(4, Math.max(0.1, zoom));
+}
 
 function externalHttpUrl(value: string | null): string | null {
   if (!value) return null;
@@ -42,6 +55,7 @@ export function ImageLightbox({
   const stageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const wheelDelta = useRef(0);
+  const pinch = useRef<Pinch | null>(null);
   const finishClose = useCallback(() => {
     onClose();
     window.requestAnimationFrame(() => state.returnFocus?.focus());
@@ -54,6 +68,7 @@ export function ImageLightbox({
     setZoom(null);
     fittedSize.current = null;
     wheelDelta.current = 0;
+    pinch.current = null;
     if (typeof stageRef.current?.scrollTo === "function") {
       stageRef.current.scrollTo({ top: 0, left: 0 });
     }
@@ -79,12 +94,69 @@ export function ImageLightbox({
     const element = imageRef.current;
     if (!element?.naturalWidth) return;
     fittedSize.current ??= element.getBoundingClientRect();
-    setZoom((current) =>
-      Math.min(4, Math.max(0.1, Number(((current ?? 1) + direction * ZOOM_STEP).toFixed(2)))),
-    );
+    setZoom((current) => clampZoom(Number(((current ?? 1) + direction * ZOOM_STEP).toFixed(2))));
   }, []);
   const zoomIn = useCallback(() => changeZoom(1), [changeZoom]);
   const zoomOut = useCallback(() => changeZoom(-1), [changeZoom]);
+
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    const element = imageRef.current;
+    const gesture = pinch.current;
+    if (zoom === null || !stage || !element || !gesture) return;
+    // Keep the same image detail underneath the moving midpoint of the fingers.
+    const rect = element.getBoundingClientRect();
+    stage.scrollLeft += rect.left + gesture.imageX * rect.width - gesture.clientX;
+    stage.scrollTop += rect.top + gesture.imageY * rect.height - gesture.clientY;
+  }, [zoom]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const handleTouch = (event: TouchEvent) => {
+      const first = event.touches[0];
+      const second = event.touches[1];
+      const element = imageRef.current;
+      if (!first || !second || !element?.naturalWidth) {
+        pinch.current = null;
+        return;
+      }
+      event.preventDefault();
+      const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+      const clientX = (first.clientX + second.clientX) / 2;
+      const clientY = (first.clientY + second.clientY) / 2;
+      if (event.type === "touchstart" || !pinch.current) {
+        const rect = element.getBoundingClientRect();
+        fittedSize.current ??= rect;
+        pinch.current = {
+          distance,
+          zoom: rect.width / fittedSize.current.width,
+          imageX: (clientX - rect.left) / rect.width,
+          imageY: (clientY - rect.top) / rect.height,
+          clientX,
+          clientY,
+        };
+        return;
+      }
+      pinch.current.clientX = clientX;
+      pinch.current.clientY = clientY;
+      setZoom(clampZoom((pinch.current.zoom * distance) / pinch.current.distance));
+    };
+    const endTouch = (event: TouchEvent) => {
+      if (pinch.current) event.preventDefault();
+      if (event.touches.length < 2) pinch.current = null;
+    };
+    stage.addEventListener("touchstart", handleTouch, { passive: false });
+    stage.addEventListener("touchmove", handleTouch, { passive: false });
+    stage.addEventListener("touchend", endTouch, { passive: false });
+    stage.addEventListener("touchcancel", endTouch, { passive: false });
+    return () => {
+      stage.removeEventListener("touchstart", handleTouch);
+      stage.removeEventListener("touchmove", handleTouch);
+      stage.removeEventListener("touchend", endTouch);
+      stage.removeEventListener("touchcancel", endTouch);
+    };
+  }, []);
 
   useEffect(() => {
     const stage = stageRef.current;
