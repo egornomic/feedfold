@@ -884,11 +884,28 @@ export function ReaderToolbar({
   onMarkReadByAge,
   onHelp,
 }: ReaderToolbarProps) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
+  const searchExpanded = searchOpen || searchActive || Boolean(searchInput);
+  const searchPresence = useMotionPresence(searchExpanded);
   const showArticleStateSwitcher =
     !readingArticle && (articleState === "unread" || articleState === "all");
 
+  useLayoutEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  function closeSearch() {
+    setSearchOpen(false);
+    onClearSearch();
+    searchToggleRef.current?.focus();
+  }
+
   return (
-    <header className={`reader-toolbar${readingArticle ? " is-reading-article" : ""}`}>
+    <header
+      className={`reader-toolbar${readingArticle ? " is-reading-article" : searchPresence.present ? " is-search-open" : ""}`}
+    >
       <div className="reader-title-row">
         <IconButton
           label={navOpen ? "Close navigation" : "Open navigation"}
@@ -920,27 +937,67 @@ export function ReaderToolbar({
             </button>
           </fieldset>
         ) : null}
-        <form className="search-form" aria-label="Article search" onSubmit={onSearch}>
-          <Search aria-hidden="true" size={16} />
-          <label className="sr-only" htmlFor="article-search">
-            Search articles
-          </label>
-          <input
-            id="article-search"
-            type="search"
-            value={searchInput}
-            placeholder="Search articles"
-            onChange={(event) => onSearchInput(event.target.value)}
-          />
-          {searchInput || searchActive ? (
-            <button type="button" onClick={onClearSearch} aria-label="Clear search">
-              <X aria-hidden="true" size={15} />
+        <button
+          ref={searchToggleRef}
+          className="icon-button search-toggle"
+          type="button"
+          aria-label={searchExpanded ? "Close search" : "Search articles"}
+          aria-expanded={searchExpanded}
+          aria-controls={searchExpanded ? "article-search-form" : undefined}
+          data-tooltip={searchExpanded ? "Close search" : "Search articles"}
+          onClick={() => (searchExpanded ? closeSearch() : setSearchOpen(true))}
+        >
+          {searchExpanded ? (
+            <X aria-hidden="true" size={19} />
+          ) : (
+            <Search aria-hidden="true" size={19} />
+          )}
+        </button>
+        {searchPresence.present ? (
+          <form
+            id="article-search-form"
+            className="search-form"
+            data-motion-state={searchPresence.state}
+            inert={!searchExpanded}
+            aria-label="Article search"
+            onSubmit={onSearch}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              closeSearch();
+            }}
+          >
+            <Search aria-hidden="true" size={16} />
+            <label className="sr-only" htmlFor="article-search">
+              Search articles
+            </label>
+            <input
+              ref={searchInputRef}
+              id="article-search"
+              type="search"
+              value={searchInput}
+              placeholder="Search articles"
+              onChange={(event) => onSearchInput(event.target.value)}
+            />
+            {searchInput || searchActive ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchOpen(true);
+                  onClearSearch();
+                  searchInputRef.current?.focus();
+                }}
+                aria-label="Clear search"
+              >
+                <X aria-hidden="true" size={15} />
+              </button>
+            ) : null}
+            <button className="search-submit" type="submit">
+              Search
             </button>
-          ) : null}
-          <button className="search-submit" type="submit">
-            Search
-          </button>
-        </form>
+          </form>
+        ) : null}
         <fieldset className="view-switcher">
           <legend className="sr-only">Reading view</legend>
           <button
