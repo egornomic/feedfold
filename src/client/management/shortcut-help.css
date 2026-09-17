@@ -1,6 +1,6 @@
 .shortcut-reference {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
 }
 
@@ -101,7 +101,7 @@
 .shortcut-reference dl > div {
   display: grid;
   min-height: 34px;
-  grid-template-columns: 74px 1fr;
+  grid-template-columns: 74px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
 }
@@ -138,4 +138,16 @@
   margin: 0;
   color: var(--muted);
   font-size: var(--type-label);
+}
+
+@media (max-width: 900px) {
+  .shortcut-reference {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container settings (max-width: 760px) {
+  .shortcut-reference {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

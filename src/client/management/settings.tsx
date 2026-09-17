@@ -1559,7 +1559,7 @@ function SettingsPage({
                       <span
                         className="color-palette-preview"
                         data-palette={palette.id}
-                        style={{ colorScheme: mode }}
+                        data-theme={mode}
                         aria-hidden="true"
                       >
                         <span className="color-palette-preview-sidebar">
