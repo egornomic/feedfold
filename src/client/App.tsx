@@ -314,6 +314,13 @@ function ReaderApp({
     readingMode: queue.readingMode,
     showToast,
   });
+  const readerPath = appRoutePath(route.readerRoute);
+
+  useLayoutEffect(() => {
+    if (readerPath && readingWorkspaceRef.current) {
+      readingWorkspaceRef.current.scrollTop = 0;
+    }
+  }, [readerPath]);
 
   const reloadRules = useCallback(async (signal: AbortSignal) => {
     setRulesLoading(true);
@@ -362,14 +369,15 @@ function ReaderApp({
   const selectScope = useCallback(
     (feedId: number | null, folderId: number | null, state: ArticleState = "unread") => {
       const nextRoute = readerRouteForSelection(state, feedId, folderId, route.readerRoute.search);
-      const reloadArticles = appRoutePath(route.current()) === appRoutePath(nextRoute);
-      queue.invalidate();
+      if (appRoutePath(route.current()) === appRoutePath(nextRoute)) {
+        setNavOpen(false);
+        return;
+      }
       route.selectScope(feedId, folderId, state);
       setNavOpen(false);
       void dataResource.loadBootstrap();
-      if (reloadArticles) void queue.loadArticles();
     },
-    [dataResource, queue, route],
+    [dataResource, route],
   );
 
   const navigateTo = useCallback(
@@ -579,6 +587,7 @@ function ReaderApp({
         sequence.current = { startedAt: Date.now() };
         return;
       }
+      if (queue.loading) return;
       if (key === "r" && !bootstrap.capabilities.manualRefresh) return;
       if (event.shiftKey && key === "r") {
         event.preventDefault();
@@ -659,6 +668,7 @@ function ReaderApp({
     navigateTo,
     preferences,
     queue.activeArticle,
+    queue.loading,
     queue.readingMode,
     refresh,
     route,
@@ -732,7 +742,7 @@ function ReaderApp({
               searchActive={Boolean(route.readerRoute.search)}
               mode={queue.readingMode}
               refreshing={bootstrap.feeds.some((feed) => feed.refreshing)}
-              markReadPending={articleActions.markReadPending}
+              markReadPending={articleActions.markReadPending || queue.loading}
               navOpen={navOpen}
               readingArticle={readerOpen && queue.readingMode === "magazine"}
               manualRefreshEnabled={bootstrap.capabilities.manualRefresh}
@@ -762,6 +772,7 @@ function ReaderApp({
             <div
               ref={readingWorkspaceRef}
               className={`reading-workspace mode-${queue.readingMode}${readerOpen ? " is-reading-article" : ""}`}
+              aria-busy={queue.loading}
             >
               {queue.loading ? (
                 <ArticleListSkeleton mode={queue.readingMode} />
@@ -810,7 +821,7 @@ function ReaderApp({
               ) : queue.readingMode === "magazine" ? (
                 <>
                   <ArticleList
-                    key={`${route.readerRoute.state}:${selectedFeedId ?? "all"}:${selectedFolderId ?? "all"}:${route.readerRoute.search}`}
+                    key={readerPath}
                     articles={queue.articles}
                     activeId={queue.activeArticleId}
                     markReadOnScroll={bootstrap.settings.markReadOnScroll}
@@ -895,6 +906,7 @@ function ReaderApp({
                 </>
               ) : (
                 <ExpandedStream
+                  key={readerPath}
                   articles={
                     route.routedArticleId !== null && queue.activeArticle
                       ? [queue.activeArticle]

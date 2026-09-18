@@ -512,7 +512,11 @@ export function AppSkeleton() {
         <div className="skeleton-line short" />
       </aside>
       <main className="main-column">
-        <div className="skeleton-toolbar" />
+        <div className="reader-toolbar skeleton-toolbar">
+          <div className="reader-title-row" aria-hidden="true">
+            <span className="menu-button" />
+          </div>
+        </div>
         <div className="reading-workspace mode-magazine">
           <ArticleListSkeleton mode="magazine" />
         </div>
@@ -564,13 +568,20 @@ export function ArticleListSkeleton({ mode }: { mode: ReadingMode }) {
         aria-busy="true"
         aria-label="Loading articles"
       >
-        {[0, 1, 2, 3, 4, 5].map((key) => (
-          <div className="skeleton-list-row" key={key}>
-            <div className="skeleton-line short" />
-            <div className="skeleton-line wide" />
-            <div className="skeleton-line" />
-          </div>
-        ))}
+        <ol aria-hidden="true">
+          {[0, 1, 2, 3, 4, 5].map((key) => (
+            <li className="article-list-item" key={key}>
+              <div className="article-card-content">
+                <div className="article-card-image" />
+                <div className="article-list-copy">
+                  <div className="skeleton-line wide" />
+                  <div className="skeleton-line short" />
+                  <div className="skeleton-line" />
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
       </div>
       <div className="reader-pane skeleton-reader">
         <div className="skeleton-line short" />

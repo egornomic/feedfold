@@ -142,7 +142,6 @@ export function useArticleQueue({
         contextArticleReturn.current = null;
         contextArticleReturnRoute.current = null;
       }
-      setError(null);
       // A layout change keeps the current queue visible until its content is ready.
       // Reuse content we already have, including a confirmed empty queue.
       if (
@@ -151,6 +150,7 @@ export function useArticleQueue({
       ) {
         loadedReaderRequestKey.current = requestKey;
         setDisplayedReadingMode(readingMode);
+        setError(null);
         setLoading(false);
         return;
       }
@@ -175,6 +175,7 @@ export function useArticleQueue({
         articleListNeedsReload.current = false;
         loadedReaderRequestKey.current = requestKey;
         setDisplayedReadingMode(readingMode);
+        setError(null);
         setArticles(nextArticles);
         setNextCursor(page.nextCursor);
         fullContentLoadedIds.current = new Set(
@@ -454,6 +455,7 @@ export function useArticleQueue({
     if (
       !bootstrapReady ||
       !nextCursor ||
+      loading ||
       loadingMore ||
       !queryRoute ||
       readingMode !== displayedReadingMode
@@ -511,6 +513,7 @@ export function useArticleQueue({
     currentRoute,
     dataResource,
     displayedReadingMode,
+    loading,
     loadingMore,
     nextCursor,
     readerRoute,
@@ -518,7 +521,7 @@ export function useArticleQueue({
     showToast,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const nextRoute = appRoute;
     dataResource.cancelArticles();
     requestId.current += 1;
@@ -536,6 +539,9 @@ export function useArticleQueue({
       loadedReaderRequestKey.current !== requestKey
     ) {
       void (articleListNeedsReload.current ? dataResource.reloadReader() : loadArticles());
+    } else {
+      setLoading(false);
+      setError(null);
     }
   }, [appRoute, bootstrapReady, dataResource, loadArticles, readingMode]);
 
