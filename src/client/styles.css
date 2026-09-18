@@ -3635,6 +3635,25 @@ kbd {
     transform var(--duration-surface) var(--ease-out);
 }
 
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.empty-state-actions > button {
+  min-height: 2.75rem;
+}
+
+@media (width <= 620px) {
+  .empty-state-actions {
+    width: 100%;
+    max-width: 20rem;
+    flex-direction: column;
+  }
+}
+
 @starting-style {
   .inline-state.empty-state {
     opacity: 0;

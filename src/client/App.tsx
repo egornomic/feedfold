@@ -783,6 +783,7 @@ function ReaderApp({
                   search={route.readerRoute.search}
                   state={route.readerRoute.state}
                   onAddFeed={openAddFeed}
+                  onShowSaved={() => selectScope(null, null, "starred")}
                   onShowAll={() =>
                     route.navigate(
                       readerRouteForSelection(

@@ -21,6 +21,7 @@ import {
   Mail,
   MailOpen,
   MessageSquareText,
+  Plus,
   RefreshCw,
   Rss,
   SearchX,
@@ -608,6 +609,7 @@ export function EmptyArticles({
   search,
   state,
   onAddFeed,
+  onShowSaved,
   onShowAll,
   onClearSearch,
 }: {
@@ -615,6 +617,7 @@ export function EmptyArticles({
   search: string;
   state: ArticleState;
   onAddFeed: () => void;
+  onShowSaved: () => void;
   onShowAll: () => void;
   onClearSearch: () => void;
 }) {
@@ -648,9 +651,16 @@ export function EmptyArticles({
         <CheckCheck aria-hidden="true" size={40} strokeWidth={1.7} />
         <h2>No unread articles</h2>
         <p>New articles will appear after the next refresh.</p>
-        <button className="secondary-button" type="button" onClick={onShowAll}>
-          Show read articles
-        </button>
+        <div className="empty-state-actions">
+          <button className="primary-button" type="button" onClick={onShowSaved}>
+            <Star aria-hidden="true" size={16} />
+            Read Saved
+          </button>
+          <button className="secondary-button" type="button" onClick={onAddFeed}>
+            <Plus aria-hidden="true" size={16} />
+            Add more feeds
+          </button>
+        </div>
       </section>
     );
   }
