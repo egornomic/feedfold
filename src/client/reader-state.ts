@@ -97,6 +97,16 @@ export function articleQueryForReaderRoute(
   };
 }
 
+export function hasReadingModeContent(
+  readingMode: ReadingMode,
+  articles: Article[],
+  fullContentLoadedIds: ReadonlySet<number>,
+): boolean {
+  return (
+    readingMode === "magazine" || articles.every((article) => fullContentLoadedIds.has(article.id))
+  );
+}
+
 export function fullContentIdsAfterReload(
   readingMode: ReadingMode,
   articles: Article[],

@@ -303,6 +303,7 @@ function ReaderApp({
     dataResource,
     bootstrapReady: bootstrap !== null,
     readingMode: preferences.readingMode,
+    onReadingModeChange: preferences.setReadingMode,
     showToast,
   });
   const articleActions = useArticleActions({
@@ -310,7 +311,7 @@ function ReaderApp({
     queue,
     route,
     dataResource,
-    readingMode: preferences.readingMode,
+    readingMode: queue.readingMode,
     showToast,
   });
 
@@ -531,7 +532,7 @@ function ReaderApp({
       const workspace = readingWorkspaceRef.current;
       if (!workspace || route.view !== "reader") return false;
       const scrollContainer =
-        preferences.readingMode === "expanded"
+        queue.readingMode === "expanded"
           ? workspace
           : route.routedArticleId !== null
             ? workspace.querySelector<HTMLElement>(".article-swipe-layer.is-active")
@@ -540,7 +541,7 @@ function ReaderApp({
       scrollContainer.scrollTop += direction * scrollContainer.clientHeight * 0.85;
       return true;
     },
-    [preferences.readingMode, route.routedArticleId, route.view],
+    [queue.readingMode, route.routedArticleId, route.view],
   );
 
   useEffect(() => {
@@ -612,17 +613,17 @@ function ReaderApp({
         c: () => void articleActions.copyArticleUrl(activeArticle),
         o: () => articleActions.openArticleSource(activeArticle),
         w: () => {
-          if (activeArticle && (preferences.readingMode === "expanded" || route.routedArticleId)) {
+          if (activeArticle && (queue.readingMode === "expanded" || route.routedArticleId)) {
             void articleActions.toggleFullContent(activeArticle);
           }
         },
         m: () => {
-          if (activeArticle && (preferences.readingMode === "expanded" || route.routedArticleId)) {
+          if (activeArticle && (queue.readingMode === "expanded" || route.routedArticleId)) {
             articleActions.toggleArticleSummary(activeArticle);
           }
         },
         t: () => {
-          if (activeArticle && (preferences.readingMode === "expanded" || route.routedArticleId)) {
+          if (activeArticle && (queue.readingMode === "expanded" || route.routedArticleId)) {
             articleActions.toggleArticleTranslation(activeArticle);
           }
         },
@@ -658,6 +659,7 @@ function ReaderApp({
     navigateTo,
     preferences,
     queue.activeArticle,
+    queue.readingMode,
     refresh,
     route,
     scrollArticlePage,
@@ -728,11 +730,11 @@ function ReaderApp({
               unreadCount={readerScopeUnreadCount(bootstrap, selectedFeedId, selectedFolderId)}
               searchInput={route.searchInput}
               searchActive={Boolean(route.readerRoute.search)}
-              mode={preferences.readingMode}
+              mode={queue.readingMode}
               refreshing={bootstrap.feeds.some((feed) => feed.refreshing)}
               markReadPending={articleActions.markReadPending}
               navOpen={navOpen}
-              readingArticle={readerOpen && preferences.readingMode === "magazine"}
+              readingArticle={readerOpen && queue.readingMode === "magazine"}
               manualRefreshEnabled={bootstrap.capabilities.manualRefresh}
               onToggleNav={() => setNavOpen((current) => !current)}
               onArticleStateChange={(state) => selectScope(selectedFeedId, selectedFolderId, state)}
@@ -759,10 +761,10 @@ function ReaderApp({
 
             <div
               ref={readingWorkspaceRef}
-              className={`reading-workspace mode-${preferences.readingMode}${readerOpen ? " is-reading-article" : ""}`}
+              className={`reading-workspace mode-${queue.readingMode}${readerOpen ? " is-reading-article" : ""}`}
             >
               {queue.loading ? (
-                <ArticleListSkeleton mode={preferences.readingMode} />
+                <ArticleListSkeleton mode={queue.readingMode} />
               ) : queue.error ? (
                 <InlineError
                   title={
@@ -805,7 +807,7 @@ function ReaderApp({
                     );
                   }}
                 />
-              ) : preferences.readingMode === "magazine" ? (
+              ) : queue.readingMode === "magazine" ? (
                 <>
                   <ArticleList
                     key={`${route.readerRoute.state}:${selectedFeedId ?? "all"}:${selectedFolderId ?? "all"}:${route.readerRoute.search}`}
@@ -813,7 +815,9 @@ function ReaderApp({
                     activeId={queue.activeArticleId}
                     markReadOnScroll={bootstrap.settings.markReadOnScroll}
                     showYouTubeDescriptions={bootstrap.settings.showYouTubeDescriptions}
-                    hasMore={queue.nextCursor !== null}
+                    hasMore={
+                      queue.nextCursor !== null && queue.readingMode === preferences.readingMode
+                    }
                     loadingMore={queue.loadingMore}
                     onLoadMore={() => void queue.loadOlderArticles()}
                     onOpen={articleActions.openArticle}
@@ -905,7 +909,11 @@ function ReaderApp({
                   customPrompts={bootstrap.settings.customPrompts}
                   showYouTubeDescriptions={bootstrap.settings.showYouTubeDescriptions}
                   markReadOnScroll={bootstrap.settings.markReadOnScroll}
-                  hasMore={route.routedArticleId === null && queue.nextCursor !== null}
+                  hasMore={
+                    route.routedArticleId === null &&
+                    queue.nextCursor !== null &&
+                    queue.readingMode === preferences.readingMode
+                  }
                   loadingMore={queue.loadingMore}
                   onLoadMore={() => void queue.loadOlderArticles()}
                   onActivate={(article) => queue.selectArticle(article.id)}

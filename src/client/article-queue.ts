@@ -19,10 +19,12 @@ import {
   articlesWithUpdatedState,
   firstUnseenArticlePage,
   fullContentIdsAfterReload,
+  hasReadingModeContent,
 } from "./reader-state";
 import { appRoutePath, type ReaderRoute } from "./routes";
 
 export interface ArticleQueueController {
+  readingMode: ReadingMode;
   articles: Article[];
   setArticles: Dispatch<SetStateAction<Article[]>>;
   articlesRef: React.RefObject<Article[]>;
@@ -58,6 +60,7 @@ interface ArticleQueueOptions {
   dataResource: ReaderDataResource;
   bootstrapReady: boolean;
   readingMode: ReadingMode;
+  onReadingModeChange: (mode: ReadingMode) => void;
   showToast: (message: string) => void;
 }
 
@@ -66,6 +69,7 @@ export function useArticleQueue({
   dataResource,
   bootstrapReady,
   readingMode,
+  onReadingModeChange,
   showToast,
 }: ArticleQueueOptions): ArticleQueueController {
   const {
@@ -77,6 +81,7 @@ export function useArticleQueue({
     setArticleContext,
   } = route;
   const [articles, setArticles] = useState<Article[]>([]);
+  const [displayedReadingMode, setDisplayedReadingMode] = useState(readingMode);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +123,11 @@ export function useArticleQueue({
       const nextRoute = currentRoute();
       if (!bootstrapReady || nextRoute.kind !== "reader") return;
       const requestKey = `${appRoutePath(nextRoute)}:${readingMode}`;
+      const switchingMode =
+        !articleListNeedsReload.current &&
+        !contextArticleReturn.current &&
+        loadedReaderRequestKey.current ===
+          `${appRoutePath(nextRoute)}:${readingMode === "expanded" ? "magazine" : "expanded"}`;
       queueReloadId.current += 1;
       const currentRequestId = requestId.current + 1;
       requestId.current = currentRequestId;
@@ -132,8 +142,19 @@ export function useArticleQueue({
         contextArticleReturn.current = null;
         contextArticleReturnRoute.current = null;
       }
-      if (!returnTarget) setLoading(true);
       setError(null);
+      // A layout change keeps the current queue visible until its content is ready.
+      // Reuse content we already have, including a confirmed empty queue.
+      if (
+        switchingMode &&
+        hasReadingModeContent(readingMode, articlesRef.current, fullContentLoadedIds.current)
+      ) {
+        loadedReaderRequestKey.current = requestKey;
+        setDisplayedReadingMode(readingMode);
+        setLoading(false);
+        return;
+      }
+      if (!returnTarget && !switchingMode) setLoading(true);
       try {
         const page = await api.articles(
           articleQueryForReaderRoute(nextRoute, {
@@ -153,6 +174,7 @@ export function useArticleQueue({
         const nextArticles = articlesWithContextReturn(page.articles, returnTarget);
         articleListNeedsReload.current = false;
         loadedReaderRequestKey.current = requestKey;
+        setDisplayedReadingMode(readingMode);
         setArticles(nextArticles);
         setNextCursor(page.nextCursor);
         fullContentLoadedIds.current = new Set(
@@ -175,13 +197,25 @@ export function useArticleQueue({
         }
       } catch (caught) {
         if (!signal.aborted && requestId.current === currentRequestId) {
-          setError(errorMessage(caught));
+          if (switchingMode) {
+            onReadingModeChange(displayedReadingMode);
+            showToast(`Could not change reading view: ${errorMessage(caught)}`);
+          } else {
+            setError(errorMessage(caught));
+          }
         }
       } finally {
         if (!signal.aborted && requestId.current === currentRequestId) setLoading(false);
       }
     },
-    [bootstrapReady, currentRoute, readingMode],
+    [
+      bootstrapReady,
+      currentRoute,
+      displayedReadingMode,
+      onReadingModeChange,
+      readingMode,
+      showToast,
+    ],
   );
 
   const reloadAfterMutation = useCallback(
@@ -257,6 +291,7 @@ export function useArticleQueue({
           refreshedActiveArticle?.id ?? null,
         );
         loadedReaderRequestKey.current = `${appRoutePath(queryRoute)}:${readingMode}`;
+        setDisplayedReadingMode(readingMode);
       } catch (caught) {
         if (!signal.aborted) setError(errorMessage(caught));
         loadedReaderRequestKey.current = null;
@@ -336,6 +371,7 @@ export function useArticleQueue({
         if (!readerQueue) return;
         articleListNeedsReload.current = false;
         loadedReaderRequestKey.current = requestKey;
+        setDisplayedReadingMode(readingMode);
         setActiveArticleId((current) =>
           current !== null && nextArticles.some((article) => article.id === current)
             ? current
@@ -388,6 +424,7 @@ export function useArticleQueue({
 
       articleListNeedsReload.current = false;
       loadedReaderRequestKey.current = requestKey;
+      setDisplayedReadingMode(readingMode);
       const nextArticles = reloaded;
       setArticles(nextArticles);
       setNextCursor(cursor);
@@ -414,7 +451,15 @@ export function useArticleQueue({
     const nextRoute = currentRoute();
     const queryRoute =
       nextRoute.kind === "reader" ? nextRoute : nextRoute.kind === "article" ? readerRoute : null;
-    if (!bootstrapReady || !nextCursor || loadingMore || !queryRoute) return [];
+    if (
+      !bootstrapReady ||
+      !nextCursor ||
+      loadingMore ||
+      !queryRoute ||
+      readingMode !== displayedReadingMode
+    ) {
+      return [];
+    }
 
     const currentRequestId = requestId.current;
     setLoadingMore(true);
@@ -465,6 +510,7 @@ export function useArticleQueue({
     bootstrapReady,
     currentRoute,
     dataResource,
+    displayedReadingMode,
     loadingMore,
     nextCursor,
     readerRoute,
@@ -503,6 +549,7 @@ export function useArticleQueue({
 
     const showArticle = (article: Article) => {
       if (!active) return;
+      setDisplayedReadingMode(readingMode);
       if (!existing) loadedReaderRequestKey.current = null;
       setArticles((current) =>
         current.some((item) => item.id === article.id)
@@ -568,6 +615,7 @@ export function useArticleQueue({
             actualArticleIndex >= 0 ? actualArticleIndex : context?.articleIndex,
           );
           loadedReaderRequestKey.current = `${appRoutePath(queueRoute)}:${readingMode}`;
+          setDisplayedReadingMode(readingMode);
           fullContentLoadedIds.current.add(article.id);
           setArticles(nextArticles);
           setNextCursor(page.nextCursor);
@@ -632,6 +680,7 @@ export function useArticleQueue({
     error === null;
 
   return {
+    readingMode: displayedReadingMode,
     articles,
     setArticles,
     articlesRef,
