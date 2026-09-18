@@ -10,6 +10,13 @@ function renderMarkdown(text: string, grounding?: AiGrounding): DocumentFragment
 }
 
 describe("AI Markdown", () => {
+  it("offers copying for fenced code while preserving whitespace and inline code", () => {
+    const fragment = renderMarkdown('Inline `value`\n\n```js\n\tconst value = "<tag>";\n```');
+    expect(fragment.querySelectorAll('button[aria-label="Copy code"]')).toHaveLength(1);
+    expect(fragment.querySelector("pre")?.textContent).toBe('\tconst value = "<tag>";\n');
+    expect(fragment.querySelector("p code")?.textContent).toBe("value");
+  });
+
   it("renders formatted LLM output without changing its block order", () => {
     const fragment = renderMarkdown(`Here is the result:
 

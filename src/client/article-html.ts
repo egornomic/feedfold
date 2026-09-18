@@ -6,10 +6,13 @@ import {
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
+import { CopyCodeButton } from "./code-block.js";
 import {
   ImageLightbox,
   type ImageLightboxItem,
@@ -75,6 +78,28 @@ export const ArticleHtml = memo(function ArticleHtml({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [lightbox, setLightbox] = useState<ImageLightboxState | null>(null);
+  const [codeBlocks, setCodeBlocks] = useState<
+    Array<{ block: HTMLPreElement; wrapper: HTMLDivElement }>
+  >([]);
+
+  useLayoutEffect(() => {
+    if (!sanitizedHtml.includes("<pre")) {
+      setCodeBlocks([]);
+      return;
+    }
+    const blocks = Array.from(containerRef.current?.querySelectorAll("pre") ?? []);
+    const targets = blocks.map((block) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "article-code-block";
+      block.before(wrapper);
+      wrapper.append(block);
+      return { block, wrapper };
+    });
+    setCodeBlocks(targets);
+    return () => {
+      for (const { block, wrapper } of targets) wrapper.replaceWith(block);
+    };
+  }, [sanitizedHtml]);
 
   useEffect(() => {
     if (!sanitizedHtml.includes("<img")) return;
@@ -188,6 +213,13 @@ export const ArticleHtml = memo(function ArticleHtml({
     Fragment,
     null,
     article,
+    ...codeBlocks.map(({ block, wrapper }, index) =>
+      createPortal(
+        createElement(CopyCodeButton, { getText: () => block.textContent ?? "" }),
+        wrapper,
+        String(index),
+      ),
+    ),
     lightbox
       ? createElement(ImageLightbox, {
           state: lightbox,

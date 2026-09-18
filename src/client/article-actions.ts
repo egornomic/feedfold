@@ -11,6 +11,7 @@ import { ApiError, api, errorMessage } from "./api";
 import type { AppRouteController } from "./app-route";
 import { articleTranslationSourceKind, fullContentToggleAction } from "./article-content";
 import type { ArticleQueueController } from "./article-queue";
+import { copyText } from "./clipboard";
 import type { ReaderDataResource } from "./data-resource";
 import {
   type ArticleSummaryViewState,
@@ -326,18 +327,7 @@ export function useArticleActions({
         return;
       }
       try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(article.url);
-        } else {
-          const input = document.createElement("textarea");
-          input.value = article.url;
-          input.style.position = "fixed";
-          input.style.opacity = "0";
-          document.body.append(input);
-          input.select();
-          document.execCommand("copy");
-          input.remove();
-        }
+        await copyText(article.url);
         showToast("Article link copied");
       } catch {
         showToast("Could not copy the article link. Copy it from the source page instead.");

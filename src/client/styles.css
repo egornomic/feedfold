@@ -3365,6 +3365,59 @@ kbd {
   tab-size: 2;
 }
 
+.article-code-block {
+  position: relative;
+  margin-block: 1.45em;
+}
+
+.article-code-block > pre {
+  margin: 0;
+}
+
+.article-summary-text .article-code-block {
+  /* Match the pre margin at its 0.86em font size. */
+  margin-block: calc(0.9em * 0.86);
+}
+
+.code-copy-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.code-copy-button:active {
+  opacity: 0.6;
+}
+
+@media (hover: hover) {
+  .code-copy-button {
+    opacity: 0;
+  }
+
+  .article-code-block:hover > .code-copy-button,
+  .article-code-block:focus-within > .code-copy-button {
+    opacity: 1;
+  }
+
+  .article-code-block .code-copy-button:active {
+    opacity: 0.6;
+  }
+
+  .code-copy-button:hover {
+    color: var(--text);
+  }
+}
+
 .article-content code {
   font-family: var(--font-code);
   font-variant-ligatures: none;
