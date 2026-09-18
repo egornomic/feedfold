@@ -98,22 +98,12 @@ const ADD_FEED_INPUTS: Record<
   rss: {
     label: "Website or feed address",
     heading: "Which website or feed do you want to follow?",
-    placeholder: "https://example.com",
-    help: "Paste any public website or direct RSS, Atom, or JSON Feed address.",
+    placeholder: "gwern.net/blog",
+    help: "Enter a website or feed address. No need to include https://.",
     prefix: null,
     action: "Find feed",
     loading: "Finding the published feed",
     add: "Add feed",
-  },
-  web: {
-    label: "Public page address",
-    heading: "Which page contains the entries you want?",
-    placeholder: "https://example.com/articles",
-    help: "Choose one public page that lists repeated articles, releases, posts, or other entries.",
-    prefix: null,
-    action: "Find entries",
-    loading: "Finding entries",
-    add: "Add web feed",
   },
   youtube: {
     label: "YouTube channel handle",
@@ -716,7 +706,7 @@ function FeedConfirmationBar({
   onTitleChange,
   onFolderChange,
 }: {
-  sourceType: AddFeedSourceType;
+  sourceType: AddFeedSourceType | "web";
   title: string;
   folderId: number | null;
   folders: Folder[];
@@ -727,16 +717,16 @@ function FeedConfirmationBar({
   onTitleChange: (title: string) => void;
   onFolderChange: (folderId: number | null) => void;
 }) {
-  const inputConfig = ADD_FEED_INPUTS[sourceType];
+  const addLabel = sourceType === "web" ? "Add web feed" : ADD_FEED_INPUTS[sourceType].add;
   const statusTitle = existingFeed ? "Already in your feeds" : "Finish setup";
   const statusDescription = existingFeed
     ? `You already follow this source as ${existingFeed.title}.`
     : "Give the feed a name and choose where it belongs.";
   const actionLabel = disabled
-    ? `${inputConfig.add.replace(/^Add /, "Adding ")}…`
+    ? `${addLabel.replace(/^Add /, "Adding ")}…`
     : existingFeed
       ? "Already added"
-      : inputConfig.add;
+      : addLabel;
 
   return (
     <section
@@ -812,7 +802,6 @@ function AddFeedForm({
   );
   const [sourceInputs, setSourceInputs] = useState<Record<AddFeedSourceType, string>>({
     rss: initialSourceUrl,
-    web: initialSourceUrl,
     youtube: "",
     telegram: "",
     x: "",
@@ -887,17 +876,6 @@ function AddFeedForm({
 
   const selectSourceType = (nextSourceType: AddFeedSourceType) => {
     if (nextSourceType === sourceType) return;
-    if (
-      (nextSourceType === "rss" || nextSourceType === "web") &&
-      sourceType !== null &&
-      (sourceType === "rss" || sourceType === "web") &&
-      !sourceInputs[nextSourceType]
-    ) {
-      setSourceInputs((current) => ({
-        ...current,
-        [nextSourceType]: current[sourceType],
-      }));
-    }
     setSourceType(nextSourceType);
     clearDiscoveryResult();
     window.requestAnimationFrame(() => addressInputRef.current?.focus());
@@ -1188,19 +1166,18 @@ function AddFeedForm({
           <header className="add-feed-stage-heading">
             <span className="add-feed-step">Step 2 of 3 · Find the source</span>
             <h2 ref={previewHeadingRef} tabIndex={-1}>
-              No published feed was found
+              No RSS feed found
             </h2>
-            <p>This page can still become a web feed by following one repeated group of entries.</p>
           </header>
           <div className="add-feed-fallback">
             <span className="add-feed-source-mark" aria-hidden="true">
               <Globe2 size={20} />
             </span>
             <div>
-              <strong>Build a web feed from this page</strong>
+              <strong>Use a web feed instead</strong>
               <p>
-                Web feeds follow one public page. They cannot sign in, bypass paywalls or CAPTCHAs,
-                follow pagination, or track arbitrary text or prices.
+                RSS delivers updates published by the site. A web feed checks this page for new
+                links in a list you choose.
               </p>
             </div>
             <div className="add-feed-fallback-actions">
@@ -1210,15 +1187,10 @@ function AddFeedForm({
               <button
                 className="primary-button"
                 type="button"
-                onClick={() => {
-                  const pageUrl = webPage.pageUrl;
-                  setSourceInputs((current) => ({ ...current, web: pageUrl }));
-                  setSourceType("web");
-                  void analyzeWebPage(pageUrl);
-                }}
+                onClick={() => void analyzeWebPage(webPage.pageUrl)}
               >
                 <Globe2 aria-hidden="true" size={16} />
-                Choose page entries
+                Set up web feed
               </button>
             </div>
           </div>
@@ -1250,8 +1222,7 @@ function AddFeedForm({
               event.preventDefault();
               try {
                 const url = feedSourceUrl(sourceType, sourceInput);
-                if (sourceType === "web") void analyzeWebPage(url);
-                else void discover(url, sourceType);
+                void discover(url, sourceType);
               } catch (caught) {
                 setError(errorMessage(caught));
               }
@@ -1267,7 +1238,8 @@ function AddFeedForm({
                 {inputConfig.prefix ? <span aria-hidden="true">{inputConfig.prefix}</span> : null}
                 <input
                   ref={addressInputRef}
-                  type={sourceType === "rss" || sourceType === "web" ? "url" : "text"}
+                  type="text"
+                  inputMode={sourceType === "rss" ? "url" : "text"}
                   required
                   value={sourceInput}
                   pattern={inputConfig.pattern}

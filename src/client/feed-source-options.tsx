@@ -1,4 +1,4 @@
-import { Globe2, Rss, Send, SquarePlay } from "lucide-react";
+import { Rss, Send, SquarePlay } from "lucide-react";
 import type { SVGProps } from "react";
 
 function XLogo({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
@@ -14,18 +14,10 @@ export const ADD_FEED_SOURCE_OPTIONS = [
   {
     value: "rss",
     label: "Website or feed",
-    description: "Find the published feed for a website, or use a direct feed address.",
+    description: "Follow updates from a website or a direct feed address.",
     detail: "RSS, Atom, or JSON Feed",
     recommended: true,
     icon: Rss,
-  },
-  {
-    value: "web",
-    label: "Web page",
-    description: "Turn repeated links on one public page into a feed.",
-    detail: "Articles, releases, listings, and more",
-    recommended: false,
-    icon: Globe2,
   },
   {
     value: "youtube",
