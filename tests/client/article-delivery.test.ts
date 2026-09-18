@@ -204,6 +204,8 @@ describe("live article delivery", () => {
       releaseArticleResponse = resolve;
     });
     let initialContentRequests = 0;
+    let holdNavigationResponses = false;
+    const navigationResponses: Array<() => void> = [];
     let releaseInitialContent = () => {};
     const initialContentResponse = new Promise<void>((resolve) => {
       releaseInitialContent = resolve;
@@ -211,6 +213,9 @@ describe("live article delivery", () => {
     const invoke = async (request: DesktopRequest): Promise<DesktopResponse> => {
       try {
         const value = await application.invoke(request);
+        if (request.operation === "articles" && holdNavigationResponses) {
+          await new Promise<void>((resolve) => navigationResponses.push(resolve));
+        }
         if (
           request.operation === "article" &&
           (value as { title: string }).title === "Starting article"
@@ -488,6 +493,66 @@ describe("live article delivery", () => {
         "expanded navigation into the delivered article",
         () => activeExpandedArticleTitle(container) === "Delivered into expanded view",
       );
+
+      await application.invoke({
+        operation: "updateArticleState",
+        payload: { id: delivered?.id, state: { isStarred: true } },
+      });
+      const navigationButton = (label: string) => {
+        const button = [...container.querySelectorAll<HTMLButtonElement>(".nav-item")].find(
+          (candidate) =>
+            [...candidate.querySelectorAll("span")].some((span) => span.textContent === label),
+        );
+        if (!button) throw new Error(`Missing navigation destination: ${label}`);
+        return button;
+      };
+      const workspace = () => container.querySelector(".reading-workspace");
+      const currentTitle = () => container.querySelector("h1")?.textContent;
+      holdNavigationResponses = true;
+      await act(async () => navigationButton("Saved").click());
+      await waitFor("the delayed Saved response", () => navigationResponses.length === 1);
+      expect(currentTitle()).toBe("Saved");
+      expect(navigationButton("Saved").getAttribute("aria-current")).toBe("page");
+      expect(expandedArticleTitles(container)).toEqual([]);
+      expect(container.querySelector('[aria-label="Loading articles"]')).not.toBeNull();
+      expect(workspace()?.getAttribute("aria-busy")).toBe("true");
+
+      await act(async () => navigationResponses.shift()?.());
+      await waitFor(
+        "Saved to commit with its articles",
+        () => workspace()?.getAttribute("aria-busy") === "false",
+      );
+      expect(expandedArticleTitles(container)).toEqual(["Delivered while reading"]);
+      expect(navigationButton("Saved").getAttribute("aria-current")).toBe("page");
+      expect(workspace()?.getAttribute("aria-busy")).toBe("false");
+
+      await act(async () => navigationButton("Feed").click());
+      await waitFor("the delayed Feed response", () => navigationResponses.length === 1);
+      await act(async () => navigationButton("Saved").click());
+      expect(currentTitle()).toBe("Saved");
+      expect(workspace()?.getAttribute("aria-busy")).toBe("false");
+      await act(async () => navigationResponses.shift()?.());
+      expect(currentTitle()).toBe("Saved");
+      expect(expandedArticleTitles(container)).toEqual(["Delivered while reading"]);
+
+      await act(async () => navigationButton("Saved").click());
+      expect(workspace()?.getAttribute("aria-busy")).toBe("false");
+      expect(navigationResponses).toHaveLength(0);
+
+      await act(async () => navigationButton("Feed").click());
+      await waitFor("another delayed Feed response", () => navigationResponses.length === 1);
+      await act(async () => navigationButton("Live reading").click());
+      await waitFor("the delayed individual feed response", () => navigationResponses.length === 2);
+      await act(async () => navigationResponses.pop()?.());
+      await waitFor(
+        "the latest destination",
+        () => workspace()?.getAttribute("aria-busy") === "false",
+      );
+      const latestTitles = expandedArticleTitles(container);
+      await act(async () => navigationResponses.shift()?.());
+      expect(currentTitle()).toBe("Live reading");
+      expect(expandedArticleTitles(container)).toEqual(latestTitles);
+      expect(workspace()?.getAttribute("aria-busy")).toBe("false");
     } finally {
       await act(async () => root.unmount());
       await Promise.all([refresh.stop(), extraction.stop()]);
