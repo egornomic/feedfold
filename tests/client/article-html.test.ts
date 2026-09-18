@@ -5,6 +5,49 @@ import { describe, expect, it } from "vitest";
 import { ArticleHtml } from "../../src/client/article-html.js";
 
 describe("article HTML", () => {
+  it("keeps code intact and updates copy controls when the reader changes content", async () => {
+    const dom = new JSDOM('<div id="app"></div>');
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const previousActEnvironment = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    Object.defineProperty(globalThis, "window", { configurable: true, value: dom.window });
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: dom.window.document,
+    });
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    const container = dom.window.document.getElementById("app");
+    if (!container) throw new Error("Article fixture is incomplete");
+    const root = createRoot(container);
+    try {
+      const html =
+        "<p>Inline <code>value</code></p><pre><code>\tconst value = &quot;&lt;tag&gt;&quot;;\n</code></pre><pre>second block</pre>";
+      await act(async () => root.render(createElement(ArticleHtml, { sanitizedHtml: html })));
+      expect(container.querySelectorAll('button[aria-label="Copy code"]')).toHaveLength(2);
+      expect(container.querySelector("pre")?.textContent).toBe('\tconst value = "<tag>";\n');
+      expect(container.querySelector("p code")?.textContent).toBe("value");
+      await act(async () =>
+        root.render(createElement(ArticleHtml, { sanitizedHtml: "<pre>replacement</pre>" })),
+      );
+      expect(container.querySelectorAll('button[aria-label="Copy code"]')).toHaveLength(1);
+      expect(container.querySelector("pre")?.textContent).toBe("replacement");
+      await act(async () =>
+        root.render(createElement(ArticleHtml, { sanitizedHtml: "<p>Prose only</p>" })),
+      );
+      expect(container.querySelectorAll("button")).toHaveLength(0);
+      expect(container.textContent).toBe("Prose only");
+    } finally {
+      await act(async () => root.unmount());
+      Object.defineProperty(globalThis, "window", { configurable: true, value: previousWindow });
+      Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: previousDocument,
+      });
+      Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", previousActEnvironment);
+      dom.window.close();
+    }
+  });
+
   it("opens article images in a keyboard-accessible lightbox", async () => {
     const dom = new JSDOM('<div id="app"></div>', { url: "https://feedfold.test/" });
     const previousWindow = globalThis.window;
