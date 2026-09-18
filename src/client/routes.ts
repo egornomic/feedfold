@@ -85,7 +85,6 @@ export function parseAppRoute(pathname: string, search: string, basePath: string
       kind: "add-feed",
       sourceUrl: "",
       ...(sourceType === "rss" ||
-      sourceType === "web" ||
       sourceType === "youtube" ||
       sourceType === "telegram" ||
       sourceType === "x"

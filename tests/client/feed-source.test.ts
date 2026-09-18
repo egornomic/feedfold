@@ -7,11 +7,11 @@ describe("add feed source input", () => {
     expect(feedSourceUrl("youtube", "kurzgesagt")).toBe("https://www.youtube.com/@kurzgesagt");
   });
 
-  it("keeps published and web feed URLs unchanged", () => {
+  it("keeps direct feed and website URLs unchanged", () => {
     expect(feedSourceUrl("rss", " https://example.com/feed.xml ")).toBe(
       "https://example.com/feed.xml",
     );
-    expect(feedSourceUrl("web", "https://example.com/articles")).toBe(
+    expect(feedSourceUrl("rss", "https://example.com/articles")).toBe(
       "https://example.com/articles",
     );
   });

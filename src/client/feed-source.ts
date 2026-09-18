@@ -1,4 +1,4 @@
-export type AddFeedSourceType = "rss" | "web" | "youtube" | "telegram" | "x";
+export type AddFeedSourceType = "rss" | "youtube" | "telegram" | "x";
 
 export const TELEGRAM_HANDLE_PATTERN = "@?[A-Za-z0-9_]{5,32}";
 export const X_HANDLE_PATTERN = "@?[A-Za-z0-9_]{1,15}";
