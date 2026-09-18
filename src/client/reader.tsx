@@ -82,7 +82,7 @@ import {
 
 const ARTICLE_SWIPE_TARGETS =
   "a, button, input, select, textarea, summary, video, audio, iframe, pre, dialog, .article-table-scroll, [contenteditable], [data-image-lightbox-trigger]";
-const ARTICLE_SWIPE_SURFACE = "[data-article-swipe-surface]";
+const ARTICLE_SWIPE_SURFACE = "[data-article-swipe-surface], [data-image-lightbox-trigger]";
 const SWIPE_SAMPLE_WINDOW = 100;
 const SWIPE_SAMPLE_LIMIT = 5;
 const SWIPE_SPRING_RESPONSE = 0.32;
@@ -2071,7 +2071,8 @@ export function ReaderPane({
         outgoingSurfaceRef.current = null;
         setOutgoingSurface(null);
       }
-      event.currentTarget.setPointerCapture(event.pointerId);
+      // Preserve the original tap target so images and media buttons still open.
+      target?.setPointerCapture(event.pointerId);
       swipeStart.current = {
         pointerId: event.pointerId,
         x: event.clientX,
