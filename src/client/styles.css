@@ -2926,8 +2926,14 @@ kbd {
 }
 
 .telegram-media-gallery.is-grouped {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 3px;
+}
+
+.telegram-media-gallery.is-grouped > * {
+  flex: 1 1 calc((100% - 6px) / 3);
+  min-width: 0;
 }
 
 .telegram-image-lightbox-trigger {
@@ -3033,8 +3039,8 @@ kbd {
     outline-offset: -3px;
   }
 
-  .telegram-media-gallery.is-grouped {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .telegram-media-gallery.is-grouped > * {
+    flex-basis: calc((100% - 3px) / 2);
   }
 }
 
