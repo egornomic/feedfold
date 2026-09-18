@@ -60,6 +60,7 @@ interface ArticleQueueOptions {
   dataResource: ReaderDataResource;
   bootstrapReady: boolean;
   readingMode: ReadingMode;
+  onReadingModeChange: (mode: ReadingMode) => void;
   showToast: (message: string) => void;
 }
 
@@ -68,6 +69,7 @@ export function useArticleQueue({
   dataResource,
   bootstrapReady,
   readingMode,
+  onReadingModeChange,
   showToast,
 }: ArticleQueueOptions): ArticleQueueController {
   const {
@@ -196,6 +198,7 @@ export function useArticleQueue({
       } catch (caught) {
         if (!signal.aborted && requestId.current === currentRequestId) {
           if (switchingMode) {
+            onReadingModeChange(displayedReadingMode);
             showToast(`Could not change reading view: ${errorMessage(caught)}`);
           } else {
             setError(errorMessage(caught));
@@ -205,7 +208,14 @@ export function useArticleQueue({
         if (!signal.aborted && requestId.current === currentRequestId) setLoading(false);
       }
     },
-    [bootstrapReady, currentRoute, readingMode, showToast],
+    [
+      bootstrapReady,
+      currentRoute,
+      displayedReadingMode,
+      onReadingModeChange,
+      readingMode,
+      showToast,
+    ],
   );
 
   const reloadAfterMutation = useCallback(

@@ -303,6 +303,7 @@ function ReaderApp({
     dataResource,
     bootstrapReady: bootstrap !== null,
     readingMode: preferences.readingMode,
+    onReadingModeChange: preferences.setReadingMode,
     showToast,
   });
   const articleActions = useArticleActions({
@@ -521,9 +522,6 @@ function ReaderApp({
   const changeReadingMode = useCallback(
     (mode: "magazine" | "expanded") => {
       queue.clearKeyboardTarget();
-      if (mode === preferences.readingMode && mode !== queue.readingMode) {
-        void queue.loadArticles();
-      }
       preferences.setReadingMode(mode);
     },
     [preferences, queue],
