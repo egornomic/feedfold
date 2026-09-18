@@ -1713,11 +1713,14 @@ kbd {
 
 .reading-workspace.mode-expanded {
   display: block;
-  padding: 26px 16px 100px;
   background: var(--paper-canvas);
   background-blend-mode: var(--paper-blend);
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.reading-workspace.mode-expanded:has(> .expanded-stream) {
+  padding: 26px 16px 100px;
 }
 
 .article-list {
