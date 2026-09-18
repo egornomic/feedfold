@@ -19,6 +19,7 @@ import {
   articlesWithUpdatedState,
   firstUnseenArticlePage,
   fullContentIdsAfterReload,
+  hasReadingModeContent,
 } from "./reader-state";
 import { appRoutePath, type ReaderRoute } from "./routes";
 
@@ -144,8 +145,7 @@ export function useArticleQueue({
       // Reuse content we already have, including a confirmed empty queue.
       if (
         switchingMode &&
-        (readingMode === "magazine" ||
-          articlesRef.current.every((article) => fullContentLoadedIds.current.has(article.id)))
+        hasReadingModeContent(readingMode, articlesRef.current, fullContentLoadedIds.current)
       ) {
         loadedReaderRequestKey.current = requestKey;
         setDisplayedReadingMode(readingMode);
