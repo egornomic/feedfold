@@ -33,5 +33,5 @@ export function feedSourceUrl(sourceType: AddFeedSourceType, input: string): str
     return `https://x.com/${handle}`;
   }
 
-  return value;
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`;
 }

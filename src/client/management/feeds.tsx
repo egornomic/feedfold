@@ -98,8 +98,8 @@ const ADD_FEED_INPUTS: Record<
   rss: {
     label: "Website or feed address",
     heading: "Which website or feed do you want to follow?",
-    placeholder: "https://example.com",
-    help: "Paste any public website or direct RSS, Atom, or JSON Feed address.",
+    placeholder: "gwern.net/blog",
+    help: "Enter a website or feed address. No need to include https://.",
     prefix: null,
     action: "Find feed",
     loading: "Finding the published feed",
@@ -1238,7 +1238,8 @@ function AddFeedForm({
                 {inputConfig.prefix ? <span aria-hidden="true">{inputConfig.prefix}</span> : null}
                 <input
                   ref={addressInputRef}
-                  type={sourceType === "rss" ? "url" : "text"}
+                  type="text"
+                  inputMode={sourceType === "rss" ? "url" : "text"}
                   required
                   value={sourceInput}
                   pattern={inputConfig.pattern}

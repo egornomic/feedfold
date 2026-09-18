@@ -14,6 +14,16 @@ describe("add feed source input", () => {
     expect(feedSourceUrl("rss", "https://example.com/articles")).toBe(
       "https://example.com/articles",
     );
+    expect(feedSourceUrl("rss", "http://example.com/feed.xml")).toBe("http://example.com/feed.xml");
+  });
+
+  it.each([
+    ["gwern.net/blog", "https://gwern.net/blog"],
+    [" gwern.net ", "https://gwern.net"],
+    ["example.com/feed.xml?format=rss#latest", "https://example.com/feed.xml?format=rss#latest"],
+    ["example.com:8443/feed", "https://example.com:8443/feed"],
+  ])("uses HTTPS for a website address without a protocol: %s", (input, expected) => {
+    expect(feedSourceUrl("rss", input)).toBe(expected);
   });
 
   it("turns Telegram and X handles into discoverable source URLs", () => {
