@@ -3892,10 +3892,6 @@ kbd {
 }
 
 @media (min-width: 1021px) {
-  .app-shell.is-management-view {
-    transition: grid-template-columns var(--duration-surface) var(--ease-in-out);
-  }
-
   .app-shell.is-sidebar-collapsed {
     grid-template-columns: 1fr;
   }
@@ -4568,7 +4564,6 @@ kbd {
     }
   }
 
-  .app-shell.is-management-view,
   .app-shell .sidebar-collapse-button {
     transition-duration: 0s;
   }
