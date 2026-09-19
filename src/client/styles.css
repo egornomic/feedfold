@@ -4671,7 +4671,7 @@ kbd {
     transition: opacity var(--duration-reduced) ease;
   }
 
-  .shortcut-dialog,
+  :root .shortcut-dialog,
   .management-dialog {
     transition:
       opacity var(--duration-reduced) ease,
@@ -4679,7 +4679,7 @@ kbd {
       overlay var(--duration-reduced) allow-discrete;
   }
 
-  .shortcut-dialog::backdrop,
+  :root .shortcut-dialog::backdrop,
   .management-dialog::backdrop {
     transition:
       opacity var(--duration-reduced) ease,
@@ -4700,8 +4700,9 @@ kbd {
   .feed-preview-loading[data-motion-state="closed"],
   .feed-confirmation-form,
   .feed-confirmation-form[data-motion-state="closed"],
-  .shortcut-dialog,
-  .shortcut-dialog[open],
+  :root .shortcut-dialog,
+  :root .shortcut-dialog[open],
+  :root .shortcut-dialog[data-state="closing"],
   .management-dialog,
   .management-dialog[open],
   .pwa-update,
@@ -4800,6 +4801,11 @@ kbd {
       transform: translate(-50%, 8px) scale(1);
     }
   }
+}
+
+:root[data-input-modality="keyboard"] .shortcut-dialog,
+:root[data-input-modality="keyboard"] .shortcut-dialog::backdrop {
+  transition: none;
 }
 
 @media (prefers-reduced-transparency: reduce) {
