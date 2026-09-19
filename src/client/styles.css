@@ -3982,6 +3982,10 @@ kbd {
 }
 
 @media (max-width: 1020px) {
+  button kbd {
+    display: none;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -4836,9 +4840,6 @@ kbd {
 @media (max-width: 360px) {
   .segmented-control button {
     padding-inline: 6px;
-  }
-  .view-switcher button kbd {
-    display: none;
   }
 }
 
