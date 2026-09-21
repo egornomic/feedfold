@@ -4,7 +4,7 @@ import {
   clearReaderPreferences,
   resolveAppearance,
   resolveTheme,
-} from "../../src/client/reader-preferences.js";
+} from "../../src/client/features/reader/reader-preferences.js";
 
 describe("theme preference", () => {
   it("follows the device appearance in auto mode", () => {

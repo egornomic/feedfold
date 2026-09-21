@@ -6,19 +6,19 @@ import type {
   BootstrapData,
   MarkReadAgeDays,
   ReadingMode,
-} from "../shared/types";
-import { ApiError, api, errorMessage } from "./api";
-import type { AppRouteController } from "./app-route";
-import { articleTranslationSourceKind, fullContentToggleAction } from "./article-content";
-import type { ArticleQueueController } from "./article-queue";
-import { copyText } from "./clipboard";
-import type { ReaderDataResource } from "./data-resource";
+} from "../../../shared/types";
+import { ApiError, api, errorMessage } from "../../api";
+import type { AppRouteController } from "../../app-route";
+import { copyText } from "../../clipboard";
+import type { ReaderDataResource } from "../../data-resource";
 import {
   type ArticleSummaryViewState,
   type ArticleTranslationViewState,
   EMPTY_ARTICLE_SUMMARY_STATE,
   EMPTY_ARTICLE_TRANSLATION_STATE,
-} from "./reader";
+} from "./article-ai-state";
+import { articleTranslationSourceKind, fullContentToggleAction } from "./article-content";
+import type { ArticleQueueController } from "./article-queue";
 import {
   articleSettingsInvalidation,
   invalidateArticleSummaries,

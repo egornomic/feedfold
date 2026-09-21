@@ -1,6 +1,9 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
-import { captureTextSelection, restoreTextSelection } from "../../src/client/text-selection.js";
+import {
+  captureTextSelection,
+  restoreTextSelection,
+} from "../../src/client/features/reader/text-selection.js";
 
 describe("article text selection", () => {
   it("restores the selected passage after rendering its action menu", () => {

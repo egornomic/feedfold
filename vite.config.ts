@@ -61,7 +61,7 @@ export default defineConfig({
     alias: demoMode
       ? [
           {
-            find: /^(?:\.\.\/|\.\/)api(?:\.js)?$/,
+            find: /^(?:\.\/|(?:\.\.\/)+)api(?:\.js)?$/,
             replacement: demoApiPath,
           },
         ]

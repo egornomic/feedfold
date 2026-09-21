@@ -1,6 +1,6 @@
 import { Check, CircleAlert, Copy } from "lucide-react";
 import { type ComponentProps, useEffect, useRef, useState } from "react";
-import { copyText } from "./clipboard.js";
+import { copyText } from "../../clipboard.js";
 
 export function CopyCodeButton({ getText }: { getText: () => string }) {
   const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");

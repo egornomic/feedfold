@@ -4,7 +4,6 @@ import {
   ArrowRight,
   BookOpen,
   BookOpenText,
-  CheckCheck,
   CheckCircle2,
   ChevronDown,
   Circle,
@@ -13,7 +12,6 @@ import {
   Ellipsis,
   ExternalLink,
   FileText,
-  Inbox,
   Languages,
   List,
   ListFilter,
@@ -21,10 +19,8 @@ import {
   Mail,
   MailOpen,
   MessageSquareText,
-  Plus,
   RefreshCw,
   Rss,
-  SearchX,
   Sparkles,
   Star,
 } from "lucide-react";
@@ -41,22 +37,28 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { extractHttpLinks } from "../shared/article-links";
-import { telegramPostIdentity } from "../shared/telegram";
-import type {
-  AiCustomPrompt,
-  Article,
-  ArticleAiTranslation,
-  ArticleState,
-  ReadingMode,
-  TelegramArticleMedia,
-  XArticleMedia,
-} from "../shared/types";
-import { withXVideoPlaceholder, xPostId, xVideoPlaceholderId, xVideoPostIds } from "../shared/x";
+import { extractHttpLinks } from "../../../shared/article-links";
+import { telegramPostIdentity } from "../../../shared/telegram";
+import type { AiCustomPrompt, Article, ArticleAiTranslation } from "../../../shared/types";
+import { withXVideoPlaceholder, xVideoPlaceholderId, xVideoPostIds } from "../../../shared/x";
+import {
+  FeedActionMenuItems,
+  type FeedManagementAction,
+  handleActionMenuKeyDown,
+} from "../../feed-management";
+import { useDelayedPending } from "../../loading";
+import { interactionMotionIsInstant, useMotionPresence } from "../../motion";
 import { AiMarkdown } from "./ai-markdown";
-import { api, appUrl, errorMessage } from "./api";
+import {
+  type ArticleSummaryViewState,
+  type ArticleTranslationViewState,
+  EMPTY_ARTICLE_SUMMARY_STATE,
+  EMPTY_ARTICLE_TRANSLATION_STATE,
+} from "./article-ai-state";
 import { articleContentView, shouldShowArticleDescription } from "./article-content";
 import { ArticleHtml } from "./article-html";
+import { articleImageUrl } from "./article-image-url";
+import { ArticleMediaPlayer, TelegramPostMedia, XPostVideo } from "./article-media";
 import {
   type ArticleSwipeDirection,
   type ArticleSwipeIntent,
@@ -66,15 +68,7 @@ import {
   articleSwipeOffset,
 } from "./article-swipe";
 import { ArticleThumbnailPlaceholder } from "./article-thumbnail-placeholder";
-import { BrandLogo } from "./brand";
-import {
-  FeedActionMenuItems,
-  type FeedManagementAction,
-  handleActionMenuKeyDown,
-} from "./feed-management";
-import { ImageLightbox, type ImageLightboxItem, type ImageLightboxState } from "./image-lightbox";
-import { useDelayedPending } from "./loading";
-import { interactionMotionIsInstant, useMotionPresence } from "./motion";
+import { InlineError } from "./reader-states";
 import { animateHorizontalSpring, type HorizontalSpringController } from "./swipe-motion";
 import {
   captureTextSelection,
@@ -95,10 +89,6 @@ type ArticleNavigationHandler = () => boolean | Promise<boolean>;
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-function articleImageUrl(value: string): string {
-  return value.startsWith("/api/") ? appUrl(value) : value;
 }
 
 function surfaceTranslateX(element: HTMLElement): number {
@@ -498,167 +488,6 @@ function ArticleLoadSentinel({
   );
 }
 
-export function StartupError({ message, retry }: { message: string; retry: () => void }) {
-  return (
-    <main className="startup-state">
-      <BrandLogo className="startup-logo" />
-      <h1>feedfold is unavailable</h1>
-      <p>{message}</p>
-      <button className="primary-button" type="button" onClick={retry}>
-        <RefreshCw aria-hidden="true" size={16} />
-        Try again
-      </button>
-    </main>
-  );
-}
-
-export function ArticleListSkeleton({ mode }: { mode: ReadingMode }) {
-  if (mode === "expanded") {
-    return (
-      <div
-        className="expanded-stream skeleton-stream"
-        role="status"
-        aria-busy="true"
-        aria-label="Loading articles"
-      >
-        {[0, 1, 2].map((key) => (
-          <div className="expanded-article skeleton-expanded" key={key}>
-            <div className="skeleton-line short" />
-            <div className="skeleton-line wide" />
-            <div className="skeleton-line" />
-            <div className="skeleton-block" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return (
-    <>
-      <div
-        className="article-list skeleton-list"
-        role="status"
-        aria-busy="true"
-        aria-label="Loading articles"
-      >
-        <ol aria-hidden="true">
-          {[0, 1, 2, 3, 4, 5].map((key) => (
-            <li className="article-list-item" key={key}>
-              <div className="article-card-content">
-                <div className="article-card-image" />
-                <div className="article-list-copy">
-                  <div className="skeleton-line wide" />
-                  <div className="skeleton-line short" />
-                  <div className="skeleton-line" />
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
-      <div className="reader-pane skeleton-reader">
-        <div className="skeleton-line short" />
-        <div className="skeleton-line wide" />
-        <div className="skeleton-line" />
-        <div className="skeleton-block" />
-      </div>
-    </>
-  );
-}
-
-export function InlineError({
-  title,
-  detail,
-  retry,
-}: {
-  title: string;
-  detail: string;
-  retry: () => void;
-}) {
-  return (
-    <section className="inline-state error-state" role="alert">
-      <AlertTriangle aria-hidden="true" size={22} />
-      <h2>{title}</h2>
-      <p>{detail}</p>
-      <button className="secondary-button" type="button" onClick={retry}>
-        <RefreshCw aria-hidden="true" size={16} />
-        Try again
-      </button>
-    </section>
-  );
-}
-
-export function EmptyArticles({
-  hasFeeds,
-  search,
-  state,
-  onAddFeed,
-  onShowSaved,
-  onShowAll,
-  onClearSearch,
-}: {
-  hasFeeds: boolean;
-  search: string;
-  state: ArticleState;
-  onAddFeed: () => void;
-  onShowSaved: () => void;
-  onShowAll: () => void;
-  onClearSearch: () => void;
-}) {
-  if (!hasFeeds) {
-    return (
-      <section className="inline-state empty-state">
-        <Rss aria-hidden="true" size={40} strokeWidth={1.7} />
-        <h2>Add your first feed</h2>
-        <p>Enter a website or feed URL, or import subscriptions from an OPML file.</p>
-        <button className="primary-button" type="button" onClick={onAddFeed}>
-          Add a feed
-        </button>
-      </section>
-    );
-  }
-  if (search) {
-    return (
-      <section className="inline-state empty-state">
-        <SearchX aria-hidden="true" size={40} strokeWidth={1.7} />
-        <h2>No articles match “{search}”</h2>
-        <p>Use a shorter phrase, or clear the search to show this queue again.</p>
-        <button className="secondary-button" type="button" onClick={onClearSearch}>
-          Clear search
-        </button>
-      </section>
-    );
-  }
-  if (state === "unread") {
-    return (
-      <section className="inline-state empty-state">
-        <CheckCheck aria-hidden="true" size={40} strokeWidth={1.7} />
-        <h2>No unread articles</h2>
-        <p>New articles will appear after the next refresh.</p>
-        <div className="empty-state-actions">
-          <button className="primary-button" type="button" onClick={onShowSaved}>
-            <Star aria-hidden="true" size={16} />
-            Read Saved
-          </button>
-          <button className="secondary-button" type="button" onClick={onAddFeed}>
-            <Plus aria-hidden="true" size={16} />
-            Add more feeds
-          </button>
-        </div>
-      </section>
-    );
-  }
-  return (
-    <section className="inline-state empty-state">
-      <Inbox aria-hidden="true" size={40} strokeWidth={1.7} />
-      <h2>No articles in this view</h2>
-      <p>Choose another feed or article state.</p>
-      <button className="secondary-button" type="button" onClick={onShowAll}>
-        Show all articles
-      </button>
-    </section>
-  );
-}
-
 export function ArticleList({
   articles,
   activeId,
@@ -807,38 +636,6 @@ export function ArticleList({
     </section>
   );
 }
-
-export interface ArticleSummaryViewState {
-  visible: boolean;
-  loading: boolean;
-  error: string | null;
-  configurationMissing: boolean;
-  promptId: string | null;
-}
-
-export const EMPTY_ARTICLE_SUMMARY_STATE: ArticleSummaryViewState = {
-  visible: false,
-  loading: false,
-  error: null,
-  configurationMissing: false,
-  promptId: null,
-};
-
-export interface ArticleTranslationViewState {
-  visible: boolean;
-  loading: boolean;
-  error: string | null;
-  configurationMissing: boolean;
-  translation: ArticleAiTranslation | null;
-}
-
-export const EMPTY_ARTICLE_TRANSLATION_STATE: ArticleTranslationViewState = {
-  visible: false,
-  loading: false,
-  error: null,
-  configurationMissing: false,
-  translation: null,
-};
 
 interface ArticleActionsProps {
   article: Article;
@@ -2556,226 +2353,9 @@ function ArticleBody({
   );
 }
 
-type XMediaViewState =
-  | { status: "loading" }
-  | { status: "ready"; media: XArticleMedia }
-  | { status: "error"; message: string };
-
-function XPostVideo({
-  article,
-  postId,
-  targetId,
-}: {
-  article: Article;
-  postId: string;
-  targetId: string | null;
-}) {
-  const [state, setState] = useState<XMediaViewState>({ status: "loading" });
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  const requestController = useRef<AbortController | null>(null);
-
-  const loadMedia = useCallback(() => {
-    requestController.current?.abort();
-    const controller = new AbortController();
-    requestController.current = controller;
-    setState({ status: "loading" });
-    void api
-      .xArticleMedia(article.id, postId, controller.signal)
-      .then((media) => setState({ status: "ready", media }))
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "error", message: errorMessage(error) });
-        }
-      });
-  }, [article.id, postId]);
-
-  useEffect(() => {
-    loadMedia();
-    return () => requestController.current?.abort();
-  }, [loadMedia]);
-
-  useLayoutEffect(() => {
-    setPortalTarget(targetId && article.feedContentHtml ? document.getElementById(targetId) : null);
-  }, [article.feedContentHtml, targetId]);
-
-  if (state.status === "loading") return null;
-  const isQuotedPostVideo = xPostId(article.url) !== postId;
-  if (state.status === "error") {
-    const error = (
-      <div className="x-media-state x-media-error" role="alert">
-        <AlertTriangle aria-hidden="true" size={16} />
-        <span>{state.message}</span>
-        <button className="secondary-button" type="button" onClick={loadMedia}>
-          Try again
-        </button>
-        <a href={`https://x.com/i/status/${postId}`} target="_blank" rel="noreferrer">
-          Open on X
-        </a>
-      </div>
-    );
-    return portalTarget ? createPortal(error, portalTarget) : error;
-  }
-
-  const video = (
-    // biome-ignore lint/a11y/useMediaCaption: X's public media metadata does not expose caption tracks.
-    <video
-      className="x-video-player"
-      src={articleImageUrl(state.media.sourceUrl)}
-      poster={state.media.posterUrl ? articleImageUrl(state.media.posterUrl) : undefined}
-      aria-label={
-        isQuotedPostVideo
-          ? "X video from quoted post"
-          : `X video from ${article.author ?? "this post"}`
-      }
-      style={state.media.aspectRatio ? { aspectRatio: state.media.aspectRatio } : undefined}
-      controls
-      playsInline
-      preload="metadata"
-    />
-  );
-  return portalTarget ? createPortal(video, portalTarget) : video;
-}
-
-type TelegramMediaViewState =
-  | { status: "loading" }
-  | { status: "ready"; media: TelegramArticleMedia }
-  | { status: "error"; message: string };
-
-function TelegramPostMedia({ article }: { article: Article }) {
-  const [state, setState] = useState<TelegramMediaViewState>({ status: "loading" });
-  const [lightbox, setLightbox] = useState<ImageLightboxState | null>(null);
-  const requestController = useRef<AbortController | null>(null);
-
-  const loadMedia = useCallback(() => {
-    requestController.current?.abort();
-    const controller = new AbortController();
-    requestController.current = controller;
-    setState({ status: "loading" });
-    void api
-      .telegramArticleMedia(article.id, controller.signal)
-      .then((media) => setState({ status: "ready", media }))
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "error", message: errorMessage(error) });
-        }
-      });
-  }, [article.id]);
-
-  useEffect(() => {
-    loadMedia();
-    return () => requestController.current?.abort();
-  }, [loadMedia]);
-
-  if (state.status === "loading") return null;
-  if (state.status === "error") {
-    return (
-      <div className="telegram-media-state telegram-media-error" role="alert">
-        <AlertTriangle aria-hidden="true" size={16} />
-        <span>{state.message}</span>
-        <button className="secondary-button" type="button" onClick={loadMedia}>
-          Try again
-        </button>
-      </div>
-    );
-  }
-  if (state.media.items.length === 0) return null;
-
-  const multiple = state.media.items.length > 1;
-  const galleryImages: ImageLightboxItem[] = state.media.items
-    .filter((item) => item.kind === "image")
-    .map((item, index, images) => ({
-      src: articleImageUrl(item.sourceUrl),
-      alt: `Telegram post image ${index + 1} of ${images.length}`,
-    }));
-  return (
-    <>
-      <section
-        className={`telegram-media-gallery${multiple ? " is-grouped" : ""}`}
-        aria-label="Telegram post media"
-      >
-        {state.media.items.map((item, index) => {
-          const label = `Telegram post ${item.kind} ${index + 1} of ${state.media.items.length}`;
-          const style = item.aspectRatio ? { aspectRatio: item.aspectRatio } : undefined;
-          if (item.kind === "image") {
-            const galleryIndex = state.media.items
-              .slice(0, index)
-              .filter((candidate) => candidate.kind === "image").length;
-            return (
-              <button
-                key={item.sourceUrl}
-                className="telegram-image-lightbox-trigger"
-                type="button"
-                data-image-lightbox-trigger
-                aria-label={`Enlarge image: ${label}`}
-                onClick={(event) =>
-                  setLightbox({
-                    images: galleryImages,
-                    index: galleryIndex,
-                    returnFocus: event.currentTarget,
-                  })
-                }
-              >
-                <img
-                  src={articleImageUrl(item.sourceUrl)}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  data-image-lightbox-trigger
-                />
-              </button>
-            );
-          }
-          return (
-            // biome-ignore lint/a11y/useMediaCaption: Telegram embeds do not expose caption tracks.
-            <video
-              key={item.sourceUrl}
-              src={articleImageUrl(item.sourceUrl)}
-              poster={item.posterUrl ? articleImageUrl(item.posterUrl) : undefined}
-              aria-label={label}
-              style={style}
-              controls
-              playsInline
-              preload="metadata"
-            />
-          );
-        })}
-      </section>
-      {lightbox ? <ImageLightbox state={lightbox} onClose={() => setLightbox(null)} /> : null}
-    </>
-  );
-}
-
 function ArticleTranslationText({ translation }: { translation: ArticleAiTranslation }) {
   return (
     <ArticleHtml className="article-content article-translation" sanitizedHtml={translation.html} />
-  );
-}
-
-function ArticleMediaPlayer({ article }: { article: Article }) {
-  const media = article.media;
-  const [interactive, setInteractive] = useState(false);
-  if (!media) return null;
-  const playerUrl = interactive ? `${media.embedUrl}?autoplay=1&playsinline=1` : media.embedUrl;
-  return (
-    <div className={`article-media-player ${media.type}`}>
-      <iframe
-        src={playerUrl}
-        title={`Play ${article.title}`}
-        loading="lazy"
-        referrerPolicy="strict-origin-when-cross-origin"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-      />
-      {!interactive ? (
-        <button
-          className="article-media-swipe-surface"
-          type="button"
-          aria-label={`Play ${article.title || "video"}`}
-          data-article-swipe-surface
-          onClick={() => setInteractive(true)}
-        />
-      ) : null}
-    </div>
   );
 }
 

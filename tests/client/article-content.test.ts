@@ -4,7 +4,7 @@ import {
   articleTranslationSourceKind,
   fullContentToggleAction,
   shouldShowArticleDescription,
-} from "../../src/client/article-content.js";
+} from "../../src/client/features/reader/article-content.js";
 import type { Article } from "../../src/shared/types.js";
 
 function linkedArticle(): Article {

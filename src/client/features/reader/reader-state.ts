@@ -6,9 +6,9 @@ import type {
   BootstrapData,
   Folder,
   ReadingMode,
-} from "../shared/types.js";
-import { folderPath } from "./folder-hierarchy.js";
-import type { ReaderRoute } from "./routes.js";
+} from "../../../shared/types.js";
+import { folderPath } from "../../folder-hierarchy.js";
+import type { ReaderRoute } from "../../routes.js";
 
 const FILTER_RULE_NAME_TEXT_LIMIT = 72;
 

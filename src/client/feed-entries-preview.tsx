@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import type { FeedPreviewArticle } from "../shared/types";
-import { ArticleThumbnailPlaceholder } from "./article-thumbnail-placeholder";
+import { ArticleThumbnailPlaceholder } from "./features/reader/article-thumbnail-placeholder";
 import "./feed-entries-preview.css";
 
 function formatPreviewDate(value: string): string {

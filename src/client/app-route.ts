@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ArticleState } from "../shared/types";
-import type { AppView } from "./navigation";
-import { readerRouteForSelection } from "./reader-state";
+import type { AppView } from "./features/navigation/sidebar";
+import { readerRouteForSelection } from "./features/reader/reader-state";
 import {
   type AppRoute,
   appRoutePath,

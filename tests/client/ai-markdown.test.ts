@@ -2,7 +2,7 @@ import { JSDOM } from "jsdom";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AiMarkdown } from "../../src/client/ai-markdown.js";
+import { AiMarkdown } from "../../src/client/features/reader/ai-markdown.js";
 import type { AiGrounding } from "../../src/shared/types.js";
 
 function renderMarkdown(text: string, grounding?: AiGrounding): DocumentFragment {

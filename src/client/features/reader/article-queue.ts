@@ -8,12 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Article, ReadingMode } from "../shared/types";
-import { api, errorMessage } from "./api";
-import type { AppRouteController } from "./app-route";
-import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
-import type { ReaderDataResource } from "./data-resource";
-import { useDelayedPending } from "./loading";
+import type { Article, ReadingMode } from "../../../shared/types";
+import { api, errorMessage } from "../../api";
+import type { AppRouteController } from "../../app-route";
+import { articlesWithContextReturn, type ContextArticleReturn } from "../../contextual-filter";
+import type { ReaderDataResource } from "../../data-resource";
+import { useDelayedPending } from "../../loading";
+import { appRoutePath, type ReaderRoute } from "../../routes";
 import {
   appendUnseenArticles,
   articleQueryForReaderRoute,
@@ -22,7 +23,6 @@ import {
   fullContentIdsAfterReload,
   hasReadingModeContent,
 } from "./reader-state";
-import { appRoutePath, type ReaderRoute } from "./routes";
 
 export interface ArticleQueueController {
   readingMode: ReadingMode;

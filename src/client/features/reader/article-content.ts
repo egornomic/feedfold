@@ -1,4 +1,4 @@
-import type { AiArticleSourceKind, Article } from "../shared/types.js";
+import type { AiArticleSourceKind, Article } from "../../../shared/types.js";
 
 export type ArticleContentView = "feed" | "summary" | "empty" | "loading" | "full" | "failed";
 export type FullContentToggleAction = "hide" | "show" | "load" | "wait";

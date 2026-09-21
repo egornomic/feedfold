@@ -2,7 +2,7 @@ import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
-import { ArticleHtml } from "../../src/client/article-html.js";
+import { ArticleHtml } from "../../src/client/features/reader/article-html.js";
 
 describe("article HTML", () => {
   it("keeps code intact and updates copy controls when the reader changes content", async () => {

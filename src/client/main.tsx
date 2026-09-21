@@ -7,7 +7,12 @@ import { App } from "./App";
 import { isDesktopApp } from "./desktop";
 import { PwaUpdate } from "./pwa-update";
 import "./management/common.css";
-import "./styles.css";
+import "./styles/base.css";
+import "./features/navigation/sidebar.css";
+import "./styles/authentication.css";
+import "./features/reader/reader-toolbar.css";
+import "./features/reader/reader.css";
+import "./styles/responsive.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("The feedfold root element is missing.");

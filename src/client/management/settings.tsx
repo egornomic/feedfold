@@ -45,13 +45,13 @@ import { COLOR_PALETTES, type ColorPalette } from "../color-palettes";
 import type { ReaderDataMutations } from "../data-resource";
 import { isDesktopApp } from "../desktop";
 import { DropdownCombobox, DropdownSelect } from "../dropdown";
-import { useAnimatedDialog } from "../motion";
 import {
   type ColorPalettes,
   clearReaderPreferences,
   type ResolvedTheme,
   type Theme,
-} from "../reader-preferences";
+} from "../features/reader/reader-preferences";
+import { useAnimatedDialog } from "../motion";
 import type { SettingsCategory } from "../routes";
 import { InvitationsSection } from "./invitations";
 import {

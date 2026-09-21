@@ -1,6 +1,6 @@
 import { ExternalLink, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useAnimatedDialog } from "./motion.js";
+import { useAnimatedDialog } from "../../motion.js";
 
 export interface ImageLightboxItem {
   src: string;

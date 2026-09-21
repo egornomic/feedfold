@@ -126,8 +126,8 @@ describe("article AI state", () => {
     let resource: { pause: () => void } | null = null;
 
     try {
-      const actionsModulePath: string = "../../src/client/article-actions.js";
-      const queueModulePath: string = "../../src/client/article-queue.js";
+      const actionsModulePath: string = "../../src/client/features/reader/article-actions.js";
+      const queueModulePath: string = "../../src/client/features/reader/article-queue.js";
       const routeModulePath: string = "../../src/client/app-route.js";
       const resourceModulePath: string = "../../src/client/data-resource.js";
       const [actionsModule, queueModule, routeModule, resourceModule] = await Promise.all([
