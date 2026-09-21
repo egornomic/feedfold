@@ -1,4 +1,5 @@
-import type { DesktopOperation, FeedfoldDesktopBridge } from "../shared/desktop.js";
+import type { ApiInput, ApiOperation, ApiOutput, ApiRequest } from "../shared/api/operations.js";
+import type { FeedfoldDesktopBridge } from "../shared/desktop.js";
 
 declare global {
   interface Window {
@@ -10,10 +11,13 @@ export function isDesktopApp(): boolean {
   return window.feedfoldDesktop?.platform === "desktop";
 }
 
-export async function invokeDesktop<T>(operation: DesktopOperation, payload?: unknown): Promise<T> {
+export async function invokeDesktop<K extends ApiOperation>(
+  operation: K,
+  payload: ApiInput<NoInfer<K>>,
+): Promise<ApiOutput<K>> {
   const bridge = window.feedfoldDesktop;
   if (!bridge) throw new Error("The desktop bridge is unavailable.");
-  const response = await bridge.invoke({ operation, payload });
+  const response = await bridge.invoke<K>({ operation, payload } as ApiRequest<K>);
   if (!response.ok) {
     const error = new Error(response.error.message) as Error & {
       status: number;
@@ -23,5 +27,5 @@ export async function invokeDesktop<T>(operation: DesktopOperation, payload?: un
     error.code = response.error.code;
     throw error;
   }
-  return response.value as T;
+  return response.value;
 }

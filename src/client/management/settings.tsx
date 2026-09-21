@@ -32,12 +32,14 @@ import {
   DEFAULT_ARTICLE_SUMMARY_PROMPT,
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
 } from "../../shared/ai-prompts";
+import type { ApiInput } from "../../shared/api/operations";
 import type {
   AiCustomPrompt,
   AiProvider,
   AiSettings,
   AppSettings,
   DuplicateArticleWindowDays,
+  FeedPollIntervalMinutes,
 } from "../../shared/types";
 import { DUPLICATE_ARTICLE_WINDOW_DAYS } from "../../shared/types";
 import { ApiError, api, errorMessage } from "../api";
@@ -1411,7 +1413,7 @@ function SettingsPage({
     stepUpDialogRef.current?.close();
   };
 
-  const saveSettings = async (change: Partial<AppSettings>) => {
+  const saveSettings = async (change: ApiInput<"updateSettings">) => {
     setSaving(true);
     try {
       onSettings(await api.updateSettings(change));
@@ -1786,7 +1788,11 @@ function SettingsPage({
                   value: String(minutes),
                   label: formatRefreshInterval(minutes),
                 }))}
-                onChange={(value) => void saveSettings({ pollIntervalMinutes: Number(value) })}
+                onChange={(value) =>
+                  void saveSettings({
+                    pollIntervalMinutes: Number(value) as FeedPollIntervalMinutes,
+                  })
+                }
               />
             </div>
             <div className="setting-row">

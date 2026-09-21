@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { inputs } from "../../../shared/api-inputs.js";
+import { inputs } from "../../../shared/api/inputs.js";
 import type { UserId } from "../routes.js";
 import type { SettingsService } from "./service.js";
 

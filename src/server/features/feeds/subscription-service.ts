@@ -1,4 +1,4 @@
-import type { FeedInput } from "../../../shared/api-inputs.js";
+import type { FeedInput } from "../../../shared/api/inputs.js";
 import type { Feed } from "../../../shared/types.js";
 import { ApplicationApiError } from "../../errors.js";
 import type { FeedRefreshService } from "../../refresh.js";

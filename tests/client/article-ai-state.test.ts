@@ -3,11 +3,8 @@ import { act, createElement, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
 import { DemoStore } from "../../src/demo/store.js";
-import type {
-  DesktopRequest,
-  DesktopResponse,
-  FeedfoldDesktopBridge,
-} from "../../src/shared/desktop.js";
+import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
+import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
 import type { AppSettings, Article, BootstrapData } from "../../src/shared/types.js";
 
 type HarnessState = {
@@ -75,7 +72,9 @@ describe("article AI state", () => {
     });
     let translationRequests = 0;
 
-    const invoke = async (request: DesktopRequest): Promise<DesktopResponse> => {
+    const invoke = async <K extends ApiOperation>(
+      request: ApiRequest<K>,
+    ): Promise<DesktopResponse<ApiOutput<K>>> => {
       try {
         const value = store.invoke(request.operation, request.payload);
         if (request.operation === "translateArticle" && translationRequests++ === 0) {
@@ -85,7 +84,7 @@ describe("article AI state", () => {
           });
           firstTranslationSettled();
         }
-        return { ok: true, value };
+        return { ok: true, value } as DesktopResponse<ApiOutput<K>>;
       } catch (caught) {
         const error = caught instanceof Error ? caught : new Error(String(caught));
         return { ok: false, error: { message: error.message, status: 500, code: null } };
@@ -94,7 +93,10 @@ describe("article AI state", () => {
     const bridge: FeedfoldDesktopBridge = {
       platform: "desktop",
       invoke,
-      exportOpml: () => invoke({ operation: "exportOpml" }),
+      exportOpml: async () => {
+        const response = await invoke({ operation: "exportOpml" });
+        return response.ok ? { ok: true, value: undefined } : response;
+      },
       onDataChanged: () => () => {},
     };
     const dom = new JSDOM('<div id="app"></div>', {

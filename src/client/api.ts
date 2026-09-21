@@ -1,4 +1,4 @@
-import type { DesktopOperation } from "../shared/desktop.js";
+import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
 import type { AiProvider } from "../shared/types.js";
 import { createApiClient } from "./api-client.js";
 import { ApiError, AUTH_REQUIRED_EVENT, appUrl } from "./api-contract.js";
@@ -64,16 +64,16 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal | null): Promise
 
 const browserRequest = createBrowserRequest(httpRequest);
 
-async function request<T>(
-  operation: DesktopOperation,
-  payload: unknown,
+async function request<K extends ApiOperation>(
+  operation: K,
+  payload: ApiInput<NoInfer<K>>,
   path: string,
   init?: RequestInit,
   aiProvider?: AiProvider | null,
-): Promise<T> {
-  if (!isDesktopApp()) return browserRequest<T>(operation, payload, path, init, aiProvider);
+): Promise<ApiOutput<K>> {
+  if (!isDesktopApp()) return browserRequest<K>(operation, payload, path, init, aiProvider);
   try {
-    return await abortable(invokeDesktop<T>(operation, payload), init?.signal);
+    return await abortable(invokeDesktop<K>(operation, payload), init?.signal);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     const desktopError = error as Error & { status?: number; code?: string | null };

@@ -1,4 +1,4 @@
-import type { DesktopOperation } from "../shared/desktop.js";
+import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
 import type { AiProvider, AiSettings, BootstrapData, SessionUser } from "../shared/types.js";
 import { aiDevice, decryptAiKey, encryptAiKey, forgetAiDevice } from "./ai-vault.js";
 import type { ApiRuntime } from "./api-client.js";
@@ -8,13 +8,13 @@ type HttpRequest = <T>(path: string, init?: RequestInit) => Promise<T>;
 export function createBrowserRequest(httpRequest: HttpRequest): ApiRuntime["request"] {
   let accountId: string | null = null;
 
-  return async <T>(
-    operation: DesktopOperation,
-    payload: unknown,
+  return async <K extends ApiOperation>(
+    operation: K,
+    payload: ApiInput<NoInfer<K>>,
     path: string,
     init?: RequestInit,
     aiProvider?: AiProvider | null,
-  ): Promise<T> => {
+  ): Promise<ApiOutput<K>> => {
     const account = accountId;
     const device = account ? await aiDevice(account).catch(() => null) : null;
     const headers = new Headers(init?.headers);
@@ -55,7 +55,7 @@ export function createBrowserRequest(httpRequest: HttpRequest): ApiRuntime["requ
     }
 
     try {
-      const result = await httpRequest<T>(path, options);
+      const result = await httpRequest<ApiOutput<K>>(path, options);
       if (
         ["session", "login", "register", "completePasskeySignup", "passkeyLogin"].includes(
           operation,

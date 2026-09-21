@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AI_PROMPT_MAX_LENGTH } from "./ai-prompts.js";
+import { AI_PROMPT_MAX_LENGTH } from "../ai-prompts.js";
 import {
   DUPLICATE_ARTICLE_WINDOW_DAYS,
   type DuplicateArticleWindowDays,
@@ -7,7 +7,7 @@ import {
   type FeedPollIntervalMinutes,
   MARK_READ_AGE_DAYS,
   type MarkReadAgeDays,
-} from "./types.js";
+} from "../types.js";
 
 export const resourceId = z.number().int().positive();
 const nullableId = resourceId.nullable();

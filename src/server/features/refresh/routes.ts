@@ -1,6 +1,6 @@
 import type { ServerResponse } from "node:http";
 import type { FastifyInstance } from "fastify";
-import { inputs } from "../../../shared/api-inputs.js";
+import { inputs } from "../../../shared/api/inputs.js";
 import type { ApplicationService } from "../../application-service.js";
 import type { FeedRefreshService } from "../../refresh.js";
 import { type AuthService, sessionToken } from "../auth/service.js";

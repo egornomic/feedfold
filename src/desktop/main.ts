@@ -29,12 +29,8 @@ import { FeedRefreshService } from "../server/refresh.js";
 import { TelegramMediaService } from "../server/telegram-media.js";
 import { WebFeedService } from "../server/web-feed.js";
 import { XMediaService } from "../server/x-media.js";
-import {
-  DESKTOP_DATA_CHANGED_CHANNEL,
-  DESKTOP_OPERATIONS,
-  type DesktopRequest,
-  type DesktopResponse,
-} from "../shared/desktop.js";
+import { API_OPERATIONS, type UntrustedApiRequest } from "../shared/api/operations.js";
+import { DESKTOP_DATA_CHANGED_CHANNEL, type DesktopResponse } from "../shared/desktop.js";
 import { DesktopCredentialCipher } from "./credential-cipher.js";
 import { youtubeEmbedRequestHeaders } from "./youtube-player.js";
 
@@ -338,15 +334,13 @@ function notifyRendererDataChanged(): void {
   frame.send(DESKTOP_DATA_CHANGED_CHANNEL);
 }
 
-function validDesktopRequest(value: unknown): value is DesktopRequest {
+function validUntrustedApiRequest(value: unknown): value is UntrustedApiRequest {
   if (!value || typeof value !== "object") return false;
   const operation = (value as { operation?: unknown }).operation;
-  return (
-    typeof operation === "string" && (DESKTOP_OPERATIONS as readonly string[]).includes(operation)
-  );
+  return typeof operation === "string" && (API_OPERATIONS as readonly string[]).includes(operation);
 }
 
-async function invoke(request: DesktopRequest): Promise<DesktopResponse> {
+async function invoke(request: UntrustedApiRequest): Promise<DesktopResponse> {
   if (!runtime) {
     return {
       ok: false,
@@ -365,7 +359,7 @@ function registerIpc(): void {
     if (!trustedIpcSender(event)) {
       return errorResponse(new ApplicationApiError(403, "This request is not allowed."));
     }
-    if (!validDesktopRequest(request)) {
+    if (!validUntrustedApiRequest(request)) {
       return errorResponse(new ApplicationApiError(400, "The desktop request is invalid."));
     }
     return invoke(request);

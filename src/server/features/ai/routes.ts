@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { inputs } from "../../../shared/api-inputs.js";
+import { inputs } from "../../../shared/api/inputs.js";
 import { browserDeviceId, type UserId } from "../routes.js";
 import type { AiService } from "./service.js";
 

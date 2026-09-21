@@ -13,7 +13,7 @@ import { FeedRefreshService } from "../../src/server/refresh.js";
 import { TelegramMediaService } from "../../src/server/telegram-media.js";
 import { WebFeedService } from "../../src/server/web-feed.js";
 import { XMediaService } from "../../src/server/x-media.js";
-import type { FeedInput } from "../../src/shared/api-inputs.js";
+import type { FeedInput } from "../../src/shared/api/inputs.js";
 import type { Feed } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];

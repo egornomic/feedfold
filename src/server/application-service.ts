@@ -1,4 +1,4 @@
-import type { FeedInput } from "../shared/api-inputs.js";
+import type { FeedInput } from "../shared/api/inputs.js";
 import { telegramPostIdentity } from "../shared/telegram.js";
 import type { WebFeedConfig } from "../shared/types.js";
 import { xVideoPostIds } from "../shared/x.js";

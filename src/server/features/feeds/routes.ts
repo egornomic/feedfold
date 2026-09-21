@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { inputs } from "../../../shared/api-inputs.js";
+import { inputs } from "../../../shared/api/inputs.js";
 import type { ApplicationService } from "../../application-service.js";
 import { WebFeedError, type WebFeedService } from "../../web-feed.js";
 import { idParams, missing, type UserId } from "../routes.js";

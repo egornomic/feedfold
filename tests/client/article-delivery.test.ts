@@ -12,11 +12,8 @@ import { FeedRefreshService } from "../../src/server/refresh.js";
 import { TelegramMediaService } from "../../src/server/telegram-media.js";
 import { WebFeedService } from "../../src/server/web-feed.js";
 import { XMediaService } from "../../src/server/x-media.js";
-import type {
-  DesktopRequest,
-  DesktopResponse,
-  FeedfoldDesktopBridge,
-} from "../../src/shared/desktop.js";
+import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
+import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
 
 const TEST_USER_ID = 1;
 
@@ -213,7 +210,9 @@ describe("live article delivery", () => {
     });
     let failNextRuleLoad = false;
     let loadedRules: Array<{ id: number; matchedCount: number }> = [];
-    const invoke = async (request: DesktopRequest): Promise<DesktopResponse> => {
+    const invoke = async <K extends ApiOperation>(
+      request: ApiRequest<K>,
+    ): Promise<DesktopResponse<ApiOutput<K>>> => {
       try {
         if (request.operation === "rules" && failNextRuleLoad) {
           failNextRuleLoad = false;
@@ -262,7 +261,10 @@ describe("live article delivery", () => {
     const bridge: FeedfoldDesktopBridge = {
       platform: "desktop",
       invoke,
-      exportOpml: () => invoke({ operation: "exportOpml" }),
+      exportOpml: async () => {
+        const response = await invoke({ operation: "exportOpml" });
+        return response.ok ? { ok: true, value: undefined } : response;
+      },
       onDataChanged: (listener) => refresh.subscribe(TEST_USER_ID, listener),
     };
 

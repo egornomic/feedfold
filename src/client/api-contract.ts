@@ -1,4 +1,4 @@
-export type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../shared/api-inputs.js";
+export type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../shared/api/inputs.js";
 
 export const AUTH_REQUIRED_EVENT = "feedfold:auth-required";
 

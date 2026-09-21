@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { resourceId } from "../../shared/api-inputs.js";
+import { resourceId } from "../../shared/api/inputs.js";
 
 export type UserId = (request: FastifyRequest) => number;
 

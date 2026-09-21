@@ -1,73 +1,9 @@
-export const DESKTOP_OPERATIONS = [
-  "session",
-  "login",
-  "register",
-  "passkeySignupOptions",
-  "completePasskeySignup",
-  "logout",
-  "authConfig",
-  "invitations",
-  "createInvitation",
-  "revokeInvitation",
-  "changePassword",
-  "removePassword",
-  "deleteAccount",
-  "stepUpPassword",
-  "stepUpPasskeyOptions",
-  "stepUpPasskey",
-  "passkeys",
-  "passkeyRegistrationOptions",
-  "registerPasskey",
-  "renamePasskey",
-  "deletePasskey",
-  "passkeyAuthenticationOptions",
-  "passkeyLogin",
-  "bootstrap",
-  "articles",
-  "article",
-  "telegramArticleMedia",
-  "xArticleMedia",
-  "loadFullContent",
-  "summarizeArticle",
-  "translateArticle",
-  "updateArticleState",
-  "markRead",
-  "refresh",
-  "discoverFeed",
-  "analyzeWebPage",
-  "createFeed",
-  "feed",
-  "updateFeed",
-  "deleteFeed",
-  "analyzeWebFeed",
-  "updateWebFeedSelection",
-  "createFolder",
-  "updateFolder",
-  "deleteFolder",
-  "rules",
-  "createRule",
-  "updateRule",
-  "deleteRule",
-  "updateSettings",
-  "aiSettings",
-  "updateAiFeature",
-  "saveAiProviderKey",
-  "deleteAiProviderKey",
-  "importOpml",
-  "exportOpml",
-] as const;
+import type { ApiOperation, ApiOutput, ApiRequest } from "./api/operations.js";
 
 export const DESKTOP_DATA_CHANGED_CHANNEL = "feedfold:data-changed";
 
-export type DesktopOperation = (typeof DESKTOP_OPERATIONS)[number];
-
-export interface DesktopRequest {
-  operation: DesktopOperation;
-  payload?: unknown;
-}
-
-export type DesktopResponse =
-  | { ok: true; value: unknown }
+export type DesktopResponse<T = ApiOutput<ApiOperation>> =
+  | { ok: true; value: T }
   | {
       ok: false;
       error: {
@@ -79,7 +15,7 @@ export type DesktopResponse =
 
 export interface FeedfoldDesktopBridge {
   readonly platform: "desktop";
-  invoke(request: DesktopRequest): Promise<DesktopResponse>;
-  exportOpml(): Promise<DesktopResponse>;
+  invoke<K extends ApiOperation>(request: ApiRequest<K>): Promise<DesktopResponse<ApiOutput<K>>>;
+  exportOpml(): Promise<DesktopResponse<void>>;
   onDataChanged(listener: () => void): () => void;
 }

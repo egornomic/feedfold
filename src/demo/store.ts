@@ -1,5 +1,5 @@
 import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../client/api-contract.js";
-import type { DesktopOperation } from "../shared/desktop.js";
+import type { ApiOperation } from "../shared/api/operations.js";
 import type {
   AiArticleSourceKind,
   AiFeature,
@@ -465,7 +465,7 @@ export class DemoStore {
     return `<?xml version="1.0" encoding="UTF-8"?><opml version="2.0"><head><title>feedfold demo</title></head><body>${outlines}</body></opml>`;
   }
 
-  invoke(operation: DesktopOperation, payload: unknown): unknown {
+  invoke(operation: ApiOperation, payload: unknown): unknown {
     switch (operation) {
       case "session":
       case "login":

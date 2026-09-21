@@ -19,7 +19,7 @@ import { FeedRefreshService } from "../../src/server/refresh.js";
 import { TelegramMediaService } from "../../src/server/telegram-media.js";
 import { WebFeedService } from "../../src/server/web-feed.js";
 import { XMediaService } from "../../src/server/x-media.js";
-import type { DesktopOperation } from "../../src/shared/desktop.js";
+import type { ApiInput, ApiOperation, ApiOutput } from "../../src/shared/api/operations.js";
 import type { ArticlePage, BootstrapData, Folder, Rule } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -68,15 +68,15 @@ async function transportClient(transport: "web" | "desktop", services: Applicati
   const origin = await app.listen({ host: "127.0.0.1", port: 0 });
   const setCookie = registration.headers["set-cookie"];
   const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";", 1)[0];
-  const request: ApiRuntime["request"] = async <T>(
-    operation: DesktopOperation,
-    payload: unknown,
+  const request: ApiRuntime["request"] = async <K extends ApiOperation>(
+    operation: K,
+    payload: ApiInput<K>,
     path: string,
     init?: RequestInit,
   ) => {
     if (transport === "desktop") {
       try {
-        return (await application.invoke({ operation, payload })) as T;
+        return (await application.invoke({ operation, payload })) as ApiOutput<K>;
       } catch (error) {
         const known = applicationError(error);
         if (known) throw new ApiError(known.message, known.status, known.code);
@@ -94,7 +94,9 @@ async function transportClient(transport: "web" | "desktop", services: Applicati
       const error = (await response.json()) as { error: string; code?: string };
       throw new ApiError(error.error, response.status, error.code);
     }
-    return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
+    return response.status === 204
+      ? (undefined as ApiOutput<K>)
+      : (response.json() as Promise<ApiOutput<K>>);
   };
   return createApiClient({
     request,

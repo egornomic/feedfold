@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { inputs } from "../../../shared/api-inputs.js";
+import { inputs } from "../../../shared/api/inputs.js";
 import type { MarkReadRequest } from "../../../shared/types.js";
 import type { ApplicationService } from "../../application-service.js";
 import { QuotaExceededError } from "../../quota.js";

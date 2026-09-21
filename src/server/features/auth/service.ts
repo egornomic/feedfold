@@ -9,6 +9,7 @@ import {
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import argon2 from "argon2";
+import type { PasskeySummary } from "../../../shared/api/operations.js";
 import {
   INVITE_CODE_ALPHABET,
   INVITE_CODE_LENGTH,
@@ -56,15 +57,6 @@ export interface AuthenticatedUser {
 export interface WebAuthnContext {
   origin: string;
   rpId: string;
-}
-
-export interface PasskeySummary {
-  id: string;
-  name: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-  deviceType: string;
-  backedUp: boolean;
 }
 
 export interface AuthRateLimitOptions {
