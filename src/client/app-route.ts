@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ArticleState } from "../shared/types";
 import type { AppView } from "./navigation";
 import { readerRouteForSelection } from "./reader-state";
@@ -40,6 +40,7 @@ export interface AppRouteController {
   route: AppRoute;
   readerRoute: ReaderRoute;
   view: AppView;
+  pending: boolean;
   routedArticleId: number | null;
   searchInput: string;
   setSearchInput: (value: string) => void;
@@ -71,6 +72,7 @@ export function useAppRoute(basePath: string): AppRouteController {
         : DEFAULT_READER_ROUTE,
   ).current;
   const [route, setRoute] = useState<AppRoute>(initialRoute);
+  const [pending, startTransition] = useTransition();
   const [historyRevision, setHistoryRevision] = useState(0);
   const [searchInput, setSearchInput] = useState(initialReaderRoute.search);
   const currentRoute = useRef<AppRoute>(initialRoute);
@@ -82,8 +84,10 @@ export function useAppRoute(basePath: string): AppRouteController {
       lastReaderRoute.current = nextRoute;
       setSearchInput(nextRoute.search);
     }
-    setRoute(nextRoute);
-    setHistoryRevision((current) => current + 1);
+    startTransition(() => {
+      setRoute(nextRoute);
+      setHistoryRevision((current) => current + 1);
+    });
   }, []);
 
   const navigate = useCallback(
@@ -225,6 +229,7 @@ export function useAppRoute(basePath: string): AppRouteController {
     route,
     readerRoute,
     view: routeView(route),
+    pending,
     routedArticleId: route.kind === "article" ? route.articleId : null,
     searchInput,
     setSearchInput,

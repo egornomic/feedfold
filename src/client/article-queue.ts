@@ -13,6 +13,7 @@ import { api, errorMessage } from "./api";
 import type { AppRouteController } from "./app-route";
 import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
 import type { ReaderDataResource } from "./data-resource";
+import { useDelayedPending } from "./loading";
 import {
   appendUnseenArticles,
   articleQueryForReaderRoute,
@@ -29,6 +30,8 @@ export interface ArticleQueueController {
   setArticles: Dispatch<SetStateAction<Article[]>>;
   articlesRef: React.RefObject<Article[]>;
   loading: boolean;
+  showLoading: boolean;
+  loadedReaderRoute: ReaderRoute | null;
   loadingMore: boolean;
   error: string | null;
   nextCursor: string | null;
@@ -83,6 +86,7 @@ export function useArticleQueue({
   const [articles, setArticles] = useState<Article[]>([]);
   const [displayedReadingMode, setDisplayedReadingMode] = useState(readingMode);
   const [loading, setLoading] = useState(false);
+  const [loadedReaderRoute, setLoadedReaderRoute] = useState<ReaderRoute | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -149,12 +153,16 @@ export function useArticleQueue({
         hasReadingModeContent(readingMode, articlesRef.current, fullContentLoadedIds.current)
       ) {
         loadedReaderRequestKey.current = requestKey;
+        setLoadedReaderRoute(nextRoute);
         setDisplayedReadingMode(readingMode);
         setError(null);
         setLoading(false);
         return;
       }
-      if (!returnTarget && !switchingMode) setLoading(true);
+      if (!returnTarget && !switchingMode) {
+        setLoading(true);
+        setError(null);
+      }
       try {
         const page = await api.articles(
           articleQueryForReaderRoute(nextRoute, {
@@ -174,6 +182,7 @@ export function useArticleQueue({
         const nextArticles = articlesWithContextReturn(page.articles, returnTarget);
         articleListNeedsReload.current = false;
         loadedReaderRequestKey.current = requestKey;
+        setLoadedReaderRoute(nextRoute);
         setDisplayedReadingMode(readingMode);
         setError(null);
         setArticles(nextArticles);
@@ -292,6 +301,7 @@ export function useArticleQueue({
           refreshedActiveArticle?.id ?? null,
         );
         loadedReaderRequestKey.current = `${appRoutePath(queryRoute)}:${readingMode}`;
+        setLoadedReaderRoute(queryRoute);
         setDisplayedReadingMode(readingMode);
       } catch (caught) {
         if (!signal.aborted) setError(errorMessage(caught));
@@ -372,6 +382,7 @@ export function useArticleQueue({
         if (!readerQueue) return;
         articleListNeedsReload.current = false;
         loadedReaderRequestKey.current = requestKey;
+        setLoadedReaderRoute(queryRoute);
         setDisplayedReadingMode(readingMode);
         setActiveArticleId((current) =>
           current !== null && nextArticles.some((article) => article.id === current)
@@ -425,6 +436,7 @@ export function useArticleQueue({
 
       articleListNeedsReload.current = false;
       loadedReaderRequestKey.current = requestKey;
+      setLoadedReaderRoute(queryRoute);
       setDisplayedReadingMode(readingMode);
       const nextArticles = reloaded;
       setArticles(nextArticles);
@@ -621,6 +633,7 @@ export function useArticleQueue({
             actualArticleIndex >= 0 ? actualArticleIndex : context?.articleIndex,
           );
           loadedReaderRequestKey.current = `${appRoutePath(queueRoute)}:${readingMode}`;
+          setLoadedReaderRoute(queueRoute);
           setDisplayedReadingMode(readingMode);
           fullContentLoadedIds.current.add(article.id);
           setArticles(nextArticles);
@@ -684,13 +697,19 @@ export function useArticleQueue({
     articleListNeedsReload.current &&
     contextArticleReturn.current === null &&
     error === null;
+  const pending = loading || articleListReloadPending;
+  const loadingKey = `${appRoutePath(appRoute)}:${readingMode}`;
+
+  const showLoading = useDelayedPending(pending && appRoute.kind === "reader", loadingKey);
 
   return {
     readingMode: displayedReadingMode,
     articles,
     setArticles,
     articlesRef,
-    loading: loading || articleListReloadPending,
+    loading: pending,
+    showLoading: pending && (appRoute.kind !== "reader" || showLoading),
+    loadedReaderRoute,
     loadingMore,
     error,
     nextCursor,

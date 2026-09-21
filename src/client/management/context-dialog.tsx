@@ -181,92 +181,82 @@ function FeedSettingsPanel({
 
   return (
     <>
-      <div className="management-dialog-body feed-settings-body">
-        {loading ? (
-          <div className="feed-settings-loading" role="status" aria-label="Loading feed settings">
-            <span className="skeleton-line" />
-            <span className="skeleton-line" />
-            <span className="skeleton-line" />
+      <div className="management-dialog-body feed-settings-body" aria-busy={loading}>
+        <div className="feed-settings-summary">
+          <span
+            className={`feed-settings-status${details.healthStatus !== "healthy" ? " has-error" : ""}`}
+          >
+            {details.healthStatus !== "healthy" ? (
+              <AlertTriangle aria-hidden="true" size={15} />
+            ) : (
+              <CheckCircle2 aria-hidden="true" size={15} />
+            )}
+            {status}
+          </span>
+          <span>
+            <strong>{details.totalCount}</strong> articles
+          </span>
+          <span>
+            <strong>{details.unreadCount}</strong> unread
+          </span>
+        </div>
+
+        <dl className="feed-settings-list">
+          <div>
+            <dt>{details.sourceKind === "web" ? "Webpage" : "Website"}</dt>
+            <dd>
+              {details.siteUrl ? (
+                <a href={details.siteUrl} target="_blank" rel="noreferrer">
+                  {details.siteUrl}
+                  <ExternalLink aria-hidden="true" size={14} />
+                </a>
+              ) : (
+                <span className="muted">Not provided</span>
+              )}
+            </dd>
           </div>
-        ) : (
-          <>
-            <div className="feed-settings-summary">
-              <span
-                className={`feed-settings-status${details.healthStatus !== "healthy" ? " has-error" : ""}`}
-              >
-                {details.healthStatus !== "healthy" ? (
-                  <AlertTriangle aria-hidden="true" size={15} />
-                ) : (
-                  <CheckCircle2 aria-hidden="true" size={15} />
-                )}
-                {status}
-              </span>
-              <span>
-                <strong>{details.totalCount}</strong> articles
-              </span>
-              <span>
-                <strong>{details.unreadCount}</strong> unread
-              </span>
+          <div>
+            <dt>{details.sourceKind === "web" ? "Page URL" : "Feed URL"}</dt>
+            <dd>
+              <a href={details.feedUrl} target="_blank" rel="noreferrer">
+                {details.feedUrl}
+                <ExternalLink aria-hidden="true" size={14} />
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt>Subscribed</dt>
+            <dd>{formatDate(details.createdAt)}</dd>
+          </div>
+          <div>
+            <dt>Refresh interval</dt>
+            <dd>Every {formatRefreshInterval(details.pollIntervalMinutes)}</dd>
+          </div>
+          <div>
+            <dt>Last attempted refresh</dt>
+            <dd>{formatDate(details.lastAttemptAt)}</dd>
+          </div>
+          <div>
+            <dt>Last successful refresh</dt>
+            <dd>{formatDate(details.lastSuccessAt)}</dd>
+          </div>
+          <div>
+            <dt>Next scheduled refresh</dt>
+            <dd>{details.paused ? "Paused" : formatDate(details.nextPollAt)}</dd>
+          </div>
+          <div>
+            <dt>Last HTTP response</dt>
+            <dd>{details.lastHttpStatus ?? "No response recorded"}</dd>
+          </div>
+          {details.sourceKind === "web" ? (
+            <div>
+              <dt>Entries found on last success</dt>
+              <dd>{details.lastMatchCount ?? "No successful refresh yet"}</dd>
             </div>
+          ) : null}
+        </dl>
 
-            <dl className="feed-settings-list">
-              <div>
-                <dt>{details.sourceKind === "web" ? "Webpage" : "Website"}</dt>
-                <dd>
-                  {details.siteUrl ? (
-                    <a href={details.siteUrl} target="_blank" rel="noreferrer">
-                      {details.siteUrl}
-                      <ExternalLink aria-hidden="true" size={14} />
-                    </a>
-                  ) : (
-                    <span className="muted">Not provided</span>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>{details.sourceKind === "web" ? "Page URL" : "Feed URL"}</dt>
-                <dd>
-                  <a href={details.feedUrl} target="_blank" rel="noreferrer">
-                    {details.feedUrl}
-                    <ExternalLink aria-hidden="true" size={14} />
-                  </a>
-                </dd>
-              </div>
-              <div>
-                <dt>Subscribed</dt>
-                <dd>{formatDate(details.createdAt)}</dd>
-              </div>
-              <div>
-                <dt>Refresh interval</dt>
-                <dd>Every {formatRefreshInterval(details.pollIntervalMinutes)}</dd>
-              </div>
-              <div>
-                <dt>Last attempted refresh</dt>
-                <dd>{formatDate(details.lastAttemptAt)}</dd>
-              </div>
-              <div>
-                <dt>Last successful refresh</dt>
-                <dd>{formatDate(details.lastSuccessAt)}</dd>
-              </div>
-              <div>
-                <dt>Next scheduled refresh</dt>
-                <dd>{details.paused ? "Paused" : formatDate(details.nextPollAt)}</dd>
-              </div>
-              <div>
-                <dt>Last HTTP response</dt>
-                <dd>{details.lastHttpStatus ?? "No response recorded"}</dd>
-              </div>
-              {details.sourceKind === "web" ? (
-                <div>
-                  <dt>Entries found on last success</dt>
-                  <dd>{details.lastMatchCount ?? "No successful refresh yet"}</dd>
-                </div>
-              ) : null}
-            </dl>
-
-            {details.lastError ? <DialogError message={details.lastError} /> : null}
-          </>
-        )}
+        {details.lastError ? <DialogError message={details.lastError} /> : null}
         {error ? <DialogError message={error} /> : null}
       </div>
       <footer className="management-dialog-footer">

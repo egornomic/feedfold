@@ -23,6 +23,7 @@ import type {
 import { errorMessage, type RuleInput } from "../api";
 import type { ReaderDataMutations } from "../data-resource";
 import { DropdownSelect } from "../dropdown";
+import { useDelayedPending } from "../loading";
 import { type MotionState, motionExitDuration, useMotionPresence } from "../motion";
 import { PageHeader } from "./shared";
 import "./rules.css";
@@ -94,7 +95,7 @@ function RulesPage({
   showToast,
 }: {
   bootstrap: BootstrapData;
-  rules: Rule[];
+  rules: Rule[] | null;
   loading: boolean;
   error: string | null;
   draft: RuleFormDraft | null;
@@ -106,6 +107,7 @@ function RulesPage({
   showToast: (message: string) => void;
 }) {
   const [formOpen, setFormOpen] = useState(draft !== null);
+  const showLoading = useDelayedPending(rules === null && !error, "rules");
   const [formSession, setFormSession] = useState(0);
   const [editing, setEditing] = useState<Rule | null>(null);
   const formPresence = useMotionPresence(formOpen);
@@ -187,22 +189,24 @@ function RulesPage({
         />
       ) : null}
 
-      <section className="management-section rules-section" aria-labelledby="active-rules-heading">
+      <section
+        className="management-section rules-section"
+        aria-labelledby="active-rules-heading"
+        aria-busy={loading}
+      >
         <div className="section-title-row">
           <div>
             <h2 id="active-rules-heading">Saved rules</h2>
             <p>Enabled rules check saved articles now and new articles during each refresh.</p>
           </div>
-          <span className="rules-count">{rules.filter((rule) => rule.enabled).length} active</span>
+          {rules !== null ? (
+            <span className="rules-count">
+              {rules.filter((rule) => rule.enabled).length} active
+            </span>
+          ) : null}
         </div>
 
-        {loading ? (
-          <div className="rule-loading" aria-busy="true">
-            {[0, 1, 2].map((key) => (
-              <div className="skeleton-line" key={key} />
-            ))}
-          </div>
-        ) : error ? (
+        {error ? (
           <div className="section-error" role="alert">
             <AlertTriangle aria-hidden="true" size={18} />
             <span>{error}</span>
@@ -210,6 +214,15 @@ function RulesPage({
               Try again
             </button>
           </div>
+        ) : null}
+        {rules === null ? (
+          error ? null : (
+            <div className="rule-loading" aria-busy="true">
+              {showLoading
+                ? [0, 1, 2].map((key) => <div className="skeleton-line" key={key} />)
+                : null}
+            </div>
+          )
         ) : rules.length === 0 ? (
           <div className="section-empty">
             <ListFilter aria-hidden="true" size={22} />

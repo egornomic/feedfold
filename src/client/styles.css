@@ -3739,8 +3739,7 @@ kbd {
 }
 
 .skeleton-line,
-.skeleton-block,
-.skeleton-toolbar {
+.skeleton-block {
   border-radius: 4px;
   background: var(--surface-hover);
   animation: skeleton-pulse 1.35s var(--ease-in-out) infinite alternate;
@@ -3790,13 +3789,6 @@ kbd {
   width: 100%;
   height: 260px;
   margin-top: 24px;
-}
-.skeleton-toolbar {
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-}
-.skeleton-sidebar {
-  padding: 22px 15px;
 }
 .skeleton-reader {
   padding: 60px;
@@ -3883,12 +3875,17 @@ kbd {
   display: none;
 }
 
-.management-route-loading {
-  display: grid;
-  width: min(100%, 1180px);
-  gap: 12px;
-  margin-inline: auto;
-  padding: 50px 34px;
+.route-loading-status {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--paper-surface);
+  color: var(--text-secondary);
+  font-size: var(--type-supporting);
 }
 
 @media (min-width: 1021px) {
@@ -4608,7 +4605,6 @@ kbd {
   .spin,
   .skeleton-line,
   .skeleton-block,
-  .skeleton-toolbar,
   .article-summary-skeleton span {
     animation: none;
   }
