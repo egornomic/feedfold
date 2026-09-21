@@ -24,6 +24,7 @@ export interface DeploymentPolicy {
   manualRefresh: boolean;
   accountActivityWindowDays: number | null;
   maxFeedsPerAccount: number | null;
+  maxWebFeedsPerAccount: number | null;
   maxPendingRefreshes: number | null;
   quotas: ResourceQuotas;
 }
@@ -67,6 +68,7 @@ export const PRIVATE_DEPLOYMENT_POLICY: DeploymentPolicy = {
   manualRefresh: true,
   accountActivityWindowDays: null,
   maxFeedsPerAccount: null,
+  maxWebFeedsPerAccount: null,
   maxPendingRefreshes: null,
   quotas: UNLIMITED_QUOTAS,
 };
@@ -76,6 +78,7 @@ export const PUBLIC_DEPLOYMENT_POLICY: DeploymentPolicy = {
   manualRefresh: false,
   accountActivityWindowDays: 7,
   maxFeedsPerAccount: 300,
+  maxWebFeedsPerAccount: 10,
   maxPendingRefreshes: 2_000,
   quotas: PUBLIC_RESOURCE_QUOTAS,
 };

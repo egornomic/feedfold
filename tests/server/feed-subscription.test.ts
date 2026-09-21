@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { ApplicationApi } from "../../src/server/application-api.js";
 import { AppDatabase } from "../../src/server/database.js";
+import { PUBLIC_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
@@ -22,6 +23,119 @@ afterEach(async () => {
 });
 
 describe("feed subscription workflow", () => {
+  it("accepts the tenth web feed over HTTP and rejects the eleventh before fetching", async () => {
+    let pageLoads = 0;
+    const publisher = createServer((_request, response) => {
+      pageLoads += 1;
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end(
+        '<html><body><article><h2><a href="/story">Story</a></h2></article></body></html>',
+      );
+    });
+    await new Promise<void>((resolve) => publisher.listen(0, "127.0.0.1", resolve));
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          publisher.closeAllConnections();
+          publisher.close(() => resolve());
+        }),
+    );
+    const origin = `http://127.0.0.1:${(publisher.address() as AddressInfo).port}`;
+    const database = new AppDatabase(":memory:", 20, PUBLIC_DEPLOYMENT_POLICY);
+    cleanups.push(() => database.close());
+    const auth = new AuthService(database.auth, 20, { registrationMode: "open" });
+    const extractionQueue = new ExtractionQueue(database.extractions, 1, 2_000);
+    cleanups.push(() => extractionQueue.stop());
+    const webFeedService = new WebFeedService({ allowPrivateNetworks: true, settleQuietMs: 100 });
+    cleanups.push(() => webFeedService.close());
+    const refreshService = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        2_000,
+        webFeedService,
+        fetch,
+      ),
+    );
+    cleanups.push(() => refreshService.stop());
+    const app = await createApp({
+      database,
+      authService: auth,
+      extractionQueue,
+      refreshService,
+      webFeedService,
+    });
+    cleanups.push(() => app.close());
+    const address = await app.listen({ port: 0, host: "127.0.0.1" });
+    const registration = await fetch(`${address}/api/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "limited-reader", password: "reader-password" }),
+    });
+    expect(registration.status).toBe(201);
+    const cookie = registration.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+    const config = (index: number) => ({
+      pageUrl: `${origin}/updates/${index}`,
+      selectors: {
+        item: "article",
+        title: "h2",
+        link: "a",
+        date: null,
+        author: null,
+        summary: null,
+        image: null,
+      },
+    });
+    for (let index = 0; index < 9; index += 1) {
+      database.feeds.createWebFeed(1, {
+        title: "Updates",
+        pageUrl: config(index).pageUrl,
+        folderId: null,
+        config: config(index),
+        parsed: {
+          title: "Updates",
+          siteUrl: origin,
+          articles: [
+            {
+              externalId: "one",
+              title: "One",
+              url: `${origin}/story`,
+              author: null,
+              publishedAt: null,
+              summary: "",
+              imageUrl: null,
+              feedContentHtml: null,
+            },
+          ],
+        },
+      });
+    }
+    const subscribe = (index: number) =>
+      fetch(`${address}/api/feeds`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceKind: "web",
+          feedUrl: config(index).pageUrl,
+          webConfig: config(index),
+        }),
+      });
+    const tenth = await subscribe(9);
+    expect(tenth.status).toBe(200);
+    expect(((await tenth.json()) as Feed).sourceKind).toBe("web");
+    expect(pageLoads).toBeGreaterThan(0);
+    const loadsAfterTenth = pageLoads;
+    const eleventh = await subscribe(10);
+    expect(eleventh.status).toBe(400);
+    expect(await eleventh.json()).toEqual({
+      error: "This account can subscribe to up to 10 web feeds.",
+    });
+    expect(pageLoads).toBe(loadsAfterTenth);
+    expect(database.feeds.listFeeds(1).filter((feed) => feed.sourceKind === "web")).toHaveLength(
+      10,
+    );
+  });
+
   it.each([
     "web",
     "desktop",

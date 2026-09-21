@@ -44,12 +44,18 @@ export class FeedService {
     return this.repository.getFeed(userId, id);
   }
 
-  assertCanCreateFeed(userId: number): void {
+  assertCanCreateFeed(userId: number, sourceKind: Feed["sourceKind"] = "published"): void {
     const limit = this.deploymentPolicy.maxFeedsPerAccount;
-    if (limit === null) return;
-    const count = this.repository.countFeeds(userId);
-    if (count >= limit) {
+    if (limit !== null && this.repository.countFeeds(userId) >= limit) {
       throw new InvalidRequestError(`This account can subscribe to up to ${limit} feeds.`);
+    }
+    const webLimit = this.deploymentPolicy.maxWebFeedsPerAccount;
+    if (
+      sourceKind === "web" &&
+      webLimit !== null &&
+      this.repository.countFeeds(userId, "web") >= webLimit
+    ) {
+      throw new InvalidRequestError(`This account can subscribe to up to ${webLimit} web feeds.`);
     }
   }
 
@@ -108,7 +114,6 @@ export class FeedService {
       parsed: ParsedFeed;
     },
   ): Feed {
-    this.assertCanCreateFeed(userId);
     this.folders.assertFolderExists(userId, input.folderId);
     if (input.parsed.articles.length === 0) {
       throw new Error("This selection does not match any entries. Choose another entry group.");
@@ -120,6 +125,7 @@ export class FeedService {
     }
 
     return this.sqlite.transaction(() => {
+      this.assertCanCreateFeed(userId, "web");
       const feedId = this.repository.createWebFeedRecord(userId, {
         ...input,
         pageUrl,

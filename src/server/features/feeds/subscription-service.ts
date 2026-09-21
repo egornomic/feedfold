@@ -19,7 +19,7 @@ export class FeedSubscriptionService {
   ) {}
 
   async create(userId: number, input: FeedInput): Promise<Feed | null> {
-    this.feeds.assertCanCreateFeed(userId);
+    this.feeds.assertCanCreateFeed(userId, input.sourceKind);
     if (input.sourceKind === "published") {
       const feed = this.feeds.createFeed(userId, input);
       if (!feed.paused && this.feeds.subscriptionNeedsRefresh(feed.id)) {
