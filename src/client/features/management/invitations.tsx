@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { INVITE_EXPIRATION_DAYS } from "../../shared/auth";
-import type { InvitationOverview, InvitationSummary } from "../../shared/types";
-import { api, appUrl, errorMessage } from "../api";
+import { INVITE_EXPIRATION_DAYS } from "../../../shared/auth";
+import type { InvitationOverview, InvitationSummary } from "../../../shared/types";
+import { api, appUrl, errorMessage } from "../../api";
 
 type InvitationStatus = "Available" | "Expired" | "Revoked" | "Used";
 

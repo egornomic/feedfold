@@ -31,8 +31,8 @@ import {
   AI_PROMPT_MAX_LENGTH,
   DEFAULT_ARTICLE_SUMMARY_PROMPT,
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
-} from "../../shared/ai-prompts";
-import type { ApiInput } from "../../shared/api/operations";
+} from "../../../shared/ai-prompts";
+import type { ApiInput } from "../../../shared/api/operations";
 import type {
   AiCustomPrompt,
   AiProvider,
@@ -40,21 +40,21 @@ import type {
   AppSettings,
   DuplicateArticleWindowDays,
   FeedPollIntervalMinutes,
-} from "../../shared/types";
-import { DUPLICATE_ARTICLE_WINDOW_DAYS } from "../../shared/types";
-import { ApiError, api, errorMessage } from "../api";
-import { COLOR_PALETTES, type ColorPalette } from "../color-palettes";
-import type { ReaderDataMutations } from "../data-resource";
-import { isDesktopApp } from "../desktop";
-import { DropdownCombobox, DropdownSelect } from "../dropdown";
+} from "../../../shared/types";
+import { DUPLICATE_ARTICLE_WINDOW_DAYS } from "../../../shared/types";
+import { ApiError, api, errorMessage } from "../../api";
+import type { SettingsCategory } from "../../app/routes";
+import { COLOR_PALETTES, type ColorPalette } from "../../color-palettes";
+import type { ReaderDataMutations } from "../../data-resource";
+import { isDesktopApp } from "../../desktop";
+import { DropdownCombobox, DropdownSelect } from "../../dropdown";
+import { useAnimatedDialog } from "../../motion";
 import {
   type ColorPalettes,
   clearReaderPreferences,
   type ResolvedTheme,
   type Theme,
-} from "../features/reader/reader-preferences";
-import { useAnimatedDialog } from "../motion";
-import type { SettingsCategory } from "../routes";
+} from "../reader/reader-preferences";
 import { InvitationsSection } from "./invitations";
 import {
   ExportOpmlLink,

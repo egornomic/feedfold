@@ -6,9 +6,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { api, appUrl, errorMessage } from "../api";
-import type { ReaderDataMutations } from "../data-resource";
-import { isDesktopApp } from "../desktop";
+import { api, appUrl, errorMessage } from "../../api";
+import type { ReaderDataMutations } from "../../data-resource";
+import { isDesktopApp } from "../../desktop";
 
 export function formatDate(value: string | null): string {
   if (!value) return "Never";

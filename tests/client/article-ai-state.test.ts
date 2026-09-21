@@ -130,7 +130,7 @@ describe("article AI state", () => {
     try {
       const actionsModulePath: string = "../../src/client/features/reader/article-actions.js";
       const queueModulePath: string = "../../src/client/features/reader/article-queue.js";
-      const routeModulePath: string = "../../src/client/app-route.js";
+      const routeModulePath: string = "../../src/client/app/route.js";
       const resourceModulePath: string = "../../src/client/data-resource.js";
       const [actionsModule, queueModule, routeModule, resourceModule] = await Promise.all([
         import(actionsModulePath),

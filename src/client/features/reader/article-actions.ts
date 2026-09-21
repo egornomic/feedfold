@@ -8,7 +8,7 @@ import type {
   ReadingMode,
 } from "../../../shared/types";
 import { ApiError, api, errorMessage } from "../../api";
-import type { AppRouteController } from "../../app-route";
+import type { AppRouteController } from "../../app/route";
 import { copyText } from "../../clipboard";
 import type { ReaderDataResource } from "../../data-resource";
 import {

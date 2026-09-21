@@ -1,5 +1,5 @@
-import type { ArticleState } from "../shared/types.js";
-import type { AddFeedSourceType } from "./feed-source.js";
+import type { ArticleState } from "../../shared/types.js";
+import type { AddFeedSourceType } from "../feed-source.js";
 
 export interface ReaderRoute {
   kind: "reader";
@@ -183,3 +183,5 @@ export function routeAfterFeedDeletion(
 export function appRouteUrl(route: AppRoute, basePath: string): string {
   return `${normalizedBasePath(basePath)}${appRoutePath(route)}`;
 }
+
+export type AppView = "reader" | "feeds" | "rules" | "settings";

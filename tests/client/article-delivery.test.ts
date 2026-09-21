@@ -299,7 +299,7 @@ describe("live article delivery", () => {
     const root = createRoot(container);
 
     try {
-      const appModulePath: string = "../../src/client/App.js";
+      const appModulePath: string = "../../src/client/app/app.js";
       const { App } = await import(appModulePath);
       await act(async () => root.render(createElement(App)));
       await waitFor(

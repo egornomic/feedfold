@@ -10,11 +10,11 @@ import {
 } from "react";
 import type { Article, ReadingMode } from "../../../shared/types";
 import { api, errorMessage } from "../../api";
-import type { AppRouteController } from "../../app-route";
+import type { AppRouteController } from "../../app/route";
+import { appRoutePath, type ReaderRoute } from "../../app/routes";
 import { articlesWithContextReturn, type ContextArticleReturn } from "../../contextual-filter";
 import type { ReaderDataResource } from "../../data-resource";
 import { useDelayedPending } from "../../loading";
-import { appRoutePath, type ReaderRoute } from "../../routes";
 import {
   appendUnseenArticles,
   articleQueryForReaderRoute,

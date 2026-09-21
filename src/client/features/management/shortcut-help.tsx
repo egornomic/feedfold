@@ -1,5 +1,5 @@
 import { AlertTriangle, Keyboard, X } from "lucide-react";
-import { useAnimatedDialog } from "../motion";
+import { useAnimatedDialog } from "../../motion";
 import { Kbd } from "./shared";
 import "./shortcut-help.css";
 

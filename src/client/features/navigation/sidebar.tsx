@@ -25,6 +25,7 @@ import type {
   Folder as FolderType,
   SessionUser,
 } from "../../../shared/types";
+import type { AppView } from "../../app/routes";
 import { BrandIdentity } from "../../brand";
 import { type FeedDragState, useFeedDrag } from "../../feed-drag";
 import {
@@ -37,8 +38,6 @@ import {
 import type { AddFeedSourceType } from "../../feed-source";
 import { ADD_FEED_SOURCE_OPTIONS } from "../../feed-source-options";
 import { IconButton, Kbd } from "./navigation-controls";
-
-export type AppView = "reader" | "feeds" | "rules" | "settings";
 
 function selectedFolderPath(
   folders: FolderType[],

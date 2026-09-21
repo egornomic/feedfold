@@ -6,7 +6,7 @@ import {
   DEFAULT_READER_ROUTE,
   parseAppRoute,
   routeAfterFeedDeletion,
-} from "../../src/client/routes.js";
+} from "../../src/client/app/routes.js";
 
 const BASE_PATH = "/";
 

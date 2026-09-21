@@ -7,8 +7,8 @@ import type {
   Folder,
   ReadingMode,
 } from "../../../shared/types.js";
+import type { ReaderRoute } from "../../app/routes.js";
 import { folderPath } from "../../folder-hierarchy.js";
-import type { ReaderRoute } from "../../routes.js";
 
 const FILTER_RULE_NAME_TEXT_LIMIT = 72;
 

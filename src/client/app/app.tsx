@@ -1,10 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import type { SessionUser } from "../shared/types";
-import { ApiError, AUTH_REQUIRED_EVENT, api, errorMessage } from "./api";
-import { LoginPage, SessionLoading } from "./auth";
-import { StartupError } from "./features/reader/reader-states";
+import type { SessionUser } from "../../shared/types";
+import { ApiError, AUTH_REQUIRED_EVENT, api, errorMessage } from "../api";
+import { LoginPage, SessionLoading } from "../auth";
+import { StartupError } from "../features/reader/reader-states";
 
-const ReaderApp = lazy(() => import("./features/reader/reader-app"));
+const AppShell = lazy(() => import("./app-shell"));
 
 export function App() {
   const [checkingSession, setCheckingSession] = useState(true);
@@ -72,7 +72,7 @@ export function App() {
   if (!user) return <LoginPage onAuthenticated={setUser} />;
   return (
     <Suspense fallback={<SessionLoading />}>
-      <ReaderApp
+      <AppShell
         key={user.id}
         user={user}
         onLogout={logout}
