@@ -141,7 +141,6 @@ export async function feedRoutes(
       extracted.parsed,
     );
     if (!updated) return missing(reply, "Feed");
-    refreshService.notifyDataChanged(accountId);
     return updated;
   });
 

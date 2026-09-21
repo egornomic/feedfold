@@ -1515,6 +1515,12 @@ const migrations: Migration[] = [
       DROP TABLE previous_ai_credentials;
     `,
   },
+  {
+    sql: `
+      ALTER TABLE rules DROP COLUMN matched_count;
+      CREATE INDEX article_rule_matches_rule_id_idx ON article_rule_matches(rule_id);
+    `,
+  },
 ];
 
 export function migrateDatabase(

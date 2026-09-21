@@ -255,19 +255,24 @@ export class ReaderDataResource implements ReaderDataMutations {
     binding.applyBootstrap(next);
   };
 
-  loadRules = async (): Promise<void> => {
+  loadRules = async (): Promise<boolean> => {
     const binding = this.binding;
-    if (!this.active || !binding) return;
+    if (!this.active || !binding) return false;
     try {
-      await this.ruleRequest.run((signal) => binding.reloadRules(signal));
+      const completed = await this.ruleRequest.run(async (signal) => {
+        await binding.reloadRules(signal);
+        return !signal.aborted;
+      });
+      return completed === true;
     } catch {
       // The bound rules loader owns its visible error state.
+      return false;
     }
   };
 
   reload = async ({
     articles = false,
-    rules = false,
+    rules = articles,
   }: {
     articles?: boolean;
     rules?: boolean;
@@ -289,13 +294,13 @@ export class ReaderDataResource implements ReaderDataMutations {
 
   updateFeed = async (id: number, input: FeedUpdateInput): Promise<Feed> => {
     const feed = await this.client.updateFeed(id, input);
-    await this.invalidateNow({ articles: true, rules: input.folderId !== undefined });
+    await this.invalidateNow({ articles: true });
     return feed;
   };
 
   deleteFeed = async (id: number): Promise<void> => {
     await this.client.deleteFeed(id);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
   };
 
   updateWebFeedSelection = async (id: number, config: WebFeedConfig): Promise<Feed> => {
@@ -318,24 +323,24 @@ export class ReaderDataResource implements ReaderDataMutations {
 
   deleteFolder = async (id: number): Promise<void> => {
     await this.client.deleteFolder(id);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
   };
 
   createRule = async (input: RuleInput): Promise<Rule> => {
     const rule = await this.client.createRule(input);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
     return rule;
   };
 
   updateRule = async (id: number, input: Partial<RuleInput>): Promise<Rule> => {
     const rule = await this.client.updateRule(id, input);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
     return rule;
   };
 
   deleteRule = async (id: number): Promise<void> => {
     await this.client.deleteRule(id);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
   };
 
   beginRefresh = async (
@@ -359,7 +364,7 @@ export class ReaderDataResource implements ReaderDataMutations {
 
   private async invalidateNow({
     articles,
-    rules = false,
+    rules = articles,
   }: {
     articles: boolean;
     rules?: boolean;
@@ -449,7 +454,11 @@ export class ReaderDataResource implements ReaderDataMutations {
     while (this.active && this.invalidationPending) {
       this.invalidationPending = false;
       if (await this.refreshBootstrap()) {
-        if (await this.loadArticles("delivery")) {
+        const [articlesLoaded, rulesLoaded] = await Promise.all([
+          this.loadArticles("delivery"),
+          this.loadRules(),
+        ]);
+        if (articlesLoaded && rulesLoaded) {
           this.invalidationRetryMs = this.initialInvalidationRetryMs;
           continue;
         }
@@ -523,7 +532,7 @@ export class ReaderDataResource implements ReaderDataMutations {
   private async flushTrackedArticleReload(): Promise<void> {
     if (!this.reloadArticlesAfterTracking) return;
     this.reloadArticlesAfterTracking = false;
-    await this.loadArticles("delivery");
+    await Promise.all([this.loadArticles("delivery"), this.loadRules()]);
   }
 
   private waitForPoll(): Promise<void> {

@@ -10,6 +10,7 @@ import Fastify, {
   LogController,
 } from "fastify";
 import { ZodError } from "zod";
+import { readerMutationRoutes } from "../shared/reader-mutations.js";
 import { AiError } from "./ai/errors.js";
 import type { AppDatabase } from "./database.js";
 import { InvalidRequestError, OperationForbiddenError } from "./errors.js";
@@ -90,6 +91,19 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
     if (!user) throw new Error("Authenticated user is missing");
     return user.id;
   };
+
+  const mutationRoutes = new Set<string>(Object.values(readerMutationRoutes));
+  app.addHook("onResponse", async (request, reply) => {
+    const account = requestUsers.get(request);
+    if (
+      account &&
+      reply.statusCode >= 200 &&
+      reply.statusCode < 300 &&
+      mutationRoutes.has(`${request.method} ${request.routeOptions.url}`)
+    ) {
+      services.refreshService.notifyDataChanged(account.id);
+    }
+  });
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AiError) {

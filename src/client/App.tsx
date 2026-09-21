@@ -345,6 +345,7 @@ function ReaderApp({
       if (!signal.aborted) setRules(nextRules);
     } catch (error) {
       if (!signal.aborted) setRulesError(errorMessage(error));
+      throw error;
     } finally {
       if (!signal.aborted) setRulesLoading(false);
     }

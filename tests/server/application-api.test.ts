@@ -49,6 +49,35 @@ function applicationServices(database: AppDatabase): ApplicationApiServices {
 }
 
 describe("local application API", () => {
+  it("publishes committed management changes and leaves failed edits silent", async () => {
+    const database = new AppDatabase(":memory:");
+    const services = applicationServices(database);
+    const application = new ApplicationApi(services);
+    const observedNames: string[][] = [];
+    services.refreshService.subscribe(1, () => {
+      observedNames.push(database.folders.listFolders(1).map(({ name }) => name));
+    });
+    const folder = (await application.invoke({
+      operation: "createFolder",
+      payload: { name: "Reading" },
+    })) as Folder;
+    expect(observedNames).toEqual([["Reading"]]);
+    await expect(
+      application.invoke({
+        operation: "updateFolder",
+        payload: { id: folder.id, input: { parentId: folder.id } },
+      }),
+    ).rejects.toThrow();
+    await application.invoke({ operation: "bootstrap" });
+    expect(observedNames).toEqual([["Reading"]]);
+    await application.invoke({
+      operation: "updateFolder",
+      payload: { id: folder.id, input: { name: "News" } },
+    });
+    await application.invoke({ operation: "deleteFolder", payload: { id: folder.id } });
+    expect(observedNames).toEqual([["Reading"], ["News"], []]);
+  });
+
   it("starts with the releases feed and preserves its removal after reopening", async () => {
     const directory = await mkdtemp(join(tmpdir(), "feedfold-default-feed-"));
     cleanups.push(() => rm(directory, { recursive: true, force: true }));

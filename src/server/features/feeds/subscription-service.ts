@@ -37,7 +37,6 @@ export class FeedSubscriptionService {
       config: input.webConfig,
       parsed: extracted.parsed,
     });
-    this.refresh.notifyDataChanged(userId);
     return feed;
   }
 }
