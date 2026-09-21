@@ -9,16 +9,13 @@ import { ApiError } from "../../src/client/api-contract.js";
 import { createApp } from "../../src/server/app.js";
 import { ApplicationApi, type ApplicationApiServices } from "../../src/server/application-api.js";
 import { applicationError } from "../../src/server/application-error.js";
-import { AppDatabase } from "../../src/server/database.js";
 import { PRIVATE_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
-import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
-import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
-import { TelegramMediaService } from "../../src/server/telegram-media.js";
-import { WebFeedService } from "../../src/server/web-feed.js";
-import { XMediaService } from "../../src/server/x-media.js";
+import {
+  type ApplicationRuntimeOptions,
+  createApplicationRuntime,
+} from "../../src/server/runtime/application-runtime.js";
+import { runtimeConfiguration } from "../../src/server/runtime/configuration.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../../src/shared/api/operations.js";
 import type { ArticlePage, BootstrapData, Folder, Rule } from "../../src/shared/types.js";
 
@@ -29,29 +26,20 @@ afterEach(async () => {
 });
 
 function applicationServices(
-  database: AppDatabase,
-  webFeedService = new WebFeedService(),
+  options: Partial<ApplicationRuntimeOptions> = {},
 ): ApplicationApiServices {
-  const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
-  const refreshService = new FeedRefreshService(
-    database.feeds,
-    new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000, webFeedService),
-    1,
-  );
-  cleanups.push(
-    () => database.close(),
-    () => webFeedService.close(),
-    () => Promise.all([refreshService.stop(), extractionQueue.stop()]).then(() => undefined),
-  );
-  return {
-    database,
-    extractionQueue,
-    refreshService,
-    webFeedService,
-    aiService: new AiService(database, { credentialCipher: null }),
-    telegramMediaService: new TelegramMediaService(1_000),
-    xMediaService: new XMediaService(1_000),
-  };
+  const runtime = createApplicationRuntime({
+    databasePath: ":memory:",
+    configuration: runtimeConfiguration({
+      FEED_FETCH_TIMEOUT_MS: "1000",
+      ARTICLE_FETCH_TIMEOUT_MS: "1000",
+      WEB_FEED_LOAD_TIMEOUT_MS: "4000",
+    }),
+    credentialCipher: null,
+    ...options,
+  });
+  cleanups.push(() => runtime.close());
+  return runtime.services;
 }
 
 async function transportClient(transport: "web" | "desktop", services: ApplicationApiServices) {
@@ -107,8 +95,8 @@ async function transportClient(transport: "web" | "desktop", services: Applicati
 
 describe("local application API", () => {
   it("publishes committed management changes and leaves failed edits silent", async () => {
-    const database = new AppDatabase(":memory:");
-    const services = applicationServices(database);
+    const services = applicationServices();
+    const { database } = services;
     const application = new ApplicationApi(services);
     const observedNames: string[][] = [];
     services.refreshService.subscribe(1, () => {
@@ -139,8 +127,7 @@ describe("local application API", () => {
     const directory = await mkdtemp(join(tmpdir(), "feedfold-default-feed-"));
     cleanups.push(() => rm(directory, { recursive: true, force: true }));
     const path = join(directory, "feedfold.db");
-    const database = new AppDatabase(path);
-    const application = new ApplicationApi(applicationServices(database));
+    const application = new ApplicationApi(applicationServices({ databasePath: path }));
     const bootstrap = (await application.invoke({ operation: "bootstrap" })) as BootstrapData;
     expect(bootstrap.feeds).toMatchObject([
       {
@@ -150,8 +137,7 @@ describe("local application API", () => {
       },
     ]);
     await application.invoke({ operation: "deleteFeed", payload: { id: bootstrap.feeds[0]?.id } });
-    const reopened = new AppDatabase(path);
-    const restarted = new ApplicationApi(applicationServices(reopened));
+    const restarted = new ApplicationApi(applicationServices({ databasePath: path }));
     expect(((await restarted.invoke({ operation: "bootstrap" })) as BootstrapData).feeds).toEqual(
       [],
     );
@@ -159,9 +145,10 @@ describe("local application API", () => {
 
   it("runs the reading workflow for one local user without an account session", async () => {
     const directory = await mkdtemp(join(tmpdir(), "feedfold-application-api-test-"));
-    const database = new AppDatabase(join(directory, "feedfold.db"));
     cleanups.push(() => rm(directory, { recursive: true, force: true }));
-    const application = new ApplicationApi(applicationServices(database));
+    const services = applicationServices({ databasePath: join(directory, "feedfold.db") });
+    const { database } = services;
+    const application = new ApplicationApi(services);
 
     database.connection
       .prepare("UPDATE users SET last_active_at = '2000-01-01T00:00:00.000Z' WHERE id = 1")
@@ -239,8 +226,8 @@ describe("local application API", () => {
     "web",
     "desktop",
   ] as const)("accepts the shared reading and management inputs through %s", async (transport) => {
-    const database = new AppDatabase(":memory:");
-    const services = applicationServices(database);
+    const services = applicationServices();
+    const { database } = services;
     const client = await transportClient(transport, services);
 
     const parent = await client.createFolder({ name: "Reading" });
@@ -336,19 +323,13 @@ describe("local application API", () => {
         }),
     );
     const sourceUrl = `http://127.0.0.1:${(source.address() as AddressInfo).port}/`;
-    const database = new AppDatabase(":memory:", 20, {
-      ...PRIVATE_DEPLOYMENT_POLICY,
-      quotas: { ...PRIVATE_DEPLOYMENT_POLICY.quotas, opmlFeedsPerImport: 1 },
+    const services = applicationServices({
+      deploymentPolicy: {
+        ...PRIVATE_DEPLOYMENT_POLICY,
+        quotas: { ...PRIVATE_DEPLOYMENT_POLICY.quotas, opmlFeedsPerImport: 1 },
+      },
+      webFeed: { allowPrivateNetworks: true, settleQuietMs: 100, settleTimeoutMs: 2_000 },
     });
-    const services = applicationServices(
-      database,
-      new WebFeedService({
-        allowPrivateNetworks: true,
-        timeoutMs: 4_000,
-        settleQuietMs: 100,
-        settleTimeoutMs: 2_000,
-      }),
-    );
     const client = await transportClient(transport, services);
     const analysis = await client.analyzeWebPage(sourceUrl);
     const candidate = analysis.candidates.find((candidate) => candidate.articles.length === 3);
