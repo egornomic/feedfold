@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+import { PUBLIC_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
+import { AuthService } from "../../src/server/features/auth/service.js";
 import type { WebFeedConfig } from "../../src/shared/types.js";
 
 const directories: string[] = [];
@@ -49,6 +51,65 @@ function article(externalId: string, title: string, url: string) {
 }
 
 describe("web feed persistence", () => {
+  it("limits public web subscriptions per account, including paused and shared feeds", async () => {
+    const database = new AppDatabase(":memory:", 20, PUBLIC_DEPLOYMENT_POLICY);
+    const privateDatabase = new AppDatabase(":memory:");
+    try {
+      const auth = new AuthService(database.auth, 20, {
+        maxAccounts: 100,
+        registrationMode: "open",
+      });
+      await auth.register("reader", "reader-password");
+      const otherReader = await auth.register("other-reader", "reader-password");
+      if (!otherReader) throw new Error("Could not register the other reader");
+      const input = (index: number) => {
+        const pageUrl = `https://example.test/updates/${index}`;
+        return {
+          title: "Updates",
+          pageUrl,
+          folderId: null,
+          config: config(pageUrl),
+          parsed: {
+            title: "Updates",
+            siteUrl: pageUrl,
+            articles: [article("one", "One", `${pageUrl}/one`)],
+          },
+        };
+      };
+      const feeds = Array.from({ length: 10 }, (_, index) =>
+        database.feeds.createWebFeed(1, input(index)),
+      );
+      const [first, second] = feeds;
+      if (!first || !second) throw new Error("Expected seeded web feeds");
+      database.feeds.updateFeed(1, first.id, { paused: true });
+      expect(() => database.feeds.createWebFeed(1, input(10))).toThrow(
+        "This account can subscribe to up to 10 web feeds.",
+      );
+      const shared = database.feeds.createWebFeed(otherReader.user.id, input(0));
+      expect(database.feeds.sourceIdForFeed(shared.id)).toBe(
+        database.feeds.sourceIdForFeed(first.id),
+      );
+      expect(
+        database.feeds.createFeed(1, { feedUrl: "https://example.test/rss" }).id,
+      ).toBeGreaterThan(0);
+      expect(
+        database.feeds.updateWebFeedSelection(1, second.id, input(11).config, input(11).parsed),
+      ).not.toBeNull();
+      database.feeds.deleteFeed(1, first.id);
+      expect(database.feeds.createWebFeed(1, input(10)).id).toBeGreaterThan(0);
+      expect(database.feeds.listFeeds(1).filter((feed) => feed.sourceKind === "web")).toHaveLength(
+        10,
+      );
+      for (let index = 0; index < 11; index += 1) {
+        privateDatabase.feeds.createWebFeed(1, input(index));
+      }
+      expect(privateDatabase.feeds.listFeeds(1)).toHaveLength(11);
+    } finally {
+      database.close();
+      privateDatabase.close();
+    }
+  });
+
   it("limits a new page subscription without importing the skipped backlog later", async () => {
     const database = await temporaryDatabase();
     const pageUrl = "https://example.test/updates";
