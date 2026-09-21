@@ -13,6 +13,7 @@ import { api, errorMessage } from "./api";
 import type { AppRouteController } from "./app-route";
 import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
 import type { ReaderDataResource } from "./data-resource";
+import { useDelayedPending } from "./loading";
 import {
   appendUnseenArticles,
   articleQueryForReaderRoute,
@@ -86,7 +87,6 @@ export function useArticleQueue({
   const [displayedReadingMode, setDisplayedReadingMode] = useState(readingMode);
   const [loading, setLoading] = useState(false);
   const [loadedReaderRoute, setLoadedReaderRoute] = useState<ReaderRoute | null>(null);
-  const [loadingIndicatorKey, setLoadingIndicatorKey] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -700,12 +700,7 @@ export function useArticleQueue({
   const pending = loading || articleListReloadPending;
   const loadingKey = `${appRoutePath(appRoute)}:${readingMode}`;
 
-  useEffect(() => {
-    setLoadingIndicatorKey(null);
-    if (!pending || appRoute.kind !== "reader") return;
-    const timer = window.setTimeout(() => setLoadingIndicatorKey(loadingKey), 300);
-    return () => window.clearTimeout(timer);
-  }, [appRoute.kind, loadingKey, pending]);
+  const showLoading = useDelayedPending(pending && appRoute.kind === "reader", loadingKey);
 
   return {
     readingMode: displayedReadingMode,
@@ -713,7 +708,7 @@ export function useArticleQueue({
     setArticles,
     articlesRef,
     loading: pending,
-    showLoading: pending && (appRoute.kind !== "reader" || loadingIndicatorKey === loadingKey),
+    showLoading: pending && (appRoute.kind !== "reader" || showLoading),
     loadedReaderRoute,
     loadingMore,
     error,

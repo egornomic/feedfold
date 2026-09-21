@@ -176,20 +176,6 @@
   padding-top: 14px;
 }
 
-.feed-settings-loading {
-  display: grid;
-  gap: 12px;
-  padding-block: 6px;
-}
-
-.feed-settings-loading .skeleton-line:nth-child(2) {
-  width: 82%;
-}
-
-.feed-settings-loading .skeleton-line:nth-child(3) {
-  width: 66%;
-}
-
 .feed-settings-summary {
   display: flex;
   flex-wrap: wrap;

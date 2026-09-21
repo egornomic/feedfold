@@ -32,10 +32,10 @@ import type {
 } from "./feed-management";
 import type { AddFeedSourceType } from "./feed-source";
 import { folderPathLabel } from "./folder-hierarchy";
+import { useDelayedPending } from "./loading";
 import type { RuleFormDraft } from "./management/rules";
 import { type AppView, ReaderToolbar, Sidebar } from "./navigation";
 import {
-  AppSkeleton,
   ArticleList,
   ArticleListSkeleton,
   EMPTY_ARTICLE_SUMMARY_STATE,
@@ -124,16 +124,6 @@ function usesSpaceForActivation(target: EventTarget | null): boolean {
   );
 }
 
-function ManagementRouteFallback() {
-  return (
-    <div className="management-route-loading" role="status" aria-label="Loading page">
-      <span className="skeleton-line wide" />
-      <span className="skeleton-line" />
-      <span className="skeleton-line short" />
-    </div>
-  );
-}
-
 export function App() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -199,7 +189,14 @@ export function App() {
   }
   if (!user) return <LoginPage onAuthenticated={setUser} />;
   return (
-    <ReaderApp key={user.id} user={user} onLogout={logout} onAccountDeleted={() => setUser(null)} />
+    <Suspense fallback={<SessionLoading />}>
+      <ReaderApp
+        key={user.id}
+        user={user}
+        onLogout={logout}
+        onAccountDeleted={() => setUser(null)}
+      />
+    </Suspense>
   );
 }
 
@@ -220,7 +217,7 @@ function ReaderApp({
   const dataResource = dataResourceRef.current;
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
-  const [rules, setRules] = useState<Rule[]>([]);
+  const [rules, setRules] = useState<Rule[] | null>(null);
   const [rulesLoading, setRulesLoading] = useState(false);
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [ruleDraft, setRuleDraft] = useState<RuleFormDraft | null>(null);
@@ -314,6 +311,20 @@ function ReaderApp({
     readingMode: queue.readingMode,
     showToast,
   });
+  const showRouteLoading = useDelayedPending(route.pending, appRoutePath(route.current()));
+  const articlePending =
+    queue.readingMode === "magazine" &&
+    route.routedArticleId !== null &&
+    !queue.fullContentLoadedIds.current.has(route.routedArticleId) &&
+    !articleActions.articleContentErrors.has(route.routedArticleId);
+  const showArticleLoading = useDelayedPending(articlePending, route.routedArticleId);
+  const readerWasOpen = useRef(false);
+  const readerOpen =
+    route.routedArticleId !== null &&
+    (readerWasOpen.current || !articlePending || showArticleLoading);
+  useLayoutEffect(() => {
+    readerWasOpen.current = readerOpen;
+  }, [readerOpen]);
   const displayedReaderRoute =
     route.route.kind === "reader" && !queue.showLoading && !queue.error
       ? (queue.loadedReaderRoute ?? route.readerRoute)
@@ -591,7 +602,7 @@ function ReaderApp({
         sequence.current = { startedAt: Date.now() };
         return;
       }
-      if (queue.loading) return;
+      if (queue.loading || route.pending) return;
       if (key === "r" && !bootstrap.capabilities.manualRefresh) return;
       if (event.shiftKey && key === "r") {
         event.preventDefault();
@@ -681,11 +692,11 @@ function ReaderApp({
     shortcutHelpOpen,
   ]);
 
-  if (!bootstrap) {
+  if (!bootstrap || (route.view === "reader" && !queue.loadedReaderRoute && !queue.error)) {
     return bootstrapError ? (
       <StartupError message={bootstrapError} retry={() => void dataResource.loadBootstrap()} />
     ) : (
-      <AppSkeleton />
+      <SessionLoading />
     );
   }
 
@@ -695,7 +706,6 @@ function ReaderApp({
     displayedReaderRoute.scope === "feed" ? displayedReaderRoute.scopeId : null;
   const displayedFolderId =
     displayedReaderRoute.scope === "folder" ? displayedReaderRoute.scopeId : null;
-  const readerOpen = route.routedArticleId !== null;
   const title = readerScopeLabel(
     bootstrap,
     displayedFeedId,
@@ -739,7 +749,18 @@ function ReaderApp({
         onLogout={onLogout}
       />
 
-      <main id="main-content" className="main-column" tabIndex={-1}>
+      {showRouteLoading ? (
+        <div className="route-loading-status" role="status">
+          Opening page…
+        </div>
+      ) : null}
+      <main
+        id="main-content"
+        className="main-column"
+        tabIndex={-1}
+        inert={route.pending}
+        aria-busy={route.pending}
+      >
         {route.view === "reader" ? (
           <>
             <ReaderToolbar
@@ -963,72 +984,64 @@ function ReaderApp({
             </div>
           </>
         ) : route.route.kind === "add-feed" ? (
-          <Suspense fallback={<ManagementRouteFallback />}>
-            <AddFeedPage
-              bootstrap={bootstrap}
-              initialSourceUrl={route.route.sourceUrl}
-              initialSourceType={route.route.sourceType}
-              mutations={dataResource}
-              onMenu={() => setNavOpen(true)}
-              onBack={() => route.navigate({ kind: "feeds" }, "replace")}
-              showToast={showToast}
-            />
-          </Suspense>
+          <AddFeedPage
+            bootstrap={bootstrap}
+            initialSourceUrl={route.route.sourceUrl}
+            initialSourceType={route.route.sourceType}
+            mutations={dataResource}
+            onMenu={() => setNavOpen(true)}
+            onBack={() => route.navigate({ kind: "feeds" }, "replace")}
+            showToast={showToast}
+          />
         ) : route.view === "feeds" ? (
-          <Suspense fallback={<ManagementRouteFallback />}>
-            <FeedsPage
-              bootstrap={bootstrap}
-              mutations={dataResource}
-              onMenu={() => setNavOpen(true)}
-              onAddFeed={openAddFeed}
-              onAddFolder={() => setManagementRequest({ kind: "create-folder" })}
-              onRefresh={(feedId) => void refresh(feedId)}
-              onFeedAction={openFeedManagement}
-              onFolderAction={openFolderManagement}
-              onMoveFeed={moveFeed}
-              showToast={showToast}
-            />
-          </Suspense>
+          <FeedsPage
+            bootstrap={bootstrap}
+            mutations={dataResource}
+            onMenu={() => setNavOpen(true)}
+            onAddFeed={openAddFeed}
+            onAddFolder={() => setManagementRequest({ kind: "create-folder" })}
+            onRefresh={(feedId) => void refresh(feedId)}
+            onFeedAction={openFeedManagement}
+            onFolderAction={openFolderManagement}
+            onMoveFeed={moveFeed}
+            showToast={showToast}
+          />
         ) : route.view === "rules" ? (
-          <Suspense fallback={<ManagementRouteFallback />}>
-            <RulesPage
-              bootstrap={bootstrap}
-              rules={rules}
-              loading={rulesLoading}
-              error={rulesError}
-              draft={ruleDraft}
-              mutations={dataResource}
-              onMenu={() => setNavOpen(true)}
-              onClearDraft={() => setRuleDraft(null)}
-              onReturnToArticle={returnToContextArticle}
-              onRetry={() => dataResource.reload({ articles: true, rules: true })}
-              showToast={showToast}
-            />
-          </Suspense>
+          <RulesPage
+            bootstrap={bootstrap}
+            rules={rules}
+            loading={rulesLoading}
+            error={rulesError}
+            draft={ruleDraft}
+            mutations={dataResource}
+            onMenu={() => setNavOpen(true)}
+            onClearDraft={() => setRuleDraft(null)}
+            onReturnToArticle={returnToContextArticle}
+            onRetry={() => dataResource.reload({ articles: true, rules: true })}
+            showToast={showToast}
+          />
         ) : (
-          <Suspense fallback={<ManagementRouteFallback />}>
-            <SettingsPage
-              userId={user.id}
-              category={route.route.kind === "settings" ? route.route.category : "appearance"}
-              settings={bootstrap.settings}
-              aiSettings={bootstrap.aiSettings}
-              theme={preferences.theme}
-              colorPalettes={preferences.colorPalettes}
-              fontSize={preferences.articleFontSize}
-              mutations={dataResource}
-              onMenu={() => setNavOpen(true)}
-              onCategory={(category, historyMode) =>
-                route.navigate({ kind: "settings", category }, historyMode)
-              }
-              onTheme={preferences.setTheme}
-              onColorPalette={preferences.setColorPalette}
-              onFontSize={preferences.setArticleFontSize}
-              onSettings={articleActions.applySettings}
-              onAiSettings={articleActions.applyAiSettings}
-              onAccountDeleted={onAccountDeleted}
-              showToast={showToast}
-            />
-          </Suspense>
+          <SettingsPage
+            userId={user.id}
+            category={route.route.kind === "settings" ? route.route.category : "appearance"}
+            settings={bootstrap.settings}
+            aiSettings={bootstrap.aiSettings}
+            theme={preferences.theme}
+            colorPalettes={preferences.colorPalettes}
+            fontSize={preferences.articleFontSize}
+            mutations={dataResource}
+            onMenu={() => setNavOpen(true)}
+            onCategory={(category, historyMode) =>
+              route.navigate({ kind: "settings", category }, historyMode)
+            }
+            onTheme={preferences.setTheme}
+            onColorPalette={preferences.setColorPalette}
+            onFontSize={preferences.setArticleFontSize}
+            onSettings={articleActions.applySettings}
+            onAiSettings={articleActions.applyAiSettings}
+            onAccountDeleted={onAccountDeleted}
+            showToast={showToast}
+          />
         )}
       </main>
 

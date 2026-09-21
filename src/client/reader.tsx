@@ -73,6 +73,7 @@ import {
   handleActionMenuKeyDown,
 } from "./feed-management";
 import { ImageLightbox, type ImageLightboxItem, type ImageLightboxState } from "./image-lightbox";
+import { useDelayedPending } from "./loading";
 import { interactionMotionIsInstant, useMotionPresence } from "./motion";
 import { animateHorizontalSpring, type HorizontalSpringController } from "./swipe-motion";
 import {
@@ -493,35 +494,6 @@ function ArticleLoadSentinel({
           <span>Loading more articles</span>
         </>
       ) : null}
-    </div>
-  );
-}
-
-export function AppSkeleton() {
-  return (
-    <div
-      className="app-shell app-loading"
-      role="status"
-      aria-busy="true"
-      aria-label="Loading feedfold"
-    >
-      <aside className="sidebar skeleton-sidebar">
-        <div className="skeleton-line wide" />
-        <div className="skeleton-line" />
-        <div className="skeleton-line" />
-        <div className="skeleton-line short" />
-      </aside>
-      <main className="main-column">
-        <div className="reader-toolbar skeleton-toolbar">
-          <div className="reader-title-row" aria-hidden="true">
-            <span className="menu-button" />
-          </div>
-        </div>
-        <div className="reading-workspace mode-magazine">
-          <ArticleListSkeleton mode="magazine" />
-        </div>
-      </main>
-      <span className="sr-only">Loading feeds and articles</span>
     </div>
   );
 }
@@ -1771,6 +1743,10 @@ export function ReaderPane({
   const [activeSurface, setActiveSurface] = useState<ArticleSurfaceSnapshot | null>(initialSurface);
   const [outgoingSurface, setOutgoingSurface] = useState<OutgoingArticleSurface | null>(null);
   const [navigationPending, setNavigationPending] = useState(false);
+  const showContentLoading = useDelayedPending(
+    article !== null && !contentLoaded && !contentError,
+    article?.id ?? null,
+  );
   const activeLayerRef = useRef<HTMLDivElement>(null);
   const outgoingLayerRef = useRef<HTMLDivElement>(null);
   const activeSurfaceRef = useRef(activeSurface);
@@ -1781,12 +1757,10 @@ export function ReaderPane({
   const suppressSwipeSurfaceClick = useRef(false);
   const pendingNavigation = useRef<PendingArticleNavigation | null>(null);
   const nextRequestId = useRef(0);
-  const propArticleId = useRef(article?.id ?? null);
   const paginationRestoreRequestId = useRef<number | null>(null);
   const transitionSetup = useRef<ArticleTransitionSetup | null>(null);
   activeSurfaceRef.current = activeSurface;
   outgoingSurfaceRef.current = outgoingSurface;
-  propArticleId.current = article?.id ?? null;
 
   const preserveActivePresentation = useCallback(() => {
     const surface = activeLayerRef.current;
@@ -1883,7 +1857,6 @@ export function ReaderPane({
       const restoreFrameHandle = window.requestAnimationFrame(() => {
         const request = pendingNavigation.current;
         if (request?.id !== requestId) return;
-        if (propArticleId.current !== activeSurfaceRef.current?.article.id) return;
         paginationRestoreRequestId.current = requestId;
         restoreActiveSurface(request.releaseVelocity, request.reducedMotion);
       });
@@ -1915,6 +1888,15 @@ export function ReaderPane({
       ? { article, contentLoaded, contentError, fullContentVisible, summaryState, translationState }
       : null;
     const currentSurface = activeSurfaceRef.current;
+    if (
+      nextSurface &&
+      currentSurface &&
+      nextSurface.article.id !== currentSurface.article.id &&
+      !nextSurface.contentLoaded &&
+      !nextSurface.contentError &&
+      !showContentLoading
+    )
+      return;
     if (nextSurface?.article.id === currentSurface?.article.id) {
       if (
         nextSurface &&
@@ -1987,6 +1969,7 @@ export function ReaderPane({
     fullContentVisible,
     preserveActivePresentation,
     summaryState,
+    showContentLoading,
     translationState,
   ]);
 
@@ -2364,7 +2347,7 @@ export function ReaderPane({
             onNext={() => navigateWithAnimation("next")}
             canPrevious={canPrevious}
             canNext={canNext}
-            navigationPending={navigationPending}
+            navigationPending={navigationPending || activeSurface.article.id !== article?.id}
             onToggleRead={onToggleRead}
             onToggleStar={onToggleStar}
             onCopy={onCopy}
