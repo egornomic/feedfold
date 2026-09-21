@@ -18,7 +18,8 @@ export class RuleRepository {
       .prepare(
         `SELECT id, name, feed_id AS feedId, folder_id AS folderId,
                 conditions_json AS conditionsJson, condition_operator AS conditionOperator, action,
-                enabled, matched_count AS matchedCount, created_at AS createdAt, updated_at AS updatedAt
+                enabled, (SELECT COUNT(*) FROM article_rule_matches WHERE rule_id = rules.id) AS matchedCount,
+                created_at AS createdAt, updated_at AS updatedAt
          FROM rules WHERE user_id = ? ORDER BY created_at DESC, id DESC`,
       )
       .all(userId) as Row[];
@@ -47,8 +48,8 @@ export class RuleRepository {
       .prepare(
         `INSERT INTO rules (
            user_id, name, feed_id, folder_id, conditions_json, condition_operator, action, enabled,
-           matched_count, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         userId,
@@ -144,7 +145,6 @@ export class RuleRepository {
   private reapplyRule(ruleId: number): void {
     const run = this.sqlite.transaction(() => {
       this.sqlite.prepare("DELETE FROM article_rule_matches WHERE rule_id = ?").run(ruleId);
-      this.sqlite.prepare("UPDATE rules SET matched_count = 0 WHERE id = ?").run(ruleId);
       const rows = this.sqlite
         .prepare(
           `SELECT articles.id, feeds.id AS feedId
@@ -235,9 +235,7 @@ export class RuleRepository {
              JOIN feed_articles ON feed_articles.feed_id = feeds.id
              WHERE feed_articles.article_id = ?`,
             );
-    let recomputed = false;
     for (const articleId of articleIds) {
-      recomputed = true;
       if (scope?.feedId !== undefined) deleteMatches.run(articleId, scope.feedId);
       else if (scope) deleteMatches.run(articleId, scope.userId);
       else deleteMatches.run(articleId);
@@ -252,23 +250,6 @@ export class RuleRepository {
         this.applyRuleToArticle(delivery.id, delivery.feedId, articleId);
       }
     }
-    if (!recomputed) return;
-    const updateMatchedCounts = scope
-      ? this.sqlite.prepare(
-          `UPDATE rules
-           SET matched_count = (
-             SELECT COUNT(*) FROM article_rule_matches WHERE rule_id = rules.id
-           )
-           WHERE user_id = ?`,
-        )
-      : this.sqlite.prepare(
-          `UPDATE rules
-           SET matched_count = (
-             SELECT COUNT(*) FROM article_rule_matches WHERE rule_id = rules.id
-           )`,
-        );
-    if (scope) updateMatchedCounts.run(scope.userId);
-    else updateMatchedCounts.run();
   }
 
   private applyRuleToArticle(ruleId: number, feedId: number, articleId: number): void {
@@ -329,9 +310,6 @@ export class RuleRepository {
       )
       .run(feedId, articleId, ruleId);
     if (inserted.changes === 0) return;
-    this.sqlite
-      .prepare("UPDATE rules SET matched_count = matched_count + 1 WHERE id = ?")
-      .run(ruleId);
     if (rule.enabled === 1 && rule.action === "mark_read") {
       this.sqlite
         .prepare("UPDATE feed_articles SET is_read = 1 WHERE feed_id = ? AND article_id = ?")

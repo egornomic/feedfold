@@ -91,6 +91,25 @@ function titles(database: AppDatabase, state: "all" | "unread" = "all"): string[
 }
 
 describe("article filtering rules", () => {
+  it("counts only remaining matches after subscriptions are removed", () => {
+    const { database, scopedFeedId, outsideFeedId } = seededDatabase();
+    const rule = database.rules.createRule(TEST_USER_ID, {
+      name: "Articles by Someone",
+      conditions: [{ field: "author", pattern: "Someone" }],
+      conditionOperator: "and",
+      action: "keep",
+    });
+    expect(rule.matchedCount).toBe(4);
+
+    expect(database.feeds.deleteFeed(TEST_USER_ID, scopedFeedId)).toBe(true);
+    expect(database.rules.getRule(TEST_USER_ID, rule.id)?.matchedCount).toBe(1);
+    expect(titles(database)).toEqual(["Outside unmatched"]);
+
+    expect(database.feeds.deleteFeed(TEST_USER_ID, outsideFeedId)).toBe(true);
+    expect(database.rules.getRule(TEST_USER_ID, rule.id)?.matchedCount).toBe(0);
+    expect(titles(database)).toEqual([]);
+  });
+
   it("applies saved rules when a feed refresh stores several articles at once", () => {
     const database = new AppDatabase(":memory:");
     databases.push(database);
