@@ -1,16 +1,12 @@
 import { Readable } from "node:stream";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { inputs } from "../../../shared/api-inputs.js";
-import { telegramPostIdentity } from "../../../shared/telegram.js";
 import type { MarkReadRequest } from "../../../shared/types.js";
-import { xVideoPostIds } from "../../../shared/x.js";
-import type { ExtractionQueue } from "../../extraction.js";
-import { QuotaExceededError, type QuotaService } from "../../quota.js";
-import type { TelegramMediaService } from "../../telegram-media.js";
+import type { ApplicationService } from "../../application-service.js";
+import { QuotaExceededError } from "../../quota.js";
 import type { XMediaService } from "../../x-media.js";
 import type { AiService } from "../ai/service.js";
-import type { ExtractionService } from "../extraction/service.js";
 import { idParams, missing, type UserId } from "../routes.js";
 import type { ArticleRepository } from "./repository.js";
 
@@ -18,66 +14,18 @@ export async function articleRoutes(
   app: FastifyInstance,
   {
     articles,
-    extractions,
-    extractionQueue,
+    application,
     ai,
-    telegramMedia,
     xMedia,
-    quotas,
     userId,
   }: {
     articles: ArticleRepository;
-    extractions: ExtractionService;
-    extractionQueue: ExtractionQueue;
+    application: ApplicationService;
     ai: AiService;
-    telegramMedia: TelegramMediaService;
     xMedia: XMediaService;
-    quotas: QuotaService;
     userId: UserId;
   },
 ): Promise<void> {
-  const resolveTelegramMedia = async (
-    accountId: number,
-    articleId: number,
-    reply: FastifyReply,
-  ) => {
-    const article = articles.getArticle(accountId, articleId);
-    if (!article?.url || !telegramPostIdentity(article.url)) {
-      missing(reply, "Telegram media");
-      return null;
-    }
-    quotas.consume("media_proxy", accountId);
-    try {
-      return await telegramMedia.mediaForPost(article.url);
-    } catch (error) {
-      if (error instanceof QuotaExceededError) throw error;
-      reply.code(502).send({ error: "Telegram media is temporarily unavailable. Try again." });
-      return null;
-    }
-  };
-
-  const resolveXMedia = async (
-    accountId: number,
-    articleId: number,
-    postId: string,
-    reply: FastifyReply,
-  ) => {
-    const article = articles.getArticle(accountId, articleId);
-    const postIds = article ? xVideoPostIds(article.url, article.feedContentHtml) : [];
-    if (!postIds.includes(postId)) {
-      missing(reply, "X video");
-      return null;
-    }
-    quotas.consume("media_proxy", accountId);
-    try {
-      return await xMedia.mediaForPost(postId);
-    } catch (error) {
-      if (error instanceof QuotaExceededError) throw error;
-      reply.code(502).send({ error: "X video is temporarily unavailable. Try again." });
-      return null;
-    }
-  };
-
   app.get("/api/articles", async (request) => {
     const query = z
       .object({
@@ -102,10 +50,9 @@ export async function articleRoutes(
     return article ?? missing(reply, "Article");
   });
 
-  app.get("/api/articles/:id/telegram-media", async (request, reply) => {
+  app.get("/api/articles/:id/telegram-media", async (request) => {
     const { id } = idParams.parse(request.params);
-    const items = await resolveTelegramMedia(userId(request), id, reply);
-    if (!items) return reply;
+    const items = await application.telegramItems(userId(request), id);
     return {
       items: items.map((item, index) => ({
         kind: item.kind,
@@ -121,11 +68,7 @@ export async function articleRoutes(
 
   app.get("/api/articles/:id/telegram-media-preview", async (request, reply) => {
     const { id } = idParams.parse(request.params);
-    const items = await resolveTelegramMedia(userId(request), id, reply);
-    if (!items) return reply;
-    const first = items[0];
-    if (!first) return missing(reply, "Telegram media");
-    return reply.redirect(first.posterUrl ?? first.url);
+    return reply.redirect(await application.telegramPreviewUrl(userId(request), id));
   });
 
   const mediaItemParams = z.object({
@@ -135,26 +78,23 @@ export async function articleRoutes(
 
   app.get("/api/articles/:id/telegram-media/:index/source", async (request, reply) => {
     const { id, index } = mediaItemParams.parse(request.params);
-    const items = await resolveTelegramMedia(userId(request), id, reply);
-    if (!items) return reply;
+    const items = await application.telegramItems(userId(request), id);
     const item = items[index];
     return item ? reply.redirect(item.url) : missing(reply, "Telegram media");
   });
 
   app.get("/api/articles/:id/telegram-media/:index/poster", async (request, reply) => {
     const { id, index } = mediaItemParams.parse(request.params);
-    const items = await resolveTelegramMedia(userId(request), id, reply);
-    if (!items) return reply;
+    const items = await application.telegramItems(userId(request), id);
     const posterUrl = items[index]?.posterUrl;
     return posterUrl ? reply.redirect(posterUrl) : missing(reply, "Telegram media poster");
   });
 
   const xMediaParams = idParams.extend({ postId: z.string().regex(/^\d{1,30}$/) });
 
-  app.get("/api/articles/:id/x-media/:postId", async (request, reply) => {
+  app.get("/api/articles/:id/x-media/:postId", async (request) => {
     const { id, postId } = xMediaParams.parse(request.params);
-    const media = await resolveXMedia(userId(request), id, postId, reply);
-    if (!media) return reply;
+    const media = await application.xMedia(userId(request), id, postId);
     return {
       sourceUrl: `/api/articles/${id}/x-media/${postId}/source`,
       posterUrl: media.posterUrl ? `/api/articles/${id}/x-media/${postId}/poster` : null,
@@ -164,8 +104,7 @@ export async function articleRoutes(
 
   app.get("/api/articles/:id/x-media/:postId/source", async (request, reply) => {
     const { id, postId } = xMediaParams.parse(request.params);
-    const media = await resolveXMedia(userId(request), id, postId, reply);
-    if (!media) return reply;
+    const media = await application.xMedia(userId(request), id, postId);
     try {
       const { response, cancel } = await xMedia.videoResponse(media, request.headers.range);
       for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
@@ -190,7 +129,7 @@ export async function articleRoutes(
 
   app.get("/api/articles/:id/x-media/:postId/poster", async (request, reply) => {
     const { id, postId } = xMediaParams.parse(request.params);
-    const media = await resolveXMedia(userId(request), id, postId, reply);
+    const media = await application.xMedia(userId(request), id, postId);
     return media?.posterUrl ? reply.redirect(media.posterUrl) : missing(reply, "X video poster");
   });
 
@@ -206,14 +145,9 @@ export async function articleRoutes(
     return { updated: articles.markArticlesRead(userId(request), body) };
   });
 
-  app.post("/api/articles/:id/extract", async (request, reply) => {
+  app.post("/api/articles/:id/extract", async (request) => {
     const { id } = idParams.parse(request.params);
-    const accountId = userId(request);
-    if (!articles.getArticle(accountId, id)) return missing(reply, "Article");
-    if (extractions.requestExtraction(accountId, id)) {
-      extractionQueue.prioritize(id);
-    }
-    return articles.getArticle(accountId, id);
+    return application.loadFullContent(userId(request), id);
   });
 
   app.post("/api/articles/:id/summary", async (request, reply) => {

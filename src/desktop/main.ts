@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SqliteError } from "better-sqlite3";
 import {
   app,
   BrowserWindow,
@@ -18,20 +17,17 @@ import {
   shell,
 } from "electron";
 import { chromium } from "playwright";
-import { ZodError } from "zod";
-import { AiError } from "../server/ai/errors.js";
-import { ApplicationApi, ApplicationApiError, LOCAL_USER_ID } from "../server/application-api.js";
+import { ApplicationApi, LOCAL_USER_ID } from "../server/application-api.js";
+import { applicationError } from "../server/application-error.js";
 import { AppDatabase } from "../server/database.js";
-import { InvalidRequestError, OperationForbiddenError } from "../server/errors.js";
+import { ApplicationApiError } from "../server/errors.js";
 import { ExtractionQueue } from "../server/extraction.js";
 import { AiService } from "../server/features/ai/service.js";
-import { FeedDiscoveryError } from "../server/feed-discovery.js";
 import { DefaultFeedSourceLoader } from "../server/feed-source-loader.js";
 import { closePublicNetwork } from "../server/public-network.js";
-import { QuotaExceededError } from "../server/quota.js";
 import { FeedRefreshService } from "../server/refresh.js";
 import { TelegramMediaService } from "../server/telegram-media.js";
-import { WebFeedError, WebFeedService } from "../server/web-feed.js";
+import { WebFeedService } from "../server/web-feed.js";
 import { XMediaService } from "../server/x-media.js";
 import {
   DESKTOP_DATA_CHANGED_CHANNEL,
@@ -301,83 +297,8 @@ function trackWindowState(window: BrowserWindow, initialState: WindowState): () 
 }
 
 function errorResponse(error: unknown): DesktopResponse {
-  if (error instanceof ApplicationApiError) {
-    return {
-      ok: false,
-      error: { message: error.message, status: error.status, code: error.code },
-    };
-  }
-  if (error instanceof AiError) {
-    return {
-      ok: false,
-      error: { message: error.message, status: error.statusCode, code: error.code },
-    };
-  }
-  if (error instanceof WebFeedError) {
-    return {
-      ok: false,
-      error: { message: error.message, status: 422, code: error.kind },
-    };
-  }
-  if (error instanceof FeedDiscoveryError) {
-    return {
-      ok: false,
-      error: { message: error.message, status: 422, code: error.kind },
-    };
-  }
-  if (error instanceof ZodError) {
-    return {
-      ok: false,
-      error: {
-        message: error.issues[0]?.message ?? "The request is invalid.",
-        status: 400,
-        code: null,
-      },
-    };
-  }
-  if (error instanceof InvalidRequestError) {
-    return { ok: false, error: { message: error.message, status: 400, code: null } };
-  }
-  if (error instanceof OperationForbiddenError) {
-    return { ok: false, error: { message: error.message, status: 403, code: null } };
-  }
-  if (error instanceof QuotaExceededError) {
-    return {
-      ok: false,
-      error: { message: error.message, status: error.statusCode, code: error.code },
-    };
-  }
-  if (error instanceof SqliteError) {
-    if (error.code === "SQLITE_FULL") {
-      return {
-        ok: false,
-        error: {
-          message: "This feedfold server has reached its storage limit.",
-          status: 507,
-          code: "quota_exceeded",
-        },
-      };
-    }
-    if (
-      error.code === "SQLITE_CONSTRAINT_UNIQUE" ||
-      error.code === "SQLITE_CONSTRAINT_PRIMARYKEY"
-    ) {
-      return {
-        ok: false,
-        error: { message: "This item already exists.", status: 409, code: null },
-      };
-    }
-    if (error.code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
-      return {
-        ok: false,
-        error: {
-          message: "That feed or folder no longer exists. Reload and try again.",
-          status: 400,
-          code: null,
-        },
-      };
-    }
-  }
+  const known = applicationError(error);
+  if (known) return { ok: false, error: known };
   console.error("feedfold desktop request failed");
   return {
     ok: false,

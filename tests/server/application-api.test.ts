@@ -1,4 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, assert, describe, expect, it } from "vitest";
@@ -6,7 +8,9 @@ import { type ApiRuntime, createApiClient } from "../../src/client/api-client.js
 import { ApiError } from "../../src/client/api-contract.js";
 import { createApp } from "../../src/server/app.js";
 import { ApplicationApi, type ApplicationApiServices } from "../../src/server/application-api.js";
+import { applicationError } from "../../src/server/application-error.js";
 import { AppDatabase } from "../../src/server/database.js";
+import { PRIVATE_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
 import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
@@ -24,9 +28,11 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-function applicationServices(database: AppDatabase): ApplicationApiServices {
+function applicationServices(
+  database: AppDatabase,
+  webFeedService = new WebFeedService(),
+): ApplicationApiServices {
   const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
-  const webFeedService = new WebFeedService();
   const refreshService = new FeedRefreshService(
     database.feeds,
     new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000, webFeedService),
@@ -46,6 +52,55 @@ function applicationServices(database: AppDatabase): ApplicationApiServices {
     telegramMediaService: new TelegramMediaService(1_000),
     xMediaService: new XMediaService(1_000),
   };
+}
+
+async function transportClient(transport: "web" | "desktop", services: ApplicationApiServices) {
+  const database = services.database;
+  const application = new ApplicationApi(services);
+  const app = await createApp({ ...services, authService: new AuthService(database.auth) });
+  cleanups.push(() => app.close());
+  const registration = await app.inject({
+    method: "POST",
+    url: "/api/auth/register",
+    payload: { username: "contract-reader", password: "reader-password" },
+  });
+  expect(registration.statusCode).toBe(201);
+  const origin = await app.listen({ host: "127.0.0.1", port: 0 });
+  const setCookie = registration.headers["set-cookie"];
+  const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";", 1)[0];
+  const request: ApiRuntime["request"] = async <T>(
+    operation: DesktopOperation,
+    payload: unknown,
+    path: string,
+    init?: RequestInit,
+  ) => {
+    if (transport === "desktop") {
+      try {
+        return (await application.invoke({ operation, payload })) as T;
+      } catch (error) {
+        const known = applicationError(error);
+        if (known) throw new ApiError(known.message, known.status, known.code);
+        throw error;
+      }
+    }
+    const response = await fetch(origin + path, {
+      ...init,
+      headers: {
+        cookie: cookie ?? "",
+        ...(init?.body ? { "content-type": "application/json" } : {}),
+      },
+    });
+    if (!response.ok) {
+      const error = (await response.json()) as { error: string; code?: string };
+      throw new ApiError(error.error, response.status, error.code);
+    }
+    return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
+  };
+  return createApiClient({
+    request,
+    subscribeReaderDataInvalidations: () => () => {},
+    exportOpml: async () => {},
+  });
 }
 
 describe("local application API", () => {
@@ -184,40 +239,7 @@ describe("local application API", () => {
   ] as const)("accepts the shared reading and management inputs through %s", async (transport) => {
     const database = new AppDatabase(":memory:");
     const services = applicationServices(database);
-    const application = new ApplicationApi(services);
-    const app = await createApp({ ...services, authService: new AuthService(database.auth) });
-    cleanups.push(() => app.close());
-    const registration = await app.inject({
-      method: "POST",
-      url: "/api/auth/register",
-      payload: { username: "contract-reader", password: "reader-password" },
-    });
-    expect(registration.statusCode).toBe(201);
-    const setCookie = registration.headers["set-cookie"];
-    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";", 1)[0];
-    const request: ApiRuntime["request"] = async <T>(
-      operation: DesktopOperation,
-      payload: unknown,
-      path: string,
-      init?: RequestInit,
-    ) => {
-      if (transport === "desktop") return (await application.invoke({ operation, payload })) as T;
-      const response = await app.inject({
-        method: (init?.method ?? "GET") as "GET" | "POST" | "PATCH" | "DELETE" | "PUT",
-        url: path,
-        headers: { cookie, "content-type": "application/json" },
-        ...(init?.body ? { payload: String(init.body) } : {}),
-      });
-      if (response.statusCode >= 400) {
-        throw new ApiError(response.json<{ error: string }>().error, response.statusCode);
-      }
-      return response.statusCode === 204 ? (undefined as T) : response.json<T>();
-    };
-    const client = createApiClient({
-      request,
-      subscribeReaderDataInvalidations: () => () => {},
-      exportOpml: async () => {},
-    });
+    const client = await transportClient(transport, services);
 
     const parent = await client.createFolder({ name: "Reading" });
     expect(parent).toMatchObject({ parentId: null, sortDirection: "newest" });
@@ -289,4 +311,96 @@ describe("local application API", () => {
       pollIntervalMinutes: 10,
     });
   });
+  it.each([
+    "web",
+    "desktop",
+  ] as const)("subscribes to a website, repairs its selection, and rejects invalid operations through %s", async (transport) => {
+    let updated = false;
+    const source = createServer((_request, response) => {
+      response.setHeader("Content-Type", "text/html");
+      const titles = ["Alpha", "Beta", updated ? "Delta" : "Gamma"];
+      response.end(
+        `<!doctype html><title>Release updates</title><main><section aria-label="Releases">
+          ${titles.map((title) => `<article><h2><a href="/${title}">${title}</a></h2><p>A release announcement.</p></article>`).join("")}
+        </section></main>`,
+      );
+    });
+    await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          source.closeAllConnections();
+          source.close(() => resolve());
+        }),
+    );
+    const sourceUrl = `http://127.0.0.1:${(source.address() as AddressInfo).port}/`;
+    const database = new AppDatabase(":memory:", 20, {
+      ...PRIVATE_DEPLOYMENT_POLICY,
+      quotas: { ...PRIVATE_DEPLOYMENT_POLICY.quotas, opmlFeedsPerImport: 1 },
+    });
+    const services = applicationServices(
+      database,
+      new WebFeedService({
+        allowPrivateNetworks: true,
+        timeoutMs: 4_000,
+        settleQuietMs: 100,
+        settleTimeoutMs: 2_000,
+      }),
+    );
+    const client = await transportClient(transport, services);
+    const analysis = await client.analyzeWebPage(sourceUrl);
+    const candidate = analysis.candidates.find((candidate) => candidate.articles.length === 3);
+    assert.isDefined(candidate);
+    const feed = await client.createFeed({
+      sourceKind: "web",
+      feedUrl: analysis.pageUrl,
+      webConfig: candidate.config,
+    });
+    const titles = async () =>
+      (await client.articles({ state: "all", feedId: feed.id })).articles.map(
+        (article) => article.title,
+      );
+    expect(await titles()).toEqual(expect.arrayContaining(["Alpha", "Beta", "Gamma"]));
+    expect((await client.analyzeWebFeed(feed.id)).savedSelectionMatched).toBe(true);
+    updated = true;
+    await client.updateWebFeedSelection(feed.id, candidate.config);
+    expect(await titles()).toEqual(expect.arrayContaining(["Alpha", "Beta", "Gamma", "Delta"]));
+    await expect(client.analyzeWebFeed(999_999)).rejects.toMatchObject({ status: 404 });
+    await expect(client.updateWebFeedSelection(999_999, candidate.config)).rejects.toMatchObject({
+      status: 404,
+    });
+    const published = (await client.bootstrap()).feeds.find(
+      (feed) => feed.sourceKind === "published",
+    );
+    assert.isDefined(published);
+    await expect(client.analyzeWebFeed(published.id)).rejects.toMatchObject({ status: 400 });
+    await expect(
+      client.updateWebFeedSelection(published.id, candidate.config),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(client.loadFullContent(999_999)).rejects.toMatchObject({ status: 404 });
+    await expect(client.telegramArticleMedia(999_999)).rejects.toMatchObject({ status: 404 });
+    await expect(client.xArticleMedia(999_999, "123")).rejects.toMatchObject({ status: 404 });
+    await client.updateFeed(feed.id, { paused: true });
+    await expect(client.refresh([feed.id])).rejects.toMatchObject({ status: 400 });
+    await client.updateFeed(feed.id, { paused: false });
+    await client.refresh([feed.id]);
+    await services.refreshService.waitForIdle();
+    expect((await client.feed(feed.id)).healthStatus).toBe("healthy");
+    const opml = (outlines: string) =>
+      new File(
+        [`<?xml version="1.0"?><opml version="2.0"><body>${outlines}</body></opml>`],
+        "feeds.opml",
+      );
+    const outline =
+      '<outline text="Releases" xmlUrl="https://github.com/egornomic/feedfold/releases.atom"/>';
+    expect(await client.importOpml(opml(outline))).toMatchObject({
+      imported: 0,
+      duplicates: 1,
+      failed: [],
+    });
+    await expect(client.importOpml(opml(outline + outline))).rejects.toMatchObject({
+      status: 429,
+      code: "quota_exceeded",
+    });
+  }, 20_000);
 });

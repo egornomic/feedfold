@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { inputs } from "../../../shared/api-inputs.js";
-import { QuotaExceededError } from "../../quota.js";
-import type { FeedRefreshService } from "../../refresh.js";
+import type { ApplicationService } from "../../application-service.js";
 import type { UserId } from "../routes.js";
 import type { OpmlService } from "./service.js";
 
@@ -9,22 +8,13 @@ export async function opmlRoutes(
   app: FastifyInstance,
   {
     opml,
-    refreshService,
+    application,
     userId,
-  }: { opml: OpmlService; refreshService: FeedRefreshService; userId: UserId },
+  }: { opml: OpmlService; application: ApplicationService; userId: UserId },
 ): Promise<void> {
-  app.post("/api/opml/import", async (request, reply) => {
+  app.post("/api/opml/import", async (request) => {
     const { opml: source } = inputs.importOpml.parse(request.body);
-    try {
-      const { feedIds, ...result } = opml.import(userId(request), source);
-      refreshService.request(feedIds);
-      return result;
-    } catch (error) {
-      if (error instanceof QuotaExceededError) throw error;
-      return reply
-        .code(400)
-        .send({ error: error instanceof Error ? error.message : String(error) });
-    }
+    return application.importOpml(userId(request), source);
   });
 
   app.get("/api/opml/export", async (request, reply) => {

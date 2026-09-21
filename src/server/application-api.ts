@@ -2,54 +2,24 @@ import { z } from "zod";
 import { resourceId as id, inputs } from "../shared/api-inputs.js";
 import type { DesktopRequest } from "../shared/desktop.js";
 import { readerMutationRoutes } from "../shared/reader-mutations.js";
-import { telegramPostIdentity } from "../shared/telegram.js";
 import type { MarkReadRequest } from "../shared/types.js";
-import { xVideoPostIds } from "../shared/x.js";
 import { accountActivityTouchBefore } from "./account-activity.js";
+import { ApplicationService, type ApplicationServices } from "./application-service.js";
 import type { AppDatabase } from "./database.js";
-import type { ExtractionQueue } from "./extraction.js";
+import { ApplicationApiError, requireResource as notFound } from "./errors.js";
 import type { AiService } from "./features/ai/service.js";
-import { FeedSubscriptionService } from "./features/feeds/subscription-service.js";
-import { discoverFeed } from "./feed-discovery.js";
 import type { FeedRefreshService } from "./refresh.js";
-import type { TelegramMediaService } from "./telegram-media.js";
 import type { WebFeedService } from "./web-feed.js";
-import type { XMediaService } from "./x-media.js";
 
 export const LOCAL_USER_ID = 1;
 const LOCAL_USER = { id: "local", username: "On this Mac", hasPassword: false } as const;
-
-export class ApplicationApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-    readonly code: string | null = null,
-  ) {
-    super(message);
-    this.name = "ApplicationApiError";
-  }
-}
-
-function notFound<T>(value: T | null | undefined, resource: string): T {
-  if (value === null || value === undefined) {
-    throw new ApplicationApiError(404, `${resource} was not found.`);
-  }
-  return value;
-}
 
 function input<T>(schema: z.ZodType<T>, payload: unknown): T {
   return schema.parse(payload);
 }
 
-export interface ApplicationApiServices {
-  database: AppDatabase;
-  extractionQueue: ExtractionQueue;
-  refreshService: FeedRefreshService;
+export interface ApplicationApiServices extends ApplicationServices {
   webFeedService: WebFeedService;
-  aiService: AiService;
-  telegramMediaService: TelegramMediaService;
-  xMediaService: XMediaService;
-  feedDiscoveryTimeoutMs?: number;
 }
 
 /**
@@ -57,34 +27,22 @@ export interface ApplicationApiServices {
  * It intentionally has no HTTP, cookies, or account lifecycle.
  */
 export class ApplicationApi {
-  readonly #database: AppDatabase;
-  readonly #extractionQueue: ExtractionQueue;
   readonly #refreshService: FeedRefreshService;
-  readonly #subscriptions: FeedSubscriptionService;
+  readonly #application: ApplicationService;
+  readonly #database: AppDatabase;
   readonly #webFeedService: WebFeedService;
   readonly #ai: AiService;
-  readonly #telegramMedia: TelegramMediaService;
-  readonly #xMedia: XMediaService;
-  readonly #feedDiscoveryTimeoutMs: number | undefined;
   readonly #userId = LOCAL_USER_ID;
 
   constructor(services: ApplicationApiServices) {
     this.#database = services.database;
+    this.#refreshService = services.refreshService;
     if (this.#database.wasNewDatabase) {
       this.#database.feeds.createDefaultFeed(this.#userId);
     }
-    this.#extractionQueue = services.extractionQueue;
-    this.#refreshService = services.refreshService;
-    this.#subscriptions = new FeedSubscriptionService(
-      services.database.feeds,
-      services.refreshService,
-      services.webFeedService,
-    );
+    this.#application = new ApplicationService(services);
     this.#webFeedService = services.webFeedService;
     this.#ai = services.aiService;
-    this.#telegramMedia = services.telegramMediaService;
-    this.#xMedia = services.xMediaService;
-    this.#feedDiscoveryTimeoutMs = services.feedDiscoveryTimeoutMs;
   }
 
   async invoke(request: DesktopRequest): Promise<unknown> {
@@ -141,10 +99,7 @@ export class ApplicationApi {
       case "passkeyLogin":
         throw new ApplicationApiError(400, "Account authentication is managed by macOS.");
       case "bootstrap":
-        return {
-          ...this.#database.bootstrap.getBootstrap(this.#userId),
-          aiSettings: this.#ai.getSettings(this.#userId),
-        };
+        return this.#application.bootstrap(this.#userId);
       case "articles":
         return this.#database.articles.listArticlePage(
           this.#userId,
@@ -156,7 +111,7 @@ export class ApplicationApi {
       }
       case "telegramArticleMedia": {
         const body = input(z.object({ id }).strict(), request.payload);
-        const items = await this.#telegramItems(body.id);
+        const items = await this.#application.telegramItems(this.#userId, body.id);
         return {
           items: items.map((item) => ({
             kind: item.kind,
@@ -171,7 +126,7 @@ export class ApplicationApi {
           z.object({ id, postId: z.string().regex(/^\d{1,30}$/) }).strict(),
           request.payload,
         );
-        const media = await this.#xMediaForArticle(body.id, body.postId);
+        const media = await this.#application.xMedia(this.#userId, body.id, body.postId);
         return {
           sourceUrl: media.url,
           posterUrl: media.posterUrl,
@@ -180,11 +135,7 @@ export class ApplicationApi {
       }
       case "loadFullContent": {
         const body = input(z.object({ id }).strict(), request.payload);
-        notFound(this.#database.articles.getArticle(this.#userId, body.id), "Article");
-        if (this.#database.extractions.requestExtraction(this.#userId, body.id)) {
-          this.#extractionQueue.prioritize(body.id);
-        }
-        return this.#database.articles.getArticle(this.#userId, body.id);
+        return this.#application.loadFullContent(this.#userId, body.id);
       }
       case "summarizeArticle": {
         const body = input(inputs.summarizeArticle.extend({ id }), request.payload);
@@ -216,20 +167,18 @@ export class ApplicationApi {
       }
       case "refresh": {
         const body = inputs.refresh.parse(request.payload ?? {});
-        return this.#refreshService.request(
-          this.#database.feeds.getManualRefreshFeedIds(this.#userId, body.feedIds),
-        );
+        return this.#application.refresh(this.#userId, body.feedIds);
       }
       case "discoverFeed": {
         const body = inputs.url.parse(request.payload);
-        return discoverFeed(body.url, this.#feedDiscoveryTimeoutMs);
+        return this.#application.discoverFeed(this.#userId, body.url);
       }
       case "analyzeWebPage": {
         const body = inputs.url.parse(request.payload);
-        return this.#webFeedService.analyze(String(this.#userId), body.url);
+        return this.#application.analyzeWebPage(this.#userId, body.url);
       }
       case "createFeed":
-        return this.#subscriptions.create(this.#userId, inputs.createFeed.parse(request.payload));
+        return this.#application.createFeed(this.#userId, inputs.createFeed.parse(request.payload));
       case "feed": {
         const body = input(z.object({ id }).strict(), request.payload);
         return notFound(this.#database.feeds.getFeed(this.#userId, body.id), "Feed");
@@ -247,34 +196,11 @@ export class ApplicationApi {
       }
       case "analyzeWebFeed": {
         const body = input(z.object({ id }).strict(), request.payload);
-        const feed = notFound(this.#database.feeds.getFeed(this.#userId, body.id), "Feed");
-        if (feed.sourceKind !== "web") {
-          throw new ApplicationApiError(400, "Choose a web feed before editing a page selection.");
-        }
-        const config = notFound(
-          this.#database.feeds.getWebFeedConfig(this.#userId, body.id),
-          "Page selection",
-        );
-        return this.#webFeedService.analyze(String(this.#userId), config.pageUrl, config);
+        return this.#application.analyzeWebFeed(this.#userId, body.id);
       }
       case "updateWebFeedSelection": {
         const body = input(inputs.updateWebFeedSelection.extend({ id }), request.payload);
-        const feed = notFound(this.#database.feeds.getFeed(this.#userId, body.id), "Feed");
-        if (feed.sourceKind !== "web") {
-          throw new ApplicationApiError(400, "Choose a web feed before editing a page selection.");
-        }
-        const config = body.config;
-        const extracted = await this.#webFeedService.extract(config);
-        const updated = notFound(
-          this.#database.feeds.updateWebFeedSelection(
-            this.#userId,
-            body.id,
-            config,
-            extracted.parsed,
-          ),
-          "Feed",
-        );
-        return updated;
+        return this.#application.updateWebFeedSelection(this.#userId, body.id, body.config);
       }
       case "createFolder": {
         const body = inputs.createFolder.parse(request.payload);
@@ -347,16 +273,7 @@ export class ApplicationApi {
       }
       case "importOpml": {
         const body = inputs.importOpml.parse(request.payload);
-        try {
-          const { feedIds, ...result } = this.#database.opml.import(this.#userId, body.opml);
-          this.#refreshService.request(feedIds);
-          return result;
-        } catch (error) {
-          throw new ApplicationApiError(
-            400,
-            error instanceof Error ? error.message : String(error),
-          );
-        }
+        return this.#application.importOpml(this.#userId, body.opml);
       }
       case "exportOpml":
         return this.#database.opml.export(this.#userId);
@@ -369,32 +286,8 @@ export class ApplicationApi {
     return this.#webFeedService.snapshot(String(this.#userId), id);
   }
 
-  async telegramPreviewUrl(articleId: number): Promise<string> {
-    const first = (await this.#telegramItems(articleId))[0];
-    return notFound(first?.posterUrl ?? first?.url, "Telegram media");
-  }
-
-  async #telegramItems(articleId: number) {
-    const article = this.#database.articles.getArticle(this.#userId, articleId);
-    if (!article?.url || !telegramPostIdentity(article.url)) {
-      throw new ApplicationApiError(404, "Telegram media was not found.");
-    }
-    try {
-      return await this.#telegramMedia.mediaForPost(article.url);
-    } catch {
-      throw new ApplicationApiError(502, "Telegram media is temporarily unavailable. Try again.");
-    }
-  }
-
-  async #xMediaForArticle(articleId: number, postId: string) {
-    const article = this.#database.articles.getArticle(this.#userId, articleId);
-    const postIds = article ? xVideoPostIds(article.url, article.feedContentHtml) : [];
-    if (!postIds.includes(postId)) throw new ApplicationApiError(404, "X video was not found.");
-    try {
-      return await this.#xMedia.mediaForPost(postId);
-    } catch {
-      throw new ApplicationApiError(502, "X video is temporarily unavailable. Try again.");
-    }
+  telegramPreviewUrl(articleId: number): Promise<string> {
+    return this.#application.telegramPreviewUrl(this.#userId, articleId);
   }
 
   #unsupported(operation: never): never {
