@@ -267,7 +267,7 @@ export class ReaderDataResource implements ReaderDataMutations {
 
   reload = async ({
     articles = false,
-    rules = false,
+    rules = articles,
   }: {
     articles?: boolean;
     rules?: boolean;
@@ -289,13 +289,13 @@ export class ReaderDataResource implements ReaderDataMutations {
 
   updateFeed = async (id: number, input: FeedUpdateInput): Promise<Feed> => {
     const feed = await this.client.updateFeed(id, input);
-    await this.invalidateNow({ articles: true, rules: input.folderId !== undefined });
+    await this.invalidateNow({ articles: true });
     return feed;
   };
 
   deleteFeed = async (id: number): Promise<void> => {
     await this.client.deleteFeed(id);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
   };
 
   updateWebFeedSelection = async (id: number, config: WebFeedConfig): Promise<Feed> => {
@@ -318,24 +318,24 @@ export class ReaderDataResource implements ReaderDataMutations {
 
   deleteFolder = async (id: number): Promise<void> => {
     await this.client.deleteFolder(id);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
   };
 
   createRule = async (input: RuleInput): Promise<Rule> => {
     const rule = await this.client.createRule(input);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
     return rule;
   };
 
   updateRule = async (id: number, input: Partial<RuleInput>): Promise<Rule> => {
     const rule = await this.client.updateRule(id, input);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
     return rule;
   };
 
   deleteRule = async (id: number): Promise<void> => {
     await this.client.deleteRule(id);
-    await this.invalidateNow({ articles: true, rules: true });
+    await this.invalidateNow({ articles: true });
   };
 
   beginRefresh = async (
@@ -359,7 +359,7 @@ export class ReaderDataResource implements ReaderDataMutations {
 
   private async invalidateNow({
     articles,
-    rules = false,
+    rules = articles,
   }: {
     articles: boolean;
     rules?: boolean;
@@ -449,7 +449,11 @@ export class ReaderDataResource implements ReaderDataMutations {
     while (this.active && this.invalidationPending) {
       this.invalidationPending = false;
       if (await this.refreshBootstrap()) {
-        if (await this.loadArticles("delivery")) {
+        const [articlesLoaded] = await Promise.all([
+          this.loadArticles("delivery"),
+          this.loadRules(),
+        ]);
+        if (articlesLoaded) {
           this.invalidationRetryMs = this.initialInvalidationRetryMs;
           continue;
         }
@@ -523,7 +527,7 @@ export class ReaderDataResource implements ReaderDataMutations {
   private async flushTrackedArticleReload(): Promise<void> {
     if (!this.reloadArticlesAfterTracking) return;
     this.reloadArticlesAfterTracking = false;
-    await this.loadArticles("delivery");
+    await Promise.all([this.loadArticles("delivery"), this.loadRules()]);
   }
 
   private waitForPoll(): Promise<void> {

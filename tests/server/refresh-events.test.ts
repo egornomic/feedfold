@@ -112,7 +112,7 @@ describe("feed refresh delivery events", () => {
 
   it("authenticates the hosted event stream, emits delivery changes, and closes cleanly", async () => {
     const database = new AppDatabase(":memory:");
-    const auth = new AuthService(database.auth);
+    const auth = new AuthService(database.auth, 20, { maxAccounts: 100 });
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
     const refresh = new FeedRefreshService(
       database.feeds,
@@ -173,6 +173,54 @@ describe("feed refresh delivery events", () => {
     if (!reader) throw new Error("The event stream did not return a response body");
     const nextEvent = eventReader(reader);
     expect(await within(nextEvent())).toBe("data: changed");
+
+    let ownerNotifications = 0;
+    const unsubscribe = refresh.subscribe(accountId, () => {
+      ownerNotifications += 1;
+    });
+    cleanups.push(unsubscribe);
+    const folderResponse = await fetch(`${origin}/api/folders`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Created in another tab" }),
+    });
+    expect(folderResponse.status).toBe(200);
+    const folder = (await folderResponse.json()) as { id: number };
+    expect(await within(nextEvent())).toBe("data: changed");
+    expect(database.folders.getFolder(accountId, folder.id)?.name).toBe("Created in another tab");
+    expect(ownerNotifications).toBe(1);
+
+    const invalidMove = await fetch(`${origin}/api/folders/${folder.id}`, {
+      method: "PATCH",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ parentId: folder.id }),
+    });
+    expect(invalidMove.status).toBe(400);
+    const read = await fetch(`${origin}/api/bootstrap`, { headers: { Cookie: cookie } });
+    expect(read.status).toBe(200);
+    expect(ownerNotifications).toBe(1);
+
+    const otherSession = await auth.register("other-stream-reader", "reader-password");
+    if (!otherSession) throw new Error("Could not create another account");
+    const otherResponse = await fetch(`${origin}/api/folders`, {
+      method: "POST",
+      headers: {
+        Cookie: auth.sessionCookie(otherSession.token, false),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "Another account's folder" }),
+    });
+    expect(otherResponse.status).toBe(200);
+    expect(ownerNotifications).toBe(1);
+
+    const rename = await fetch(`${origin}/api/folders/${folder.id}`, {
+      method: "PATCH",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Renamed in another tab" }),
+    });
+    expect(rename.status).toBe(200);
+    expect(await within(nextEvent())).toBe("data: changed");
+    expect(database.folders.getFolder(accountId, folder.id)?.name).toBe("Renamed in another tab");
 
     refresh.request([feed.id]);
     await refresh.waitForIdle();

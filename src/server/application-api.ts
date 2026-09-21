@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { resourceId as id, inputs } from "../shared/api-inputs.js";
 import type { DesktopRequest } from "../shared/desktop.js";
+import { readerMutationRoutes } from "../shared/reader-mutations.js";
 import { telegramPostIdentity } from "../shared/telegram.js";
 import type { MarkReadRequest } from "../shared/types.js";
 import { xVideoPostIds } from "../shared/x.js";
@@ -87,6 +88,14 @@ export class ApplicationApi {
   }
 
   async invoke(request: DesktopRequest): Promise<unknown> {
+    const result = await this.#execute(request);
+    if (Object.hasOwn(readerMutationRoutes, request.operation)) {
+      this.#refreshService.notifyDataChanged(this.#userId);
+    }
+    return result;
+  }
+
+  async #execute(request: DesktopRequest): Promise<unknown> {
     const activityAt = new Date().toISOString();
     this.#database.auth.touchUserActivity(
       this.#userId,
@@ -265,7 +274,6 @@ export class ApplicationApi {
           ),
           "Feed",
         );
-        this.#refreshService.notifyDataChanged(this.#userId);
         return updated;
       }
       case "createFolder": {

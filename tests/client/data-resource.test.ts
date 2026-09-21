@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InjectOptions } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { api, type FeedInput, type FeedUpdateInput } from "../../src/client/api.js";
+import {
+  api,
+  type FeedInput,
+  type FeedUpdateInput,
+  type FolderInput,
+} from "../../src/client/api.js";
 import { ReaderDataResource } from "../../src/client/data-resource.js";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
@@ -52,7 +57,10 @@ const FEED_SOURCE = `<?xml version="1.0" encoding="UTF-8"?>
 </rss>`;
 
 describe("reader data resource", () => {
-  it("reloads feed-dependent data after moving a feed to a folder", async () => {
+  it.each([
+    "feed",
+    "folder",
+  ])("reloads dependent data after moving a %s into a folder", async (kind) => {
     const database = new AppDatabase(":memory:");
     cleanups.push(() => database.close());
     const sourceFolder = database.folders.createFolder(1, { name: "Source" });
@@ -102,6 +110,11 @@ describe("reader data resource", () => {
           features: { articleSummary: null },
         },
       }),
+      updateFolder: async (id: number, input: Partial<FolderInput>) => {
+        const updated = database.folders.updateFolder(1, id, input);
+        if (!updated) throw new Error("Folder was not found");
+        return updated;
+      },
       updateFeed: async (id: number, input: FeedUpdateInput) => {
         const updated = database.feeds.updateFeed(1, id, input);
         if (!updated) throw new Error("Feed was not found");
@@ -141,10 +154,17 @@ describe("reader data resource", () => {
       return latestRules;
     };
 
-    await resource.updateFeed(feed.id, { folderId: destinationFolder.id });
+    if (kind === "feed") {
+      await resource.updateFeed(feed.id, { folderId: destinationFolder.id });
+    } else {
+      await resource.updateFolder(sourceFolder.id, { parentId: destinationFolder.id });
+      expect(currentBootstrap().folders.find(({ id }) => id === sourceFolder.id)?.parentId).toBe(
+        destinationFolder.id,
+      );
+    }
 
     expect(currentBootstrap().feeds.find((candidate) => candidate.id === feed.id)?.folderId).toBe(
-      destinationFolder.id,
+      kind === "feed" ? destinationFolder.id : sourceFolder.id,
     );
     expect(currentArticles().articles).toEqual([]);
     expect(currentRules()).toEqual([expect.objectContaining({ id: rule.id, matchedCount: 1 })]);
@@ -280,6 +300,14 @@ describe("reader data resource", () => {
       feedUrl: "https://example.test/live.xml",
       folderId: folder.id,
     });
+    const rule = database.rules.createRule(1, {
+      name: "Delivered articles",
+      conditions: [{ field: "title", pattern: "Delivered" }],
+      conditionOperator: "and",
+      action: "keep",
+    });
+    let latestRules = database.rules.listRules(1);
+    expect(latestRules[0]?.matchedCount).toBe(0);
     let bootstrapCalls = 0;
     const client = {
       ...api,
@@ -331,7 +359,9 @@ describe("reader data resource", () => {
           liveArticlesApplied.resolve();
         }
       },
-      reloadRules: async () => {},
+      reloadRules: async () => {
+        latestRules = database.rules.listRules(1);
+      },
     });
     const currentBootstrap = () => {
       if (!latestBootstrap) throw new Error("Bootstrap data was not reloaded");
@@ -373,6 +403,7 @@ describe("reader data resource", () => {
     invalidate();
     await Promise.all([liveCountApplied.promise, liveArticlesApplied.promise]);
 
+    await expect.poll(() => latestRules.find(({ id }) => id === rule.id)?.matchedCount).toBe(1);
     expect(currentBootstrap().counts.unread).toBe(1);
     expect(currentBootstrap().feeds[0]?.unreadCount).toBe(1);
     expect(currentBootstrap().folders[0]?.unreadCount).toBe(1);
