@@ -314,7 +314,11 @@ function ReaderApp({
     readingMode: queue.readingMode,
     showToast,
   });
-  const readerPath = appRoutePath(route.readerRoute);
+  const displayedReaderRoute =
+    route.route.kind === "reader" && !queue.showLoading && !queue.error
+      ? (queue.loadedReaderRoute ?? route.readerRoute)
+      : route.readerRoute;
+  const readerPath = appRoutePath(displayedReaderRoute);
 
   useLayoutEffect(() => {
     if (readerPath && readingWorkspaceRef.current) {
@@ -687,12 +691,16 @@ function ReaderApp({
 
   const selectedFeedId = route.readerRoute.scope === "feed" ? route.readerRoute.scopeId : null;
   const selectedFolderId = route.readerRoute.scope === "folder" ? route.readerRoute.scopeId : null;
+  const displayedFeedId =
+    displayedReaderRoute.scope === "feed" ? displayedReaderRoute.scopeId : null;
+  const displayedFolderId =
+    displayedReaderRoute.scope === "folder" ? displayedReaderRoute.scopeId : null;
   const readerOpen = route.routedArticleId !== null;
   const title = readerScopeLabel(
     bootstrap,
-    selectedFeedId,
-    selectedFolderId,
-    route.readerRoute.state,
+    displayedFeedId,
+    displayedFolderId,
+    displayedReaderRoute.state,
   );
 
   return (
@@ -736,8 +744,8 @@ function ReaderApp({
           <>
             <ReaderToolbar
               title={title}
-              articleState={route.readerRoute.state}
-              unreadCount={readerScopeUnreadCount(bootstrap, selectedFeedId, selectedFolderId)}
+              articleState={displayedReaderRoute.state}
+              unreadCount={readerScopeUnreadCount(bootstrap, displayedFeedId, displayedFolderId)}
               searchInput={route.searchInput}
               searchActive={Boolean(route.readerRoute.search)}
               mode={queue.readingMode}
@@ -747,7 +755,9 @@ function ReaderApp({
               readingArticle={readerOpen && queue.readingMode === "magazine"}
               manualRefreshEnabled={bootstrap.capabilities.manualRefresh}
               onToggleNav={() => setNavOpen((current) => !current)}
-              onArticleStateChange={(state) => selectScope(selectedFeedId, selectedFolderId, state)}
+              onArticleStateChange={(state) =>
+                selectScope(displayedFeedId, displayedFolderId, state)
+              }
               onSearchInput={route.setSearchInput}
               onSearch={submitSearch}
               onClearSearch={() => {
@@ -773,10 +783,11 @@ function ReaderApp({
               ref={readingWorkspaceRef}
               className={`reading-workspace mode-${queue.readingMode}${readerOpen ? " is-reading-article" : ""}`}
               aria-busy={queue.loading}
+              inert={queue.loading && !queue.showLoading}
             >
-              {queue.loading ? (
+              {queue.showLoading ? (
                 <ArticleListSkeleton mode={queue.readingMode} />
-              ) : queue.error ? (
+              ) : queue.loading && !queue.loadedReaderRoute ? null : queue.error ? (
                 <InlineError
                   title={
                     route.routedArticleId === null
@@ -793,8 +804,8 @@ function ReaderApp({
               ) : queue.articles.length === 0 ? (
                 <EmptyArticles
                   hasFeeds={bootstrap.feeds.length > 0}
-                  search={route.readerRoute.search}
-                  state={route.readerRoute.state}
+                  search={displayedReaderRoute.search}
+                  state={displayedReaderRoute.state}
                   onAddFeed={openAddFeed}
                   onShowSaved={() => selectScope(null, null, "starred")}
                   onShowAll={() =>
@@ -824,7 +835,7 @@ function ReaderApp({
                     key={readerPath}
                     articles={queue.articles}
                     activeId={queue.activeArticleId}
-                    markReadOnScroll={bootstrap.settings.markReadOnScroll}
+                    markReadOnScroll={!queue.loading && bootstrap.settings.markReadOnScroll}
                     showYouTubeDescriptions={bootstrap.settings.showYouTubeDescriptions}
                     hasMore={
                       queue.nextCursor !== null && queue.readingMode === preferences.readingMode
@@ -920,7 +931,7 @@ function ReaderApp({
                   translationLanguage={bootstrap.settings.translationLanguage}
                   customPrompts={bootstrap.settings.customPrompts}
                   showYouTubeDescriptions={bootstrap.settings.showYouTubeDescriptions}
-                  markReadOnScroll={bootstrap.settings.markReadOnScroll}
+                  markReadOnScroll={!queue.loading && bootstrap.settings.markReadOnScroll}
                   hasMore={
                     route.routedArticleId === null &&
                     queue.nextCursor !== null &&

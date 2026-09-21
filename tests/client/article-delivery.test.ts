@@ -508,14 +508,22 @@ describe("live article delivery", () => {
       };
       const workspace = () => container.querySelector(".reading-workspace");
       const currentTitle = () => container.querySelector("h1")?.textContent;
+      const previousTitles = expandedArticleTitles(container);
       holdNavigationResponses = true;
       await act(async () => navigationButton("Saved").click());
       await waitFor("the delayed Saved response", () => navigationResponses.length === 1);
-      expect(currentTitle()).toBe("Saved");
+      expect(currentTitle()).toBe("Feed");
       expect(navigationButton("Saved").getAttribute("aria-current")).toBe("page");
-      expect(expandedArticleTitles(container)).toEqual([]);
-      expect(container.querySelector('[aria-label="Loading articles"]')).not.toBeNull();
+      expect(expandedArticleTitles(container)).toEqual(previousTitles);
+      expect(container.querySelector('[aria-label="Loading articles"]')).toBeNull();
       expect(workspace()?.getAttribute("aria-busy")).toBe("true");
+      expect(workspace()?.hasAttribute("inert")).toBe(true);
+
+      await waitFor("loading feedback for a slow navigation", () =>
+        Boolean(container.querySelector('[aria-label="Loading articles"]')),
+      );
+      expect(currentTitle()).toBe("Saved");
+      expect(expandedArticleTitles(container)).toEqual([]);
 
       await act(async () => navigationResponses.shift()?.());
       await waitFor(
@@ -525,6 +533,7 @@ describe("live article delivery", () => {
       expect(expandedArticleTitles(container)).toEqual(["Delivered while reading"]);
       expect(navigationButton("Saved").getAttribute("aria-current")).toBe("page");
       expect(workspace()?.getAttribute("aria-busy")).toBe("false");
+      expect(workspace()?.hasAttribute("inert")).toBe(false);
 
       await act(async () => navigationButton("Feed").click());
       await waitFor("the delayed Feed response", () => navigationResponses.length === 1);
@@ -541,8 +550,19 @@ describe("live article delivery", () => {
 
       await act(async () => navigationButton("Feed").click());
       await waitFor("another delayed Feed response", () => navigationResponses.length === 1);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      });
+      expect(currentTitle()).toBe("Saved");
+      expect(expandedArticleTitles(container)).toEqual(["Delivered while reading"]);
+      expect(container.querySelector('[aria-label="Loading articles"]')).toBeNull();
       await act(async () => navigationButton("Live reading").click());
       await waitFor("the delayed individual feed response", () => navigationResponses.length === 2);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 160));
+      });
+      expect(currentTitle()).toBe("Saved");
+      expect(container.querySelector('[aria-label="Loading articles"]')).toBeNull();
       await act(async () => navigationResponses.pop()?.());
       await waitFor(
         "the latest destination",
