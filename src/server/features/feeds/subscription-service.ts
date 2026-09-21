@@ -1,12 +1,13 @@
 import type { FeedInput } from "../../../shared/api-inputs.js";
 import type { Feed } from "../../../shared/types.js";
+import { ApplicationApiError } from "../../errors.js";
 import type { FeedRefreshService } from "../../refresh.js";
 import type { WebFeedService } from "../../web-feed.js";
 import type { FeedService } from "./service.js";
 
-export class WebFeedUnavailableError extends Error {
+export class WebFeedUnavailableError extends ApplicationApiError {
   constructor() {
-    super("Web feed loading is unavailable. Check the server's Chromium setup.");
+    super(503, "Web feed loading is unavailable. Check the server's Chromium setup.");
     this.name = "WebFeedUnavailableError";
   }
 }

@@ -1,35 +1,25 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { inputs } from "../../../shared/api-inputs.js";
-import type { WebFeedConfig } from "../../../shared/types.js";
-import { discoverFeed, FeedDiscoveryError } from "../../feed-discovery.js";
-import type { QuotaService } from "../../quota.js";
-import type { FeedRefreshService } from "../../refresh.js";
+import type { ApplicationService } from "../../application-service.js";
 import { WebFeedError, type WebFeedService } from "../../web-feed.js";
 import { idParams, missing, type UserId } from "../routes.js";
 import type { FeedService } from "./service.js";
-import { FeedSubscriptionService, WebFeedUnavailableError } from "./subscription-service.js";
 
 export async function feedRoutes(
   app: FastifyInstance,
   {
     feeds,
-    refreshService,
+    application,
     webFeedService,
-    feedDiscoveryTimeoutMs,
-    quotas,
     userId,
   }: {
     feeds: FeedService;
-    refreshService: FeedRefreshService;
+    application: ApplicationService;
     webFeedService?: WebFeedService;
-    feedDiscoveryTimeoutMs?: number;
-    quotas: QuotaService;
     userId: UserId;
   },
 ): Promise<void> {
-  const subscriptions = new FeedSubscriptionService(feeds, refreshService, webFeedService);
-
   app.get("/api/feeds", async (request) => ({
     feeds: feeds.listFeeds(userId(request)),
   }));
@@ -40,30 +30,14 @@ export async function feedRoutes(
     return feed ?? missing(reply, "Feed");
   });
 
-  app.post("/api/feeds/discover", async (request, reply) => {
+  app.post("/api/feeds/discover", async (request) => {
     const { url } = inputs.url.parse(request.body);
-    try {
-      const accountId = userId(request);
-      quotas.consume("feed_discovery", accountId);
-      return await discoverFeed(url, feedDiscoveryTimeoutMs, undefined, (task) =>
-        feeds.runOutbound(task),
-      );
-    } catch (error) {
-      if (error instanceof FeedDiscoveryError) {
-        return reply.code(422).send({ error: error.message, code: error.kind });
-      }
-      throw error;
-    }
+    return application.discoverFeed(userId(request), url);
   });
 
-  app.post("/api/web-feeds/analyze", async (request, reply) => {
-    if (!webFeedService) {
-      return reply
-        .code(503)
-        .send({ error: "Web feed loading is unavailable. Check the server's Chromium setup." });
-    }
+  app.post("/api/web-feeds/analyze", async (request) => {
     const { url } = inputs.url.parse(request.body);
-    return webFeedService.analyze(String(userId(request)), url);
+    return application.analyzeWebPage(userId(request), url);
   });
 
   app.get(
@@ -89,59 +63,19 @@ export async function feedRoutes(
     },
   );
 
-  app.post("/api/feeds", async (request, reply) => {
-    const body = inputs.createFeed.parse(request.body);
-    try {
-      return await subscriptions.create(userId(request), body);
-    } catch (error) {
-      if (error instanceof WebFeedUnavailableError) {
-        return reply.code(503).send({ error: error.message });
-      }
-      throw error;
-    }
+  app.post("/api/feeds", async (request) => {
+    return application.createFeed(userId(request), inputs.createFeed.parse(request.body));
   });
 
-  app.post("/api/feeds/:id/web-feed/analyze", async (request, reply) => {
-    if (!webFeedService) {
-      return reply
-        .code(503)
-        .send({ error: "Web feed loading is unavailable. Check the server's Chromium setup." });
-    }
+  app.post("/api/feeds/:id/web-feed/analyze", async (request) => {
     const { id } = idParams.parse(request.params);
-    const accountId = userId(request);
-    const feed = feeds.getFeed(accountId, id);
-    if (!feed) return missing(reply, "Feed");
-    if (feed.sourceKind !== "web") {
-      return reply.code(400).send({ error: "Choose a web feed before editing a page selection." });
-    }
-    const config = feeds.getWebFeedConfig(accountId, id);
-    if (!config) return missing(reply, "Page selection");
-    return webFeedService.analyze(String(accountId), config.pageUrl, config);
+    return application.analyzeWebFeed(userId(request), id);
   });
 
-  app.patch("/api/feeds/:id/web-feed", async (request, reply) => {
-    if (!webFeedService) {
-      return reply
-        .code(503)
-        .send({ error: "Web feed loading is unavailable. Check the server's Chromium setup." });
-    }
+  app.patch("/api/feeds/:id/web-feed", async (request) => {
     const { id } = idParams.parse(request.params);
     const { config } = inputs.updateWebFeedSelection.parse(request.body);
-    const accountId = userId(request);
-    const feed = feeds.getFeed(accountId, id);
-    if (!feed) return missing(reply, "Feed");
-    if (feed.sourceKind !== "web") {
-      return reply.code(400).send({ error: "Choose a web feed before editing a page selection." });
-    }
-    const extracted = await webFeedService.extract(config as WebFeedConfig);
-    const updated = feeds.updateWebFeedSelection(
-      accountId,
-      id,
-      config as WebFeedConfig,
-      extracted.parsed,
-    );
-    if (!updated) return missing(reply, "Feed");
-    return updated;
+    return application.updateWebFeedSelection(userId(request), id, config);
   });
 
   app.patch("/api/feeds/:id", async (request, reply) => {
@@ -161,6 +95,6 @@ export async function feedRoutes(
     const { id } = idParams.parse(request.params);
     const accountId = userId(request);
     if (!feeds.getFeed(accountId, id)) return missing(reply, "Feed");
-    return refreshService.request(feeds.getManualRefreshFeedIds(accountId, [id]));
+    return application.refresh(accountId, [id]);
   });
 }

@@ -1,20 +1,20 @@
 import type { ServerResponse } from "node:http";
 import type { FastifyInstance } from "fastify";
 import { inputs } from "../../../shared/api-inputs.js";
+import type { ApplicationService } from "../../application-service.js";
 import type { FeedRefreshService } from "../../refresh.js";
 import { type AuthService, sessionToken } from "../auth/service.js";
-import type { FeedService } from "../feeds/service.js";
 import type { UserId } from "../routes.js";
 
 export async function refreshRoutes(
   app: FastifyInstance,
   {
-    feeds,
+    application,
     refreshService,
     authService,
     userId,
   }: {
-    feeds: FeedService;
+    application: ApplicationService;
     refreshService: FeedRefreshService;
     authService: AuthService;
     userId: UserId;
@@ -77,8 +77,7 @@ export async function refreshRoutes(
 
   app.post("/api/refresh", async (request) => {
     const body = inputs.refresh.parse(request.body ?? {});
-    const feedIds = feeds.getManualRefreshFeedIds(userId(request), body.feedIds);
-    return refreshService.request(feedIds);
+    return application.refresh(userId(request), body.feedIds);
   });
 }
 

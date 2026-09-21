@@ -395,40 +395,7 @@ export class FeedRepository {
     },
   ): number {
     const timestamp = now();
-    const configJson = JSON.stringify(input.config);
-    this.sqlite
-      .prepare(
-        `INSERT OR IGNORE INTO feed_sources (
-           feed_url, site_url, source_kind, source_config_key, title, refreshing,
-           poll_interval_minutes, next_poll_at, created_at, updated_at
-         ) VALUES (?, ?, 'web', ?, ?, 1, ?, ?, ?, ?)`,
-      )
-      .run(
-        input.pageUrl,
-        input.parsed.siteUrl ?? input.pageUrl,
-        configJson,
-        input.parsed.title.trim() || input.pageUrl,
-        WEB_FEED_POLL_INTERVAL_MINUTES,
-        timestamp,
-        timestamp,
-        timestamp,
-      );
-    const sourceId = Number(
-      this.sqlite
-        .prepare(
-          `SELECT id FROM feed_sources
-           WHERE source_kind = 'web' AND feed_url = ? AND source_config_key = ?`,
-        )
-        .pluck()
-        .get(input.pageUrl, configJson),
-    );
-    this.sqlite
-      .prepare(
-        `INSERT OR IGNORE INTO source_web_feed_configs (
-           source_id, config_json, selection_revision, last_match_count, created_at, updated_at
-         ) VALUES (?, ?, 1, ?, ?, ?)`,
-      )
-      .run(sourceId, configJson, input.parsed.articles.length, timestamp, timestamp);
+    const sourceId = this.ensureWebFeedSource(input.pageUrl, input.config, input.parsed);
     const result = this.sqlite
       .prepare(
         `INSERT INTO feeds (
@@ -446,11 +413,46 @@ export class FeedRepository {
     return Number(result.lastInsertRowid);
   }
 
+  private ensureWebFeedSource(pageUrl: string, config: WebFeedConfig, parsed: ParsedFeed): number {
+    const timestamp = now();
+    const configJson = JSON.stringify(config);
+    this.sqlite
+      .prepare(
+        `INSERT OR IGNORE INTO feed_sources (
+           feed_url, site_url, source_kind, source_config_key, title, refreshing,
+           poll_interval_minutes, next_poll_at, created_at, updated_at
+         ) VALUES (?, ?, 'web', ?, ?, 1, ?, ?, ?, ?)`,
+      )
+      .run(
+        pageUrl,
+        parsed.siteUrl ?? pageUrl,
+        configJson,
+        parsed.title.trim() || pageUrl,
+        WEB_FEED_POLL_INTERVAL_MINUTES,
+        timestamp,
+        timestamp,
+        timestamp,
+      );
+    const sourceId = Number(
+      this.sqlite
+        .prepare(
+          `SELECT id FROM feed_sources
+           WHERE source_kind = 'web' AND feed_url = ? AND source_config_key = ?`,
+        )
+        .pluck()
+        .get(pageUrl, configJson),
+    );
+    this.sqlite
+      .prepare(
+        `INSERT OR IGNORE INTO source_web_feed_configs (
+           source_id, config_json, selection_revision, last_match_count, created_at, updated_at
+         ) VALUES (?, ?, 1, ?, ?, ?)`,
+      )
+      .run(sourceId, configJson, parsed.articles.length, timestamp, timestamp);
+    return sourceId;
+  }
+
   updateWebFeedSelectionRecord(feedId: number, config: WebFeedConfig, parsed: ParsedFeed): number {
-    const feed = this.sqlite
-      .prepare("SELECT user_id AS userId, title, folder_id AS folderId FROM feeds WHERE id = ?")
-      .get(feedId) as { userId: number; title: string; folderId: number | null } | undefined;
-    if (!feed) throw new Error(`Feed ${feedId} is missing`);
     const oldSourceId = this.sourceIdForFeed(feedId);
     const oldRevision = Number(
       this.sqlite
@@ -458,14 +460,7 @@ export class FeedRepository {
         .pluck()
         .get(oldSourceId) ?? 0,
     );
-    const temporaryId = this.createWebFeedRecord(feed.userId, {
-      title: feed.title,
-      pageUrl: config.pageUrl,
-      folderId: feed.folderId,
-      config,
-      parsed,
-    });
-    const newSourceId = this.sourceIdForFeed(temporaryId);
+    const newSourceId = this.ensureWebFeedSource(config.pageUrl, config, parsed);
     this.sqlite
       .prepare(
         `UPDATE source_web_feed_configs
@@ -473,7 +468,6 @@ export class FeedRepository {
          WHERE source_id = ?`,
       )
       .run(oldRevision + 1, newSourceId);
-    this.sqlite.prepare("DELETE FROM feeds WHERE id = ?").run(temporaryId);
     this.sqlite
       .prepare("UPDATE feeds SET source_id = ?, initialized_at = NULL, updated_at = ? WHERE id = ?")
       .run(newSourceId, now(), feedId);

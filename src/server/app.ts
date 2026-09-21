@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import fastifyStatic from "@fastify/static";
-import { SqliteError } from "better-sqlite3";
 import Fastify, {
   type FastifyInstance,
   type FastifyReply,
@@ -9,11 +8,10 @@ import Fastify, {
   type FastifyServerOptions,
   LogController,
 } from "fastify";
-import { ZodError } from "zod";
 import { readerMutationRoutes } from "../shared/reader-mutations.js";
-import { AiError } from "./ai/errors.js";
+import { applicationError } from "./application-error.js";
+import { ApplicationService } from "./application-service.js";
 import type { AppDatabase } from "./database.js";
-import { InvalidRequestError, OperationForbiddenError } from "./errors.js";
 import type { ExtractionQueue } from "./extraction.js";
 import { aiRoutes } from "./features/ai/routes.js";
 import { AiService } from "./features/ai/service.js";
@@ -29,11 +27,10 @@ import { browserDeviceId } from "./features/routes.js";
 import { ruleRoutes } from "./features/rules/routes.js";
 import { settingsRoutes } from "./features/settings/routes.js";
 import { registerOperationalLogging } from "./logging.js";
-import { QuotaExceededError } from "./quota.js";
 import type { FeedRefreshService } from "./refresh.js";
 import { responsePolicies } from "./response-policy.js";
 import { TelegramMediaService } from "./telegram-media.js";
-import { WebFeedError, type WebFeedService } from "./web-feed.js";
+import type { WebFeedService } from "./web-feed.js";
 import { XMediaService } from "./x-media.js";
 
 export interface AppServices {
@@ -85,6 +82,12 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
       undefined,
       services.database.quotas,
     );
+  const application = new ApplicationService({
+    ...services,
+    aiService: ai,
+    telegramMediaService: telegramMedia,
+    xMediaService: xMedia,
+  });
   const requestUsers = new WeakMap<FastifyRequest, { id: number; username: string }>();
   const userId = (request: FastifyRequest): number => {
     const user = requestUsers.get(request);
@@ -106,51 +109,12 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   });
 
   app.setErrorHandler((error, request, reply) => {
-    if (error instanceof AiError) {
-      reply.code(error.statusCode).send({ error: error.message, code: error.code });
+    const known = applicationError(error);
+    if (known) {
+      reply
+        .code(known.status)
+        .send({ error: known.message, ...(known.code ? { code: known.code } : {}) });
       return;
-    }
-    if (error instanceof WebFeedError) {
-      reply.code(422).send({ error: error.message, code: error.kind });
-      return;
-    }
-    if (error instanceof ZodError) {
-      reply.code(400).send({ error: error.issues[0]?.message ?? "The request is invalid." });
-      return;
-    }
-    if (error instanceof InvalidRequestError) {
-      reply.code(400).send({ error: error.message });
-      return;
-    }
-    if (error instanceof OperationForbiddenError) {
-      reply.code(error.statusCode).send({ error: error.message });
-      return;
-    }
-    if (error instanceof QuotaExceededError) {
-      reply.code(error.statusCode).send({ error: error.message, code: error.code });
-      return;
-    }
-    if (error instanceof SqliteError) {
-      if (error.code === "SQLITE_FULL") {
-        reply.code(507).send({
-          error: "This feedfold server has reached its storage limit.",
-          code: "quota_exceeded",
-        });
-        return;
-      }
-      if (
-        error.code === "SQLITE_CONSTRAINT_UNIQUE" ||
-        error.code === "SQLITE_CONSTRAINT_PRIMARYKEY"
-      ) {
-        reply.code(409).send({ error: "This item already exists." });
-        return;
-      }
-      if (error.code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
-        reply
-          .code(400)
-          .send({ error: "That feed or folder no longer exists. Reload and try again." });
-        return;
-      }
     }
     request.log.error({ event: "request_handler_failed" }, "request handler failed");
     reply.code(500).send({ error: "The server could not complete the request. Try again." });
@@ -239,26 +203,20 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
     configuredOrigin: services.publicOrigin,
   });
   await app.register(bootstrapRoutes, {
-    bootstrap: services.database.bootstrap,
-    ai,
+    application,
     userId,
   });
   await app.register(articleRoutes, {
     articles: services.database.articles,
-    extractions: services.database.extractions,
-    extractionQueue: services.extractionQueue,
+    application,
     ai,
-    telegramMedia,
     xMedia,
-    quotas: services.database.quotas,
     userId,
   });
   await app.register(feedRoutes, {
     feeds: services.database.feeds,
-    refreshService: services.refreshService,
+    application,
     webFeedService: services.webFeedService,
-    feedDiscoveryTimeoutMs: services.feedDiscoveryTimeoutMs,
-    quotas: services.database.quotas,
     userId,
   });
   await app.register(folderRoutes, { folders: services.database.folders, userId });
@@ -266,14 +224,14 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   await app.register(settingsRoutes, { settings: services.database.settings, userId });
   await app.register(aiRoutes, { ai, userId });
   await app.register(refreshRoutes, {
-    feeds: services.database.feeds,
+    application,
     refreshService: services.refreshService,
     authService: services.authService,
     userId,
   });
   await app.register(opmlRoutes, {
     opml: services.database.opml,
-    refreshService: services.refreshService,
+    application,
     userId,
   });
 
