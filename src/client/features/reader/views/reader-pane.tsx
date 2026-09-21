@@ -9,13 +9,16 @@ import {
   useRef,
   useState,
 } from "react";
-import type { AiCustomPrompt, Article } from "../../../shared/types";
-import type { FeedManagementAction } from "../../feed-management";
-import { useDelayedPending } from "../../loading";
-import { interactionMotionIsInstant } from "../../motion";
-import { ArticleActions } from "./article-action-bar";
-import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
-import { ArticleDocument } from "./article-document";
+import type { AiCustomPrompt, Article } from "../../../../shared/types";
+import type { FeedManagementAction } from "../../../feed-management";
+import { useDelayedPending } from "../../../loading";
+import { interactionMotionIsInstant } from "../../../motion";
+import { ArticleActions } from "../article/article-action-bar";
+import type {
+  ArticleSummaryViewState,
+  ArticleTranslationViewState,
+} from "../article/article-ai-state";
+import { ArticleDocument } from "../article/article-document";
 import {
   type ArticleSwipeDirection,
   type ArticleSwipeIntent,
@@ -23,9 +26,12 @@ import {
   articleSwipeDownAction,
   articleSwipeIntent,
   articleSwipeOffset,
-} from "./article-swipe";
-import { InlineError } from "./reader-states";
-import { animateHorizontalSpring, type HorizontalSpringController } from "./swipe-motion";
+} from "../interaction/article-swipe";
+import {
+  animateHorizontalSpring,
+  type HorizontalSpringController,
+} from "../interaction/swipe-motion";
+import { InlineError } from "../reader-states";
 
 const ARTICLE_SWIPE_TARGETS =
   "a, button, input, select, textarea, summary, video, audio, iframe, pre, dialog, .article-table-scroll, [contenteditable], [data-image-lightbox-trigger]";

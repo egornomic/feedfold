@@ -1,16 +1,16 @@
 import { useLayoutEffect, useRef } from "react";
-import type { AiCustomPrompt, Article } from "../../../shared/types";
-import type { FeedManagementAction } from "../../feed-management";
-import { ArticleActions } from "./article-action-bar";
+import type { AiCustomPrompt, Article } from "../../../../shared/types";
+import type { FeedManagementAction } from "../../../feed-management";
+import { ArticleActions } from "../article/article-action-bar";
 import {
   type ArticleSummaryViewState,
   type ArticleTranslationViewState,
   EMPTY_ARTICLE_SUMMARY_STATE,
   EMPTY_ARTICLE_TRANSLATION_STATE,
-} from "./article-ai-state";
-import { ArticleDocument } from "./article-document";
+} from "../article/article-ai-state";
+import { ArticleDocument } from "../article/article-document";
+import { useMarkReadOnScroll } from "../interaction/mark-read-on-scroll";
 import { ArticleLoadSentinel } from "./article-load-sentinel";
-import { useMarkReadOnScroll } from "./mark-read-on-scroll";
 
 function useExpandedActionDocking(
   streamRef: React.RefObject<HTMLElement | null>,

@@ -1,7 +1,7 @@
 import { AlertTriangle, FileText, LoaderCircle, RefreshCw } from "lucide-react";
-import { telegramPostIdentity } from "../../../shared/telegram";
-import type { Article, ArticleAiTranslation } from "../../../shared/types";
-import { withXVideoPlaceholder, xVideoPlaceholderId, xVideoPostIds } from "../../../shared/x";
+import { telegramPostIdentity } from "../../../../shared/telegram";
+import type { Article, ArticleAiTranslation } from "../../../../shared/types";
+import { withXVideoPlaceholder, xVideoPlaceholderId, xVideoPostIds } from "../../../../shared/x";
 import type { ArticleTranslationViewState } from "./article-ai-state";
 import { articleContentView, shouldShowArticleDescription } from "./article-content";
 import { ArticleHtml } from "./article-html";

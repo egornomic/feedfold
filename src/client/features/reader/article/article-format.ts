@@ -1,4 +1,4 @@
-import type { Article } from "../../../shared/types";
+import type { Article } from "../../../../shared/types";
 
 function formatRelativeDate(value: string | null): string {
   if (!value) return "No date";

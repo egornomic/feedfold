@@ -1,7 +1,7 @@
 import { AlertTriangle, Languages, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
 import { useRef } from "react";
-import type { AiCustomPrompt, Article } from "../../../shared/types";
-import { useMotionPresence } from "../../motion";
+import type { AiCustomPrompt, Article } from "../../../../shared/types";
+import { useMotionPresence } from "../../../motion";
 import { AiMarkdown } from "./ai-markdown";
 import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
 

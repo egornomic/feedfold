@@ -39,12 +39,12 @@ import {
   routeAfterFeedDeletion,
 } from "../../routes";
 import { type AppView, Sidebar } from "../navigation/sidebar";
+import {
+  EMPTY_ARTICLE_SUMMARY_STATE,
+  EMPTY_ARTICLE_TRANSLATION_STATE,
+} from "./article/article-ai-state";
 import { useArticleActions } from "./article-actions";
-import { EMPTY_ARTICLE_SUMMARY_STATE, EMPTY_ARTICLE_TRANSLATION_STATE } from "./article-ai-state";
-import { ArticleList } from "./article-list";
 import { useArticleQueue } from "./article-queue";
-import { ExpandedStream } from "./expanded-stream";
-import { ReaderPane } from "./reader-pane";
 import { ARTICLE_FONT_MAX, ARTICLE_FONT_MIN, useReaderPreferences } from "./reader-preferences";
 import {
   filterRuleName,
@@ -55,6 +55,9 @@ import {
 } from "./reader-state";
 import { ArticleListSkeleton, EmptyArticles, InlineError, StartupError } from "./reader-states";
 import { ReaderToolbar } from "./reader-toolbar";
+import { ArticleList } from "./views/article-list";
+import { ExpandedStream } from "./views/expanded-stream";
+import { ReaderPane } from "./views/reader-pane";
 
 const APP_BASE_PATH = import.meta.env.BASE_URL;
 const DEMO_SOURCE_URL =

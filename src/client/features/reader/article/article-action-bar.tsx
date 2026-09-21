@@ -18,7 +18,7 @@ import {
   Sparkles,
   Star,
 } from "lucide-react";
-import type { AiCustomPrompt, Article } from "../../../shared/types";
+import type { AiCustomPrompt, Article } from "../../../../shared/types";
 import { useActionMenu } from "./article-action-menu";
 import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
 

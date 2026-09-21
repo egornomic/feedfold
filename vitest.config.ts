@@ -12,7 +12,7 @@ export default defineConfig({
       // UI rendering and process entry points need separate browser/packaged-app coverage.
       include: [
         "src/client/**/*.ts",
-        "src/client/features/reader/ai-markdown.tsx",
+        "src/client/features/reader/article/ai-markdown.tsx",
         "src/server/**/*.ts",
         "src/shared/**/*.ts",
         "src/demo/store.ts",

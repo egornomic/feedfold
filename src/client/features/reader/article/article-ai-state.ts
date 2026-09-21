@@ -1,4 +1,4 @@
-import type { ArticleAiTranslation } from "../../../shared/types";
+import type { ArticleAiTranslation } from "../../../../shared/types";
 
 export interface ArticleSummaryViewState {
   visible: boolean;

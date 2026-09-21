@@ -16,8 +16,8 @@ import {
   type ArticleTranslationViewState,
   EMPTY_ARTICLE_SUMMARY_STATE,
   EMPTY_ARTICLE_TRANSLATION_STATE,
-} from "./article-ai-state";
-import { articleTranslationSourceKind, fullContentToggleAction } from "./article-content";
+} from "./article/article-ai-state";
+import { articleTranslationSourceKind, fullContentToggleAction } from "./article/article-content";
 import type { ArticleQueueController } from "./article-queue";
 import {
   articleSettingsInvalidation,

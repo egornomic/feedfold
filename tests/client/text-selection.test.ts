@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   captureTextSelection,
   restoreTextSelection,
-} from "../../src/client/features/reader/text-selection.js";
+} from "../../src/client/features/reader/interaction/text-selection.js";
 
 describe("article text selection", () => {
   it("restores the selected passage after rendering its action menu", () => {

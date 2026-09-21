@@ -1,13 +1,13 @@
 import { CheckCircle2, Circle, Star } from "lucide-react";
 import { useRef } from "react";
-import type { Article } from "../../../shared/types";
-import { shouldShowArticleDescription } from "./article-content";
-import { articleDate, articleLabel, mediaTypeLabel } from "./article-format";
-import { articleImageUrl } from "./article-image-url";
+import type { Article } from "../../../../shared/types";
+import { shouldShowArticleDescription } from "../article/article-content";
+import { articleDate, articleLabel, mediaTypeLabel } from "../article/article-format";
+import { articleImageUrl } from "../article/article-image-url";
+import { ArticleThumbnailPlaceholder } from "../article/article-thumbnail-placeholder";
+import { LinkifiedText } from "../article/linkified-text";
+import { useMarkReadOnScroll } from "../interaction/mark-read-on-scroll";
 import { ArticleLoadSentinel } from "./article-load-sentinel";
-import { ArticleThumbnailPlaceholder } from "./article-thumbnail-placeholder";
-import { LinkifiedText } from "./linkified-text";
-import { useMarkReadOnScroll } from "./mark-read-on-scroll";
 
 export function ArticleList({
   articles,

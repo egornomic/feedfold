@@ -1,18 +1,18 @@
 import { ListFilter } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { AiCustomPrompt, Article } from "../../../shared/types";
-import type { FeedManagementAction } from "../../feed-management";
-import { useMotionPresence } from "../../motion";
-import { ArticleSummaryPanel, ArticleTranslationNotice } from "./article-ai-panels";
-import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
-import { ArticleBody } from "./article-body";
-import { ArticleHeader } from "./article-header";
+import type { AiCustomPrompt, Article } from "../../../../shared/types";
+import type { FeedManagementAction } from "../../../feed-management";
+import { useMotionPresence } from "../../../motion";
 import {
   captureTextSelection,
   restoreTextSelection,
   type TextSelectionSnapshot,
-} from "./text-selection";
+} from "../interaction/text-selection";
+import { ArticleSummaryPanel, ArticleTranslationNotice } from "./article-ai-panels";
+import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
+import { ArticleBody } from "./article-body";
+import { ArticleHeader } from "./article-header";
 
 interface SelectionMenuState {
   text: string;

@@ -1,9 +1,9 @@
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Article, TelegramArticleMedia, XArticleMedia } from "../../../shared/types";
-import { xPostId } from "../../../shared/x";
-import { api, errorMessage } from "../../api";
+import type { Article, TelegramArticleMedia, XArticleMedia } from "../../../../shared/types";
+import { xPostId } from "../../../../shared/x";
+import { api, errorMessage } from "../../../api";
 import { articleImageUrl } from "./article-image-url";
 import { ImageLightbox, type ImageLightboxItem, type ImageLightboxState } from "./image-lightbox";
 

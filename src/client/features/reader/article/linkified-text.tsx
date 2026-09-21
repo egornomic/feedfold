@@ -1,4 +1,4 @@
-import { extractHttpLinks } from "../../../shared/article-links";
+import { extractHttpLinks } from "../../../../shared/article-links";
 
 export function LinkifiedText({ text }: { text: string }) {
   const links = extractHttpLinks(text);

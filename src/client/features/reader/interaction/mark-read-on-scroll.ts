@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Article } from "../../../shared/types";
+import type { Article } from "../../../../shared/types";
 
 export function useMarkReadOnScroll({
   articles,

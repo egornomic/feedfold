@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import Markdown, { type Components, type ExtraProps, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { AiGrounding } from "../../../shared/types.js";
+import type { AiGrounding } from "../../../../shared/types.js";
 import { CodeBlock } from "./code-block.js";
 
 const allowedElements = [
