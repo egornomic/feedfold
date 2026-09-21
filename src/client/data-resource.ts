@@ -255,13 +255,18 @@ export class ReaderDataResource implements ReaderDataMutations {
     binding.applyBootstrap(next);
   };
 
-  loadRules = async (): Promise<void> => {
+  loadRules = async (): Promise<boolean> => {
     const binding = this.binding;
-    if (!this.active || !binding) return;
+    if (!this.active || !binding) return false;
     try {
-      await this.ruleRequest.run((signal) => binding.reloadRules(signal));
+      const completed = await this.ruleRequest.run(async (signal) => {
+        await binding.reloadRules(signal);
+        return !signal.aborted;
+      });
+      return completed === true;
     } catch {
       // The bound rules loader owns its visible error state.
+      return false;
     }
   };
 
@@ -449,11 +454,11 @@ export class ReaderDataResource implements ReaderDataMutations {
     while (this.active && this.invalidationPending) {
       this.invalidationPending = false;
       if (await this.refreshBootstrap()) {
-        const [articlesLoaded] = await Promise.all([
+        const [articlesLoaded, rulesLoaded] = await Promise.all([
           this.loadArticles("delivery"),
           this.loadRules(),
         ]);
-        if (articlesLoaded) {
+        if (articlesLoaded && rulesLoaded) {
           this.invalidationRetryMs = this.initialInvalidationRetryMs;
           continue;
         }

@@ -210,9 +210,18 @@ describe("live article delivery", () => {
     const initialContentResponse = new Promise<void>((resolve) => {
       releaseInitialContent = resolve;
     });
+    let failNextRuleLoad = false;
+    let loadedRules: Array<{ id: number; matchedCount: number }> = [];
     const invoke = async (request: DesktopRequest): Promise<DesktopResponse> => {
       try {
+        if (request.operation === "rules" && failNextRuleLoad) {
+          failNextRuleLoad = false;
+          throw new ApplicationApiError(503, "Rule service temporarily unavailable");
+        }
         const value = await application.invoke(request);
+        if (request.operation === "rules") {
+          loadedRules = (value as { rules: typeof loadedRules }).rules;
+        }
         if (request.operation === "articles" && holdNavigationResponses) {
           await new Promise<void>((resolve) => navigationResponses.push(resolve));
         }
@@ -573,6 +582,34 @@ describe("live article delivery", () => {
       expect(currentTitle()).toBe("Live reading");
       expect(expandedArticleTitles(container)).toEqual(latestTitles);
       expect(workspace()?.getAttribute("aria-busy")).toBe("false");
+
+      holdNavigationResponses = false;
+      const rule = database.rules.createRule(TEST_USER_ID, {
+        name: "Starting stories",
+        conditions: [{ field: "title", pattern: "Starting" }],
+        conditionOperator: "and",
+        action: "keep",
+      });
+      const receivedMatches = () => loadedRules.find(({ id }) => id === rule.id)?.matchedCount;
+      await act(async () => refresh.notifyDataChanged(TEST_USER_ID));
+      await waitFor("the initial rule match count", () => receivedMatches() === 1);
+      failNextRuleLoad = true;
+      await act(async () => {
+        await application.invoke({
+          operation: "updateRule",
+          payload: {
+            id: rule.id,
+            input: { conditions: [{ field: "title", pattern: "No matching story" }] },
+          },
+        });
+      });
+      await waitFor("the failed rule request", () => !failNextRuleLoad);
+      expect(database.rules.getRule(TEST_USER_ID, rule.id)?.matchedCount).toBe(0);
+      expect(receivedMatches()).toBe(1);
+      await waitFor(
+        "rule counts to recover without another event or user action",
+        () => receivedMatches() === 0,
+      );
     } finally {
       await act(async () => root.unmount());
       await Promise.all([refresh.stop(), extraction.stop()]);
