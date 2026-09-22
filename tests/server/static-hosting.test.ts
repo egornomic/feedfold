@@ -20,8 +20,11 @@ describe("production app hosting", () => {
     await Promise.all([
       writeFile(join(staticDirectory, "index.html"), "<main>feedfold shell</main>"),
       writeFile(join(staticDirectory, "assets", "app.css"), "body { color: green; }"),
+      writeFile(join(staticDirectory, "assets", "app-aB12_3-4.js"), "export default 1;"),
+      writeFile(join(staticDirectory, "sw.js"), "self.addEventListener('fetch', () => {});"),
       writeFile(join(demoDirectory, "index.html"), "<main>feedfold demo</main>"),
       writeFile(join(demoDirectory, "assets", "app.css"), "body { color: blue; }"),
+      writeFile(join(demoDirectory, "assets", "app-12345678.css"), "body { color: blue; }"),
     ]);
 
     const database = new AppDatabase(join(directory, "feedfold.db"), 20);
@@ -48,11 +51,21 @@ describe("production app hosting", () => {
       const navigation = await app.inject({ method: "GET", url: "/feeds/all" });
       expect(navigation.statusCode).toBe(200);
       expect(navigation.body).toBe("<main>feedfold shell</main>");
+      expect(navigation.headers["cache-control"]).toBe("no-cache");
+
+      for (const url of ["/assets/app-aB12_3-4.js", "/demo/assets/app-12345678.css"]) {
+        const versioned = await app.inject({ method: "GET", url });
+        expect(versioned.statusCode).toBe(200);
+        expect(versioned.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+      }
+      const serviceWorker = await app.inject({ method: "GET", url: "/sw.js" });
+      expect(serviceWorker.headers["cache-control"]).toBe("no-cache");
 
       const asset = await app.inject({ method: "GET", url: "/assets/app.css" });
       expect(asset.statusCode).toBe(200);
       expect(asset.headers["content-type"]).toContain("text/css");
       expect(asset.body).toBe("body { color: green; }");
+      expect(asset.headers["cache-control"]).toBe("public, max-age=0");
 
       const demoRedirect = await app.inject({ method: "GET", url: "/demo" });
       expect(demoRedirect.statusCode).toBe(308);
