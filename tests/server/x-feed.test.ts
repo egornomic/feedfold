@@ -265,7 +265,7 @@ describe("X RSS instances", () => {
     refresh.request([feed.id]);
     await refresh.waitForIdle();
     expect(requests).toEqual(["primary"]);
-    const article = database.articles.listArticles(1, { state: "all" })[0];
+    const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
     if (!article) throw new Error("Expected the initial X post");
     database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
 

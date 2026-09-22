@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { AppDatabase, type ParsedArticle } from "../../src/server/database.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const TEST_USER_ID = 1;
 const databases: AppDatabase[] = [];
@@ -46,7 +47,7 @@ function seededDatabase(): {
     feedUrl: "https://outside.example.test/feed",
   });
 
-  database.feeds.completeRefresh(scopedFeed.id, {
+  completeFeedRefresh(database.feeds, scopedFeed.id, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
@@ -63,7 +64,7 @@ function seededDatabase(): {
       ],
     },
   });
-  database.feeds.completeRefresh(outsideFeed.id, {
+  completeFeedRefresh(database.feeds, outsideFeed.id, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
@@ -86,8 +87,8 @@ function seededDatabase(): {
 
 function titles(database: AppDatabase, state: "all" | "unread" = "all"): string[] {
   return database.articles
-    .listArticles(TEST_USER_ID, { state })
-    .map((candidate) => candidate.title);
+    .listArticlePage(TEST_USER_ID, { state })
+    .articles.map((candidate) => candidate.title);
 }
 
 describe("article filtering rules", () => {
@@ -132,7 +133,7 @@ describe("article filtering rules", () => {
       action: "mark_read",
     });
 
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,

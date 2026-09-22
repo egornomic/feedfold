@@ -12,6 +12,7 @@ import { ExtractionQueue, extractArticle } from "../../src/server/features/extra
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 const TEST_USER_ID = 1;
@@ -75,10 +76,10 @@ describe("feed refresh and full-text extraction", () => {
     refresh.request([feed.id]);
     await refresh.waitForIdle();
 
-    const initialArticles = database.articles.listArticles(TEST_USER_ID, {
+    const initialArticles = database.articles.listArticlePage(TEST_USER_ID, {
       state: "all",
       feedId: feed.id,
-    });
+    }).articles;
     expect(initialArticles.map(({ title }) => title)).toEqual(
       Array.from({ length: 10 }, (_, index) => `Article ${12 - index}`),
     );
@@ -87,10 +88,10 @@ describe("feed refresh and full-text extraction", () => {
     refresh.request([feed.id]);
     await refresh.waitForIdle();
 
-    const refreshedArticles = database.articles.listArticles(TEST_USER_ID, {
+    const refreshedArticles = database.articles.listArticlePage(TEST_USER_ID, {
       state: "all",
       feedId: feed.id,
-    });
+    }).articles;
     expect(refreshedArticles.map(({ title }) => title)).toEqual(
       Array.from({ length: 11 }, (_, index) => `Article ${13 - index}`),
     );
@@ -244,10 +245,10 @@ describe("feed refresh and full-text extraction", () => {
     expect(missingRequests).toBe(0);
     expect(database.extractions.getPendingExtractions()).toEqual([]);
 
-    const articles = database.articles.listArticles(TEST_USER_ID, {
+    const articles = database.articles.listArticlePage(TEST_USER_ID, {
       state: "all",
       includeContent: true,
-    });
+    }).articles;
     expect(articles).toHaveLength(2);
     const extracted = articles.find((article) => article.title === "Extract me");
     expect(extracted).toMatchObject({
@@ -288,8 +289,8 @@ describe("feed refresh and full-text extraction", () => {
     expect(fullContent).not.toContain("<script");
 
     const magazineArticle = database.articles
-      .listArticles(TEST_USER_ID, { state: "all" })
-      .find((article) => article.id === extracted.id);
+      .listArticlePage(TEST_USER_ID, { state: "all" })
+      .articles.find((article) => article.id === extracted.id);
     expect(magazineArticle).toMatchObject({
       extractionStatus: "complete",
       contentHtml: null,
@@ -328,7 +329,9 @@ describe("feed refresh and full-text extraction", () => {
     expect(feedRequests).toBe(2);
     expect(conditionalHeader).toBe('"v1"');
     expect(database.feeds.getFeed(TEST_USER_ID, feed.id)?.lastHttpStatus).toBe(304);
-    expect(database.articles.listArticles(TEST_USER_ID, { state: "all" })).toHaveLength(2);
+    expect(database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles).toHaveLength(
+      2,
+    );
 
     database.articles.updateArticleState(TEST_USER_ID, extracted.id, {
       isRead: true,
@@ -351,7 +354,9 @@ describe("feed refresh and full-text extraction", () => {
     expect(database.articles.getArticle(TEST_USER_ID, extracted.id)?.feedContentHtml).toContain(
       "Corrected feed summary",
     );
-    expect(database.articles.listArticles(TEST_USER_ID, { state: "all" })).toHaveLength(2);
+    expect(database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles).toHaveLength(
+      2,
+    );
 
     const broken = database.feeds.createFeed(TEST_USER_ID, {
       feedUrl: `${baseUrl}/broken`,
@@ -439,7 +444,8 @@ describe("feed refresh and full-text extraction", () => {
       totalCount: 1,
     });
     expect(
-      database.articles.listArticles(TEST_USER_ID, { state: "all", includeContent: true })[0],
+      database.articles.listArticlePage(TEST_USER_ID, { state: "all", includeContent: true })
+        .articles[0],
     ).toMatchObject({
       title: "Publisher & post",
       summary: "Fallback summary.",
@@ -522,12 +528,12 @@ describe("feed refresh and full-text extraction", () => {
         feedContentHtml: `<p>Readable feed content ${index}</p>`,
       })),
     };
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -608,7 +614,7 @@ describe("feed refresh and full-text extraction", () => {
       feedContentHtml: null,
     });
     const refreshFeed = (feedId: number, articles: ParsedFeed["articles"]) =>
-      database.feeds.completeRefresh(feedId, {
+      completeFeedRefresh(database.feeds, feedId, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -705,7 +711,7 @@ describe("feed refresh and full-text extraction", () => {
     refreshFeed(partnerFeed.id, [
       article("partner-copy", "Exact shared title", "https://example.test/shared-url"),
     ]);
-    expect(database.articles.listArticles(partner.id, { state: "all" })).toMatchObject([
+    expect(database.articles.listArticlePage(partner.id, { state: "all" }).articles).toMatchObject([
       { title: "Exact shared title", url: "https://example.test/shared-url" },
     ]);
   });
@@ -727,13 +733,14 @@ describe("feed refresh and full-text extraction", () => {
       imageUrl: null,
       feedContentHtml: "<p>Feed summary without an image.</p>",
     };
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
       parsed: { title: "Feed", siteUrl: "https://example.test", articles: [parsedArticle] },
     });
-    const articleId = database.articles.listArticles(TEST_USER_ID, { state: "all" })[0]?.id;
+    const articleId = database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles[0]
+      ?.id;
     if (!articleId) throw new Error("Article was not stored");
     expect(database.extractions.requestExtraction(TEST_USER_ID, articleId)).toBe(true);
     expect(database.extractions.markExtractionProcessing(articleId)).toBe(true);
@@ -745,7 +752,7 @@ describe("feed refresh and full-text extraction", () => {
       error: null,
     });
 
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -780,18 +787,19 @@ describe("feed refresh and full-text extraction", () => {
       imageUrl: null,
       feedContentHtml: "<p>Old feed article.</p>",
     };
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
       parsed: { title: "Feed", siteUrl: "https://example.test", articles: [article] },
     });
-    const articleId = database.articles.listArticles(TEST_USER_ID, { state: "all" })[0]?.id;
+    const articleId = database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles[0]
+      ?.id;
     if (!articleId) throw new Error("Article was not stored");
     expect(database.extractions.requestExtraction(TEST_USER_ID, articleId)).toBe(true);
     expect(database.extractions.markExtractionProcessing(articleId)).toBe(true);
 
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -836,7 +844,7 @@ describe("feed refresh and full-text extraction", () => {
     const short = youtubeMediaFromUrl("https://www.youtube.com/shorts/short123");
     if (!video || !short) throw new Error("Expected YouTube media metadata");
 
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -870,7 +878,9 @@ describe("feed refresh and full-text extraction", () => {
       },
     });
 
-    expect(database.articles.listArticles(TEST_USER_ID, { state: "all" })).toMatchObject([
+    expect(
+      database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles,
+    ).toMatchObject([
       { title: "Regular upload", extractionStatus: "feed", media: { type: "video" } },
       { title: "Short upload", extractionStatus: "feed", media: { type: "short" } },
     ]);
@@ -884,8 +894,8 @@ describe("feed refresh and full-text extraction", () => {
     expect(rule.matchedCount).toBe(1);
     expect(
       database.articles
-        .listArticles(TEST_USER_ID, { state: "all" })
-        .map((article) => article.title),
+        .listArticlePage(TEST_USER_ID, { state: "all" })
+        .articles.map((article) => article.title),
     ).toEqual(["Regular upload"]);
   });
 
@@ -949,7 +959,7 @@ describe("feed refresh and full-text extraction", () => {
       feedUrl: `${baseUrl}/feed`,
       title: "Priority",
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -970,8 +980,8 @@ describe("feed refresh and full-text extraction", () => {
     });
     const articleIds = new Map(
       database.articles
-        .listArticles(TEST_USER_ID, { state: "all" })
-        .map((article) => [article.title, article.id]),
+        .listArticlePage(TEST_USER_ID, { state: "all" })
+        .articles.map((article) => [article.title, article.id]),
     );
     const firstId = articleIds.get("first");
     const secondId = articleIds.get("second");

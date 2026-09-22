@@ -226,9 +226,9 @@ describe("feed subscription workflow", () => {
     const fresh = await createFeed({ sourceKind: "published", feedUrl: `${origin}/feed` });
     await refreshService.waitForIdle();
     expect(requestedPaths).toEqual(["/feed"]);
-    expect(database.articles.listArticles(1, { feedId: fresh.id, state: "all" })).toMatchObject([
-      { title: "Published story" },
-    ]);
+    expect(
+      database.articles.listArticlePage(1, { feedId: fresh.id, state: "all" }).articles,
+    ).toMatchObject([{ title: "Published story" }]);
 
     const paused = await createFeed({
       sourceKind: "published",
@@ -238,7 +238,9 @@ describe("feed subscription workflow", () => {
     await refreshService.waitForIdle();
     expect(paused).toMatchObject({ paused: true, refreshing: false });
     expect(requestedPaths).toEqual(["/feed"]);
-    expect(database.articles.listArticles(1, { feedId: paused.id, state: "all" })).toEqual([]);
+    expect(
+      database.articles.listArticlePage(1, { feedId: paused.id, state: "all" }).articles,
+    ).toEqual([]);
 
     await expect(createFeed({ sourceKind: "published", feedUrl: fresh.feedUrl })).rejects.toThrow();
     expect(
@@ -278,7 +280,7 @@ describe("feed subscription workflow", () => {
     cleanups.push(
       refreshService.subscribe(1, () => {
         deliveredTitles.push(
-          database.articles.listArticles(1, { state: "all" }).map(({ title }) => title),
+          database.articles.listArticlePage(1, { state: "all" }).articles.map(({ title }) => title),
         );
       }),
     );

@@ -12,6 +12,7 @@ import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js"
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
 import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 import { exposeBrowserGlobals, waitFor } from "./react-harness.js";
 
 const TEST_USER_ID = 1;
@@ -139,7 +140,7 @@ describe("live article delivery", () => {
       feedUrl: "https://example.test/live-reading.xml",
       folderId: null,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,

@@ -19,6 +19,7 @@ import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import { DEFAULT_FACTCHECK_PROMPT } from "../../src/shared/ai-prompts.js";
 import type { AiRequestCredential } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -62,13 +63,13 @@ function addArticle(database: AppDatabase, userId: number): { feedId: number; ar
       },
     ],
   };
-  database.feeds.completeRefresh(feed.id, {
+  completeFeedRefresh(database.feeds, feed.id, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
     parsed,
   });
-  const articleId = database.articles.listArticles(userId, { state: "all" })[0]?.id;
+  const articleId = database.articles.listArticlePage(userId, { state: "all" }).articles[0]?.id;
   if (!articleId) throw new Error("Test article was not stored");
   return { feedId: feed.id, articleId };
 }
@@ -81,7 +82,7 @@ function addYouTubeArticle(database: AppDatabase, userId: number): number {
   const videoUrl = "https://www.youtube.com/watch?v=9hE5-98ZeCg";
   const media = youtubeMediaFromUrl(videoUrl);
   if (!media) throw new Error("Test YouTube media could not be created");
-  database.feeds.completeRefresh(feed.id, {
+  completeFeedRefresh(database.feeds, feed.id, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
@@ -103,7 +104,7 @@ function addYouTubeArticle(database: AppDatabase, userId: number): number {
       ],
     },
   });
-  const articleId = database.articles.listArticles(userId, { state: "all" })[0]?.id;
+  const articleId = database.articles.listArticlePage(userId, { state: "all" }).articles[0]?.id;
   if (!articleId) throw new Error("Test YouTube article was not stored");
   return articleId;
 }
@@ -830,7 +831,7 @@ describe("AI article summaries", () => {
       feedContentHtml:
         "<article><p>The full feed article explains an important result.</p></article>",
     };
-    database.feeds.completeRefresh(feedId, {
+    completeFeedRefresh(database.feeds, feedId, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -844,7 +845,7 @@ describe("AI article summaries", () => {
       "Stored summary",
     );
 
-    database.feeds.completeRefresh(feedId, {
+    completeFeedRefresh(database.feeds, feedId, {
       httpStatus: 200,
       etag: null,
       lastModified: null,

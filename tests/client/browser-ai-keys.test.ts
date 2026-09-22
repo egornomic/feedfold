@@ -18,6 +18,7 @@ import { FeedRefreshService } from "../../src/server/features/refresh/service.js
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { productionLogger } from "../../src/server/logging.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 declare global {
   interface Window {
@@ -145,7 +146,7 @@ describe("browser-held AI keys", () => {
         title: "Test",
         feedUrl: "https://example.test/feed",
       });
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -166,7 +167,8 @@ describe("browser-held AI keys", () => {
           ],
         },
       });
-      const articleId = database.articles.listArticles(userId, { state: "all" })[0]?.id as number;
+      const articleId = database.articles.listArticlePage(userId, { state: "all" }).articles[0]
+        ?.id as number;
       const summarize = () =>
         first.page.evaluate(
           (id) => window.feedfoldTest.api.summarizeArticle(id, null, true, "openai"),

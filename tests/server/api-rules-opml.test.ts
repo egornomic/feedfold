@@ -17,6 +17,7 @@ import {
   DEFAULT_CUSTOM_PROMPTS,
 } from "../../src/shared/ai-prompts.js";
 import type { Article, BootstrapData, ImportResult, Rule } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 const TEST_ACCOUNTS = [
@@ -179,7 +180,7 @@ describe("live API, OPML, and filtering rules", () => {
     const readerFeed = readerFeedResponse.json() as { id: number };
     const partnerFeed = partnerFeedResponse.json() as { id: number };
 
-    database.feeds.completeRefresh(readerFeed.id, {
+    completeFeedRefresh(database.feeds, readerFeed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -275,7 +276,7 @@ describe("live API, OPML, and filtering rules", () => {
     });
     expect(crossAccountRefresh.json()).toEqual({ requested: 0, refreshingFeedIds: [] });
 
-    database.feeds.completeRefresh(readerFeed.id, {
+    completeFeedRefresh(database.feeds, readerFeed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,

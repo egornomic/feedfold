@@ -11,6 +11,7 @@ import { FeedRefreshService } from "../../src/server/features/refresh/service.js
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type { ArticlePage, Folder } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -111,7 +112,7 @@ describe("folder article sorting", () => {
       title: string,
       articles: Array<{ externalId: string; title: string; publishedAt: string }>,
     ) =>
-      database.feeds.completeRefresh(feedId, {
+      completeFeedRefresh(database.feeds, feedId, {
         httpStatus: 200,
         etag: null,
         lastModified: null,

@@ -18,6 +18,7 @@ import {
 import { runtimeConfiguration } from "../../src/server/runtime/configuration.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../../src/shared/api/operations.js";
 import type { ArticlePage, BootstrapData, Folder, Rule } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -169,7 +170,7 @@ describe("local application API", () => {
       feedUrl: "https://example.test/feed.xml",
       folderId: folder.id,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -252,7 +253,7 @@ describe("local application API", () => {
       folderId: folder.id,
     });
     expect(feed).toMatchObject({ paused: false, folderId: folder.id });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,

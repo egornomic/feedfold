@@ -16,6 +16,7 @@ import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -490,7 +491,7 @@ describe("deployment policy", () => {
         feedUrl: "https://publisher.example.test/quota.xml",
       });
       expect(
-        database.feeds.completeRefresh(feed.id, {
+        completeFeedRefresh(database.feeds, feed.id, {
           httpStatus: 200,
           etag: null,
           lastModified: null,
@@ -531,7 +532,7 @@ describe("deployment policy", () => {
         feedUrl: "https://publisher.example.test/bytes.xml",
       });
       expect(
-        storageDatabase.feeds.completeRefresh(feed.id, {
+        completeFeedRefresh(storageDatabase.feeds, feed.id, {
           httpStatus: 200,
           etag: null,
           lastModified: null,

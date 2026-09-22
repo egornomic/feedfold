@@ -20,6 +20,7 @@ import { FeedRefreshService } from "../../src/server/features/refresh/service.js
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type { ArticlePage, BootstrapData, Feed, Rule } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -71,7 +72,7 @@ describe("reader data resource", () => {
       feedUrl: "https://example.test/moving.xml",
       folderId: sourceFolder.id,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -244,7 +245,7 @@ describe("reader data resource", () => {
       reloadArticles: async () => {
         if (deliverDuringReload) {
           deliverDuringReload = false;
-          database.feeds.completeRefresh(feed.id, {
+          completeFeedRefresh(database.feeds, feed.id, {
             httpStatus: 200,
             etag: null,
             lastModified: null,
@@ -377,7 +378,7 @@ describe("reader data resource", () => {
     await resource.loadBootstrap();
     expect(currentBootstrap().counts.unread).toBe(0);
 
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -426,7 +427,7 @@ describe("reader data resource", () => {
       feedUrl: "https://example.test/concurrent.xml",
       folderId: null,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -508,7 +509,7 @@ describe("reader data resource", () => {
     await resource.loadBootstrap();
     expect(currentBootstrap().counts.unread).toBe(1);
 
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
