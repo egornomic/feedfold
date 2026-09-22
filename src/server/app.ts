@@ -37,6 +37,8 @@ export interface AppServices extends ApplicationServices {
 function staticHeaders(reply: FastifyReply, path: string): void {
   if (path.endsWith("sw.js") || path.endsWith("index.html")) {
     reply.header("Cache-Control", "no-cache");
+  } else if (/[/\\]assets[/\\][^/\\]+-[\w-]{8}\.[\w]+$/.test(path)) {
+    reply.header("Cache-Control", "public, max-age=31536000, immutable");
   }
 }
 

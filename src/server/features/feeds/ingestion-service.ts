@@ -97,7 +97,9 @@ export class FeedIngestionService {
             parsed,
             subscription.initialized ? undefined : INITIAL_ARTICLE_LIMIT,
           );
-          this.quotas.assertAccountStorage(subscription.userId);
+          if (delivered.size > 0 || changedArticleIds.size > 0) {
+            this.quotas.assertAccountStorage(subscription.userId);
+          }
           this.feeds.markSubscriptionInitialized(subscription.feedId, initializedAt);
           this.rules.recomputeRulesForFeedArticles(
             subscription.userId,

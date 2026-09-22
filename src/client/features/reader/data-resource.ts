@@ -453,7 +453,10 @@ export class ReaderDataResource implements ReaderDataMutations {
   private async flushInvalidations(): Promise<void> {
     while (this.active && this.invalidationPending) {
       this.invalidationPending = false;
+      const initializing = this.binding?.getBootstrap() === null;
       if (await this.refreshBootstrap()) {
+        // The first snapshot starts the route's own article/rule loaders.
+        if (initializing) continue;
         const [articlesLoaded, rulesLoaded] = await Promise.all([
           this.loadArticles("delivery"),
           this.loadRules(),

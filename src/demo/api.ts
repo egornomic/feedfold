@@ -32,8 +32,14 @@ function request<K extends ApiOperation>(
   });
 }
 
-function subscribeReaderDataInvalidations(): () => void {
-  return () => {};
+function subscribeReaderDataInvalidations(listener: () => void): () => void {
+  let active = true;
+  queueMicrotask(() => {
+    if (active) listener();
+  });
+  return () => {
+    active = false;
+  };
 }
 
 async function exportOpml(): Promise<void> {

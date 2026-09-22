@@ -516,6 +516,18 @@ describe("deployment policy", () => {
         0,
       );
       expect(database.feeds.getFeed(1, feed.id)).toMatchObject({ healthStatus: "healthy" });
+
+      // A publisher's 304 can still retry an earlier delivery blocked by the quota.
+      expect(
+        completeFeedRefresh(database.feeds, feed.id, {
+          httpStatus: 304,
+          etag: null,
+          lastModified: null,
+        }),
+      ).toBe(true);
+      expect(database.connection.prepare("SELECT COUNT(*) FROM feed_articles").pluck().get()).toBe(
+        0,
+      );
     } finally {
       database.close();
     }

@@ -59,6 +59,96 @@ const FEED_SOURCE = `<?xml version="1.0" encoding="UTF-8"?>
 </rss>`;
 
 describe("reader data resource", () => {
+  it.each([false, true])(
+    "loads one initial snapshot and reconciles deliveries and reconnects (delivery during startup: %s)",
+    async (duringStartup) => {
+      const database = new AppDatabase(":memory:");
+      const refresh = new FeedRefreshService(
+        database.feeds,
+        new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+      );
+      cleanups.push(
+        () => database.close(),
+        () => refresh.stop(),
+      );
+      const snapshotStarted = deferred();
+      const releaseSnapshot = deferred();
+      let bootstrapCalls = 0;
+      let articleReloads = 0;
+      let ruleReloads = 0;
+      let latestBootstrap: BootstrapData | null = null;
+      const currentBootstrap = () => latestBootstrap;
+      const resource = new ReaderDataResource(
+        {
+          ...api,
+          bootstrap: async () => {
+            bootstrapCalls += 1;
+            const snapshot = {
+              ...database.bootstrap.getBootstrap(1),
+              aiSettings: {
+                credentialStorageAvailable: false,
+                providers: [],
+                features: { articleSummary: null },
+              },
+            };
+            if (bootstrapCalls === 1) {
+              snapshotStarted.resolve();
+              await releaseSnapshot.promise;
+            }
+            return snapshot;
+          },
+        },
+        5,
+        (listener) => {
+          const unsubscribe = refresh.subscribe(1, listener);
+          queueMicrotask(listener);
+          return unsubscribe;
+        },
+      );
+      cleanups.push(() => resource.pause());
+      resource.connect({
+        getBootstrap: currentBootstrap,
+        applyBootstrap: (snapshot) => {
+          latestBootstrap = snapshot;
+        },
+        setBootstrapError: (message) => {
+          if (message) throw new Error(message);
+        },
+        reloadArticles: async () => {
+          articleReloads += 1;
+        },
+        reloadRules: async () => {
+          ruleReloads += 1;
+        },
+      });
+
+      resource.resume();
+      await snapshotStarted.promise;
+      if (!duringStartup) {
+        releaseSnapshot.resolve();
+        await expect.poll(() => currentBootstrap()).not.toBeNull();
+        expect(bootstrapCalls).toBe(1);
+        expect(articleReloads).toBe(0);
+        expect(ruleReloads).toBe(0);
+      }
+      database.folders.createFolder(1, { name: "Added in another tab" });
+      refresh.notifyDataChanged(1);
+      releaseSnapshot.resolve();
+      await expect.poll(() => currentBootstrap()?.folders.length).toBe(1);
+      await expect.poll(() => articleReloads).toBe(1);
+      expect(ruleReloads).toBe(1);
+      expect(bootstrapCalls).toBe(2);
+
+      resource.pause();
+      database.folders.createFolder(1, { name: "Added while disconnected" });
+      refresh.notifyDataChanged(1);
+      resource.resume();
+      await expect.poll(() => currentBootstrap()?.folders.length).toBe(2);
+      await expect.poll(() => articleReloads).toBe(2);
+      expect(bootstrapCalls).toBe(3);
+    },
+  );
+
   it.each(["feed", "folder"])(
     "reloads dependent data after moving a %s into a folder",
     async (kind) => {

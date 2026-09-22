@@ -61,7 +61,6 @@ export interface ArticleQueueController {
 interface ArticleQueueOptions {
   route: AppRouteController;
   dataResource: ReaderDataResource;
-  bootstrapReady: boolean;
   readingMode: ReadingMode;
   onReadingModeChange: (mode: ReadingMode) => void;
   showToast: (message: string) => void;
@@ -70,7 +69,6 @@ interface ArticleQueueOptions {
 export function useArticleQueue({
   route,
   dataResource,
-  bootstrapReady,
   readingMode,
   onReadingModeChange,
   showToast,
@@ -125,7 +123,7 @@ export function useArticleQueue({
   const reloadQuery = useCallback(
     async (signal: AbortSignal) => {
       const nextRoute = currentRoute();
-      if (!bootstrapReady || nextRoute.kind !== "reader") return;
+      if (nextRoute.kind !== "reader") return;
       const requestKey = `${appRoutePath(nextRoute)}:${readingMode}`;
       const switchingMode =
         !articleListNeedsReload.current &&
@@ -218,14 +216,7 @@ export function useArticleQueue({
         if (!signal.aborted && requestId.current === currentRequestId) setLoading(false);
       }
     },
-    [
-      bootstrapReady,
-      currentRoute,
-      displayedReadingMode,
-      onReadingModeChange,
-      readingMode,
-      showToast,
-    ],
+    [currentRoute, displayedReadingMode, onReadingModeChange, readingMode, showToast],
   );
 
   const reloadAfterMutation = useCallback(
@@ -322,7 +313,7 @@ export function useArticleQueue({
           : nextRoute.kind === "article"
             ? readerRouteRef.current
             : null;
-      if (!bootstrapReady || !queryRoute) {
+      if (!queryRoute) {
         loadedReaderRequestKey.current = null;
         return;
       }
@@ -450,7 +441,7 @@ export function useArticleQueue({
       );
       setQueryRevision((current) => current + 1);
     },
-    [bootstrapReady, currentRoute, readingMode],
+    [currentRoute, readingMode],
   );
 
   const loadArticles = useCallback(
@@ -465,7 +456,6 @@ export function useArticleQueue({
     const queryRoute =
       nextRoute.kind === "reader" ? nextRoute : nextRoute.kind === "article" ? readerRoute : null;
     if (
-      !bootstrapReady ||
       !nextCursor ||
       loading ||
       loadingMore ||
@@ -521,7 +511,6 @@ export function useArticleQueue({
       if (requestId.current === currentRequestId) setLoadingMore(false);
     }
   }, [
-    bootstrapReady,
     currentRoute,
     dataResource,
     displayedReadingMode,
@@ -538,13 +527,35 @@ export function useArticleQueue({
     dataResource.cancelArticles();
     requestId.current += 1;
     setLoadingMore(false);
-    if (!bootstrapReady) return;
     if (nextRoute.kind === "article") {
       articleListNeedsReload.current = true;
       return;
     }
     if (nextRoute.kind !== "reader") return;
     const requestKey = `${appRoutePath(nextRoute)}:${readingMode}`;
+    if (
+      articleListNeedsReload.current &&
+      !contextArticleReturn.current &&
+      loadedReaderRequestKey.current === requestKey
+    ) {
+      const previous = articlesRef.current;
+      const matching = previous.filter((article) => {
+        if (nextRoute.state === "unread") return !article.isRead;
+        if (nextRoute.state === "read") return article.isRead;
+        if (nextRoute.state === "starred") return article.isStarred;
+        return true;
+      });
+      setArticles(matching);
+      setActiveArticleId((current) => {
+        if (matching.some((article) => article.id === current)) return current;
+        const index = Math.max(
+          0,
+          previous.findIndex((article) => article.id === current),
+        );
+        return matching[Math.min(index, matching.length - 1)]?.id ?? null;
+      });
+      articleListNeedsReload.current = false;
+    }
     if (
       articleListNeedsReload.current ||
       contextArticleReturn.current ||
@@ -555,11 +566,11 @@ export function useArticleQueue({
       setLoading(false);
       setError(null);
     }
-  }, [appRoute, bootstrapReady, dataResource, loadArticles, readingMode]);
+  }, [appRoute, dataResource, loadArticles, readingMode]);
 
   useEffect(() => {
     const articleId = routedArticleId;
-    if (!bootstrapReady || articleId === null) return;
+    if (articleId === null) return;
     void routedArticleRetry;
     let active = true;
     const currentRequestId = requestId.current;
@@ -591,12 +602,19 @@ export function useArticleQueue({
 
     const currentQueueReloadId = queueReloadId.current + 1;
     queueReloadId.current = currentQueueReloadId;
+    loadedReaderRequestKey.current = null;
     setLoading(true);
     setError(null);
+    let articleReady = false;
+    const isCurrent = () =>
+      active &&
+      requestId.current === currentRequestId &&
+      queueReloadId.current === currentQueueReloadId;
     void (async () => {
       try {
         await dataResource.requestArticles(async (signal) => {
           const article = await api.article(articleId, signal);
+          if (signal.aborted || !isCurrent()) return;
           const context = articleContext();
           const queueRoute = context?.route ?? {
             kind: "reader" as const,
@@ -605,6 +623,17 @@ export function useArticleQueue({
             state: "all" as const,
             search: "",
           };
+          fullContentLoadedIds.current = new Set([article.id]);
+          setArticleContext(queueRoute, context?.articleIndex);
+          setLoadedReaderRoute(queueRoute);
+          setDisplayedReadingMode(readingMode);
+          setArticles([article]);
+          setNextCursor(null);
+          setActiveArticleId(article.id);
+          setLoading(false);
+          setLoadingMore(true);
+          articleReady = true;
+
           const page = await api.articles(
             articleQueryForReaderRoute(queueRoute, {
               limit: readingMode === "expanded" ? 20 : 100,
@@ -613,19 +642,18 @@ export function useArticleQueue({
             }),
             signal,
           );
-          if (
-            signal.aborted ||
-            !active ||
-            requestId.current !== currentRequestId ||
-            queueReloadId.current !== currentQueueReloadId
-          ) {
-            return;
-          }
+          if (signal.aborted || !isCurrent()) return;
+          const currentArticle =
+            articlesRef.current.find((item) => item.id === article.id) ?? article;
           const pageIndex = page.articles.findIndex((item) => item.id === article.id);
-          const anchoredArticles = articlesWithContextReturn(page.articles, {
-            article,
-            index: page.anchorIndex ?? (pageIndex >= 0 ? pageIndex : (context?.articleIndex ?? 0)),
-          });
+          const anchoredArticles = articlesWithContextReturn(
+            articlesWithUpdatedState(page.articles, [currentArticle]),
+            {
+              article: currentArticle,
+              index:
+                page.anchorIndex ?? (pageIndex >= 0 ? pageIndex : (context?.articleIndex ?? 0)),
+            },
+          );
           const nextArticles = appendUnseenArticles(anchoredArticles, articlesRef.current).articles;
           const actualArticleIndex = nextArticles.findIndex((item) => item.id === article.id);
           setArticleContext(
@@ -642,24 +670,33 @@ export function useArticleQueue({
           setActiveArticleId(article.id);
         });
       } catch (caught) {
-        if (active) setError(errorMessage(caught));
+        if (!isCurrent()) return;
+        if (articleReady) {
+          showToast(
+            `Could not load nearby articles. Refresh to try again: ${errorMessage(caught)}`,
+          );
+        } else {
+          setError(errorMessage(caught));
+        }
       } finally {
-        if (active) setLoading(false);
+        if (isCurrent()) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     })();
 
     return () => {
       active = false;
-      dataResource.cancelArticles();
     };
   }, [
     articleContext,
-    bootstrapReady,
     dataResource,
     readingMode,
     routedArticleId,
     routedArticleRetry,
     setArticleContext,
+    showToast,
   ]);
 
   const selectArticle = useCallback((articleId: number, keyboardTarget = false) => {

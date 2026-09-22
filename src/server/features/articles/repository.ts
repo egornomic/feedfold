@@ -57,24 +57,19 @@ function initialArticles(
 export class ArticleRepository {
   constructor(private readonly sqlite: Sqlite.Database) {}
 
-  getCounts(userId: number): { unread: number; starred: number; all: number } {
-    const counts = this.sqlite
-      .prepare(
-        `SELECT
-           SUM(CASE WHEN feed_articles.is_read = 0 AND ${visibleClause} THEN 1 ELSE 0 END) AS unread,
-           SUM(CASE WHEN feed_articles.is_starred = 1 AND ${visibleClause} THEN 1 ELSE 0 END) AS starred,
-           SUM(CASE WHEN ${visibleClause} THEN 1 ELSE 0 END) AS allCount
+  getStarredCount(userId: number): number {
+    return Number(
+      this.sqlite
+        .prepare(
+          `SELECT COUNT(*)
          FROM feed_articles
          JOIN articles ON articles.id = feed_articles.article_id
          JOIN feeds ON feeds.id = feed_articles.feed_id
-         WHERE feeds.user_id = ?`,
-      )
-      .get(userId) as Row;
-    return {
-      unread: Number(counts.unread ?? 0),
-      starred: Number(counts.starred ?? 0),
-      all: Number(counts.allCount ?? 0),
-    };
+         WHERE feeds.user_id = ? AND feed_articles.is_starred = 1 AND ${visibleClause}`,
+        )
+        .pluck()
+        .get(userId),
+    );
   }
 
   listArticlePage(userId: number, query: ArticleQuery): ArticlePage {

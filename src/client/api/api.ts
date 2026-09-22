@@ -88,7 +88,11 @@ function subscribeReaderDataInvalidations(listener: () => void): () => void {
   };
   const bridge = window.feedfoldDesktop;
   const unsubscribe = bridge
-    ? bridge.onDataChanged(invalidate)
+    ? (() => {
+        const unsubscribe = bridge.onDataChanged(invalidate);
+        queueMicrotask(invalidate);
+        return unsubscribe;
+      })()
     : (() => {
         const events = new EventSource(appUrl("/api/refresh/events"), { withCredentials: true });
         events.addEventListener("message", invalidate);

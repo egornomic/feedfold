@@ -1,10 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionUser } from "../../shared/types";
 import { ApiError, AUTH_REQUIRED_EVENT, api, errorMessage } from "../api/api";
 import { LoginPage, SessionLoading } from "../features/auth/auth";
 import { StartupError } from "../features/reader/reader-states";
-
-const AppShell = lazy(() => import("./app-shell"));
+import AppShell from "./app-shell";
 
 export function App() {
   const [checkingSession, setCheckingSession] = useState(true);
@@ -71,13 +70,6 @@ export function App() {
   }
   if (!user) return <LoginPage onAuthenticated={setUser} />;
   return (
-    <Suspense fallback={<SessionLoading />}>
-      <AppShell
-        key={user.id}
-        user={user}
-        onLogout={logout}
-        onAccountDeleted={() => setUser(null)}
-      />
-    </Suspense>
+    <AppShell key={user.id} user={user} onLogout={logout} onAccountDeleted={() => setUser(null)} />
   );
 }

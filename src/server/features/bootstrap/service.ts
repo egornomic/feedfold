@@ -15,11 +15,16 @@ export class BootstrapService {
   ) {}
 
   getBootstrap(userId: number): Omit<BootstrapData, "aiSettings"> {
+    const feeds = this.feeds.listFeeds(userId);
     return {
       folders: this.folders.listFolders(userId),
-      feeds: this.feeds.listFeeds(userId),
+      feeds,
       settings: this.settings.getSettings(userId),
-      counts: this.articles.getCounts(userId),
+      counts: {
+        unread: feeds.reduce((count, feed) => count + feed.unreadCount, 0),
+        all: feeds.reduce((count, feed) => count + feed.totalCount, 0),
+        starred: this.articles.getStarredCount(userId),
+      },
       capabilities: { manualRefresh: this.deploymentPolicy.manualRefresh },
     };
   }
