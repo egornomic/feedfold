@@ -82,8 +82,8 @@ export default defineConfig({
         scope: appBaseUrl,
         display: "standalone",
         categories: ["news", "productivity"],
-        background_color: "#0f1211",
-        theme_color: "#0f1211",
+        background_color: "#0e0f0e",
+        theme_color: "#0e0f0e",
         icons: [
           {
             src: appUrl("/icons/pwa-192.png"),

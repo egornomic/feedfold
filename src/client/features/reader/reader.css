@@ -122,14 +122,6 @@
   background: var(--accent-surface);
 }
 
-.article-list-item.is-read:not(.is-active) {
-  opacity: 0.66;
-}
-
-:root[data-theme="light"] .article-list-item.is-read:not(.is-active) {
-  opacity: 0.82;
-}
-
 .article-open-button {
   position: absolute;
   inset: 0;

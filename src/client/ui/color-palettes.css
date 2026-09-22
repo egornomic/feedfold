@@ -2,22 +2,22 @@
    Each pair is light, dark; color-scheme chooses the active version. */
 :root,
 [data-palette="moss"] {
-  --bg: light-dark(#f7f8f5, #0f1211);
-  --sidebar: light-dark(#e9ede8, #121614);
-  --surface: light-dark(#fdfefb, #171c19);
-  --surface-raised: light-dark(#fff, #1c221f);
-  --surface-hover: light-dark(#edf1ec, #202723);
-  --surface-active: light-dark(#e3ebe4, #263029);
-  --border: light-dark(rgba(20, 40, 27, 0.13), rgba(220, 235, 226, 0.13));
-  --border-strong: light-dark(rgba(20, 40, 27, 0.24), rgba(220, 235, 226, 0.25));
-  --text: light-dark(#101a13, #f0f4f1);
-  --text-secondary: light-dark(#34443a, #b7c0ba);
-  --muted: light-dark(#56635a, #7f8983);
-  --accent: light-dark(#226a45, #9bc8a7);
-  --accent-strong: light-dark(#185536, #b6dfbe);
-  --accent-surface: light-dark(rgba(34, 106, 69, 0.13), rgba(137, 190, 151, 0.13));
-  --on-accent: light-dark(oklch(0.99 0.004 130), oklch(0.12 0.02 130));
-  --focus: light-dark(oklch(0.48 0.14 130), oklch(0.82 0.13 130));
+  --bg: light-dark(#f7f8f5, #0e0f0e);
+  --sidebar: light-dark(#eceee8, #111311);
+  --surface: light-dark(#fcfdf9, #181a18);
+  --surface-raised: light-dark(#fff, #202320);
+  --surface-hover: light-dark(#eff1eb, #232623);
+  --surface-active: light-dark(#e6ebe0, #282c28);
+  --border: light-dark(rgb(27 38 26 / 0.12), rgb(228 232 225 / 0.095));
+  --border-strong: light-dark(rgb(27 38 26 / 0.22), rgb(228 232 225 / 0.19));
+  --text: light-dark(#1b211b, #eeefeb);
+  --text-secondary: light-dark(#414b40, #b8bcb5);
+  --muted: light-dark(#616b5d, #949a90);
+  --accent: light-dark(#3f6945, #a1ba9f);
+  --accent-strong: light-dark(#305437, #bed1b6);
+  --accent-surface: light-dark(rgb(63 105 69 / 0.1), rgb(161 186 159 / 0.1));
+  --on-accent: light-dark(#fcfdf9, #10160f);
+  --focus: var(--accent);
 }
 
 [data-palette="sand"] {
