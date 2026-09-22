@@ -1,24 +1,25 @@
 import { AlertTriangle, Languages, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
 import { useRef } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import { useMotionPresence } from "../../../ui/motion";
+import type { useMotionPresence } from "../../../ui/motion";
 import { AiMarkdown } from "./ai-markdown";
 import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
 
 export function ArticleSummaryPanel({
   article,
   state,
+  presence: summaryPresence,
   customPrompts,
   onRegenerate,
   onOpenSettings,
 }: {
   article: Article;
   state: ArticleSummaryViewState;
+  presence: ReturnType<typeof useMotionPresence>;
   customPrompts: AiCustomPrompt[];
   onRegenerate: (article: Article) => void;
   onOpenSettings: () => void;
 }) {
-  const summaryPresence = useMotionPresence(state.visible);
   const retainedState = useRef(state);
   if (state.visible) retainedState.current = state;
   const displayedState = state.visible ? state : retainedState.current;

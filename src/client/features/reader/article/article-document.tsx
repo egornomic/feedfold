@@ -2,7 +2,7 @@ import { ListFilter } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import { useMotionPresence } from "../../../ui/motion";
+import { interactionMotionIsInstant, useMotionPresence } from "../../../ui/motion";
 import type { FeedManagementAction } from "../../feeds/feed-management";
 import {
   captureTextSelection,
@@ -57,7 +57,8 @@ export function ArticleDocument({
   const readingFlowRef = useRef<HTMLDivElement>(null);
   const readingFlowTop = useRef<number | null>(null);
   const readingFlowAnimation = useRef<Animation | null>(null);
-  const previousSummaryVisibility = useRef(summaryState.visible);
+  const summaryPresence = useMotionPresence(summaryState.visible);
+  const previousSummaryPresence = useRef(summaryPresence.present);
   const menuRef = useRef<HTMLDivElement>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const selectionMenuPresence = useMotionPresence(selectionMenu !== null);
@@ -67,13 +68,14 @@ export function ArticleDocument({
 
   useLayoutEffect(() => {
     const flow = readingFlowRef.current;
-    if (!flow) return;
-    const visibilityChanged = previousSummaryVisibility.current !== summaryState.visible;
-    previousSummaryVisibility.current = summaryState.visible;
-    const nextTop = flow.getBoundingClientRect().top;
+    const root = documentRef.current;
+    if (!flow || !root) return;
+    const presenceChanged = previousSummaryPresence.current !== summaryPresence.present;
+    previousSummaryPresence.current = summaryPresence.present;
+    const nextTop = flow.getBoundingClientRect().top - root.getBoundingClientRect().top;
     const previousTop = readingFlowTop.current;
     readingFlowTop.current = nextTop;
-    if (!visibilityChanged) return;
+    if (!presenceChanged) return;
     readingFlowAnimation.current?.cancel();
     readingFlowAnimation.current = null;
     if (previousTop === null) return;
@@ -84,6 +86,7 @@ export function ArticleDocument({
     if (
       Math.abs(delta) < 0.5 ||
       duration === 0 ||
+      interactionMotionIsInstant() ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
       return;
@@ -100,7 +103,7 @@ export function ArticleDocument({
     animation.onfinish = () => {
       if (readingFlowAnimation.current === animation) readingFlowAnimation.current = null;
     };
-  }, [summaryState.visible]);
+  }, [summaryPresence.present]);
 
   useEffect(
     () => () => {
@@ -201,6 +204,7 @@ export function ArticleDocument({
               <ArticleSummaryPanel
                 article={article}
                 state={summaryState}
+                presence={summaryPresence}
                 customPrompts={customPrompts}
                 onRegenerate={onRegenerateSummary}
                 onOpenSettings={onOpenAiSettings}

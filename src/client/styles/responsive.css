@@ -248,21 +248,15 @@
 
 @media (min-width: 1021px) {
   .app-shell.is-sidebar-collapsed {
-    grid-template-columns: 1fr;
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  .app-shell > .sidebar {
+    width: var(--sidebar-width);
   }
 
   .app-shell.is-sidebar-collapsed > .sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    width: var(--sidebar-width);
-    height: 100dvh;
-    min-height: 0;
     pointer-events: none;
-  }
-
-  .sidebar.is-collapsed .brand-row {
-    width: 52px;
-    padding: 8px;
   }
 
   .sidebar.is-collapsed::before {
@@ -288,25 +282,6 @@
 
   .app-shell.is-sidebar-collapsed .reader-toolbar .reader-title-row {
     padding-left: 58px;
-  }
-
-  .app-shell.is-management-view.is-sidebar-collapsed {
-    grid-template-columns: 0 minmax(0, 1fr);
-  }
-
-  .app-shell.is-management-view.is-sidebar-collapsed > .sidebar {
-    position: relative;
-    inset: auto;
-    width: auto;
-    height: auto;
-  }
-
-  .app-shell.is-management-view .sidebar::before {
-    transform: none;
-  }
-
-  .app-shell.is-management-view .sidebar > :is(.brand-row, .sidebar-navigation, .sidebar-footer) {
-    width: var(--sidebar-width);
   }
 
   .app-shell .sidebar-collapse-button {
@@ -923,6 +898,9 @@
     }
   }
 
+  .app-shell,
+  .reader-title-row,
+  .page-header,
   .app-shell .sidebar-collapse-button {
     transition-duration: 0s;
   }
@@ -1030,7 +1008,7 @@
   }
 
   :root .shortcut-dialog,
-  .management-dialog {
+  :root .management-dialog {
     transition:
       opacity var(--duration-reduced) ease,
       display var(--duration-reduced) allow-discrete,
@@ -1038,7 +1016,7 @@
   }
 
   :root .shortcut-dialog::backdrop,
-  .management-dialog::backdrop {
+  :root .management-dialog::backdrop {
     transition:
       opacity var(--duration-reduced) ease,
       display var(--duration-reduced) allow-discrete,
@@ -1061,8 +1039,9 @@
   :root .shortcut-dialog,
   :root .shortcut-dialog[open],
   :root .shortcut-dialog[data-state="closing"],
-  .management-dialog,
-  .management-dialog[open],
+  :root .management-dialog,
+  :root .management-dialog[open],
+  :root .management-dialog[data-state="closing"],
   .pwa-update,
   .pwa-update[data-motion-state="closed"] {
     transform: none;
@@ -1132,6 +1111,10 @@
   }
 
   @starting-style {
+    :root .management-dialog[open] {
+      transform: none;
+    }
+
     .inline-state.empty-state,
     .inline-editor[data-motion-state="open"],
     .add-folder-form[data-motion-state="open"],
@@ -1161,6 +1144,21 @@
   }
 }
 
+:root[data-input-modality="keyboard"]
+  :is(.app-shell, .reader-title-row, .page-header, .sidebar, .nav-scrim, .sidebar-context-menu),
+:root[data-input-modality="keyboard"] .sidebar::before,
+:root[data-input-modality="keyboard"]
+  .sidebar
+  :is(.brand, .sidebar-navigation, .sidebar-footer, .sidebar-collapse-button),
+:root[data-input-modality="keyboard"] :is(.article-ai-summary, .article-content-layer),
+:root[data-input-modality="keyboard"]
+  :is(
+    .dropdown-select-trigger,
+    .dropdown-select-trigger > svg,
+    .dropdown-combobox > svg,
+    .dropdown-select-menu,
+    .dropdown-select-option
+  ),
 :root[data-input-modality="keyboard"] .shortcut-dialog,
 :root[data-input-modality="keyboard"] .shortcut-dialog::backdrop {
   transition: none;
