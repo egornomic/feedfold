@@ -115,7 +115,21 @@ export default defineConfig({
       },
       workbox: {
         clientsClaim: true,
-        globPatterns: ["**/*.{js,css,html,png,webp}"],
+        globPatterns: ["**/*.{js,css,html,png}"],
+        globIgnores: [
+          "**/{feeds,add-feed,rules,settings,shortcut-help,context-dialog,web-feed-setup,folder-form,rule-form}-*.{js,css}",
+        ],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin && /\/assets\/[^/]+-[\w-]{8}\.\w+$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: `feedfold${appBasePath}-assets`,
+              expiration: { maxEntries: 100, maxAgeSeconds: 31_536_000 },
+            },
+          },
+        ],
         navigateFallback: appUrl("/index.html"),
         navigateFallbackDenylist: [
           new RegExp(`^${apiPathPattern}`),
