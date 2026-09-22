@@ -210,10 +210,6 @@ export class FeedService {
     return this.repository.getRefreshCandidates(ids);
   }
 
-  getUserRefreshFeedIds(userId: number, requestedIds?: number[]): number[] {
-    return this.repository.getUserRefreshFeedIds(userId, requestedIds);
-  }
-
   sourceIdForFeed(feedId: number): number {
     return this.repository.sourceIdForFeed(feedId);
   }
@@ -237,10 +233,6 @@ export class FeedService {
 
   listSourceSubscriptions(sourceId: number): SourceSubscription[] {
     return this.repository.listSourceSubscriptions(sourceId);
-  }
-
-  listDeliverableSourceSubscriptions(sourceId: number): SourceSubscription[] {
-    return this.repository.listDeliverableSourceSubscriptions(sourceId);
   }
 
   completeRefresh(id: number, input: SuccessfulFeedRefresh): boolean {
