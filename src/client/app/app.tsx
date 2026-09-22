@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { SessionUser } from "../../shared/types";
-import { ApiError, AUTH_REQUIRED_EVENT, api, errorMessage } from "../api";
-import { LoginPage, SessionLoading } from "../auth";
+import { ApiError, AUTH_REQUIRED_EVENT, api, errorMessage } from "../api/api";
+import { LoginPage, SessionLoading } from "../features/auth/auth";
 import { StartupError } from "../features/reader/reader-states";
 
 const AppShell = lazy(() => import("./app-shell"));

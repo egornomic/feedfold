@@ -2,19 +2,19 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
-import { decryptAiKey, encryptAiKey } from "../../src/client/ai-vault.js";
+import { decryptAiKey, encryptAiKey } from "../../src/client/api/ai-vault.js";
+import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
+import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
 import {
   ARTICLE_SUMMARY_PROMPT_VERSION,
   prepareArticleSummary,
-} from "../../src/server/ai/article-summary.js";
+} from "../../src/server/features/ai/article-summary.js";
 import {
   prepareArticleTranslation,
   renderArticleTranslation,
-} from "../../src/server/ai/article-translation.js";
-import { AiError } from "../../src/server/ai/errors.js";
-import { createAiProviders } from "../../src/server/ai/providers.js";
-import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
-import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+} from "../../src/server/features/ai/article-translation.js";
+import { AiError } from "../../src/server/features/ai/errors.js";
+import { createAiProviders } from "../../src/server/features/ai/providers.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import { DEFAULT_FACTCHECK_PROMPT } from "../../src/shared/ai-prompts.js";

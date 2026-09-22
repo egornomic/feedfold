@@ -28,17 +28,17 @@ import type {
   Folder as FolderType,
   WebFeedAnalysis,
 } from "../../../shared/types";
-import { api, errorMessage } from "../../api";
-import type { ReaderDataMutations } from "../../data-resource";
-import { DropdownSelect } from "../../dropdown";
-import type { ManagementRequest } from "../../feed-management";
-import { folderPathLabel } from "../../folder-hierarchy";
-import { useAnimatedDialog } from "../../motion";
+import { api, errorMessage } from "../../api/api";
+import { DropdownSelect } from "../../ui/dropdown";
+import { useAnimatedDialog } from "../../ui/motion";
+import type { ManagementRequest } from "../feeds/feed-management";
+import { folderPathLabel } from "../feeds/folder-hierarchy";
+import type { ReaderDataMutations } from "../reader/data-resource";
 import { formatDate, formatRefreshInterval } from "./shared";
 import "./dialogs.css";
 
 const WebFeedSetup = lazy(async () => ({
-  default: (await import("../../web-feed-setup")).WebFeedSetup,
+  default: (await import("../feeds/web-feed-setup")).WebFeedSetup,
 }));
 const FolderForm = lazy(async () => ({
   default: (await import("./feeds")).FolderForm,

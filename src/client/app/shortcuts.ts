@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast as showToast } from "sonner";
 import type { BootstrapData, ReadingMode } from "../../shared/types";
+import type { ManagementRequest } from "../features/feeds/feed-management";
 import type { useArticleActions } from "../features/reader/article-actions";
 import type { ArticleQueueController } from "../features/reader/article-queue";
 import {
@@ -8,7 +9,6 @@ import {
   ARTICLE_FONT_MIN,
   type useReaderPreferences,
 } from "../features/reader/reader-preferences";
-import type { ManagementRequest } from "../feed-management";
 import type { AppRouteController } from "./route";
 
 interface AppShortcuts {

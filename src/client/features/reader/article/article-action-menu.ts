@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { handleActionMenuKeyDown } from "../../../feed-management";
+import { handleActionMenuKeyDown } from "../../../ui/action-menu";
 
 export function useActionMenu() {
   const [open, setOpen] = useState(false);

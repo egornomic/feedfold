@@ -7,10 +7,9 @@ import type {
   MarkReadAgeDays,
   ReadingMode,
 } from "../../../shared/types";
-import { ApiError, api, errorMessage } from "../../api";
+import { ApiError, api, errorMessage } from "../../api/api";
 import type { AppRouteController } from "../../app/route";
-import { copyText } from "../../clipboard";
-import type { ReaderDataResource } from "../../data-resource";
+import { copyText } from "../../platform/clipboard";
 import {
   type ArticleSummaryViewState,
   type ArticleTranslationViewState,
@@ -19,6 +18,7 @@ import {
 } from "./article/article-ai-state";
 import { articleTranslationSourceKind, fullContentToggleAction } from "./article/article-content";
 import type { ArticleQueueController } from "./article-queue";
+import type { ReaderDataResource } from "./data-resource";
 import {
   articleSettingsInvalidation,
   invalidateArticleSummaries,

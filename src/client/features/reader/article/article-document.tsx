@@ -2,8 +2,8 @@ import { ListFilter } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import type { FeedManagementAction } from "../../../feed-management";
-import { useMotionPresence } from "../../../motion";
+import { useMotionPresence } from "../../../ui/motion";
+import type { FeedManagementAction } from "../../feeds/feed-management";
 import {
   captureTextSelection,
   restoreTextSelection,

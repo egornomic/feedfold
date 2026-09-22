@@ -2,9 +2,9 @@ import type { ServerResponse } from "node:http";
 import type { FastifyInstance } from "fastify";
 import { inputs } from "../../../shared/api/inputs.js";
 import type { ApplicationService } from "../../application-service.js";
-import type { FeedRefreshService } from "../../refresh.js";
 import { type AuthService, sessionToken } from "../auth/service.js";
 import type { UserId } from "../routes.js";
+import type { FeedRefreshService } from "./service.js";
 
 export async function refreshRoutes(
   app: FastifyInstance,

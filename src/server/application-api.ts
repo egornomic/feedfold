@@ -8,8 +8,8 @@ import { ApplicationService, type ApplicationServices } from "./application-serv
 import type { AppDatabase } from "./database.js";
 import { ApplicationApiError, requireResource as notFound } from "./errors.js";
 import type { AiService } from "./features/ai/service.js";
-import type { FeedRefreshService } from "./refresh.js";
-import type { WebFeedService } from "./web-feed.js";
+import type { WebFeedService } from "./features/feeds/web/service.js";
+import type { FeedRefreshService } from "./features/refresh/service.js";
 
 function macOsAuthentication(): never {
   throw new ApplicationApiError(400, "Account authentication is managed by macOS.");

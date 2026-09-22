@@ -1,6 +1,6 @@
 import { AlertTriangle, Keyboard, X } from "lucide-react";
-import { useAnimatedDialog } from "../../motion";
-import { Kbd } from "./shared";
+import { Kbd } from "../../ui/controls";
+import { useAnimatedDialog } from "../../ui/motion";
 import "./shortcut-help.css";
 
 const shortcuts = [

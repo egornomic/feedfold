@@ -10,9 +10,9 @@ import {
   useState,
 } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import type { FeedManagementAction } from "../../../feed-management";
-import { useDelayedPending } from "../../../loading";
-import { interactionMotionIsInstant } from "../../../motion";
+import { useDelayedPending } from "../../../ui/loading";
+import { interactionMotionIsInstant } from "../../../ui/motion";
+import type { FeedManagementAction } from "../../feeds/feed-management";
 import { ArticleActions } from "../article/article-action-bar";
 import type {
   ArticleSummaryViewState,

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import type { ReadingMode } from "../../../shared/types.js";
-import { type ColorPalette, DEFAULT_COLOR_PALETTE } from "../../color-palettes.js";
+import { type ColorPalette, DEFAULT_COLOR_PALETTE } from "../../ui/color-palettes.js";
 
 export type Theme = "auto" | "dark" | "light";
 export type ResolvedTheme = Exclude<Theme, "auto">;

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import type { Article, TelegramArticleMedia, XArticleMedia } from "../../../../shared/types";
 import { xPostId } from "../../../../shared/x";
-import { api, errorMessage } from "../../../api";
+import { api, errorMessage } from "../../../api/api";
 import { articleImageUrl } from "./article-image-url";
 import { ImageLightbox, type ImageLightboxItem, type ImageLightboxState } from "./image-lightbox";
 

@@ -1,4 +1,4 @@
-import { createApiClient } from "../client/api-client.js";
+import { createApiClient } from "../client/api/api-client.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
 import { DemoStore } from "./store.js";
 
@@ -7,8 +7,8 @@ export type {
   FeedUpdateInput,
   FolderInput,
   RuleInput,
-} from "../client/api-contract.js";
-export { ApiError, AUTH_REQUIRED_EVENT, appUrl, errorMessage } from "../client/api-contract.js";
+} from "../client/api/api-contract.js";
+export { ApiError, AUTH_REQUIRED_EVENT, appUrl, errorMessage } from "../client/api/api-contract.js";
 
 const demoStore = new DemoStore();
 

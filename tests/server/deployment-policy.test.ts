@@ -10,11 +10,11 @@ import {
   PUBLIC_DEPLOYMENT_POLICY,
   registrationAccountCap,
 } from "../../src/server/deployment-policy.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
-import { WebFeedService } from "../../src/server/web-feed.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 

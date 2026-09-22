@@ -26,18 +26,18 @@ import type {
   SessionUser,
 } from "../../../shared/types";
 import type { AppView } from "../../app/routes";
-import { BrandIdentity } from "../../brand";
-import { type FeedDragState, useFeedDrag } from "../../feed-drag";
+import { handleActionMenuKeyDown } from "../../ui/action-menu";
+import { BrandIdentity } from "../../ui/brand";
+import { IconButton, Kbd } from "../../ui/controls";
+import { type FeedDragState, useFeedDrag } from "../feeds/feed-drag";
 import {
   FeedActionMenuItems,
   type FeedManagementAction,
   FolderActionMenuItems,
   type FolderManagementAction,
-  handleActionMenuKeyDown,
-} from "../../feed-management";
-import type { AddFeedSourceType } from "../../feed-source";
-import { ADD_FEED_SOURCE_OPTIONS } from "../../feed-source-options";
-import { IconButton, Kbd } from "./navigation-controls";
+} from "../feeds/feed-management";
+import type { AddFeedSourceType } from "../feeds/feed-source";
+import { ADD_FEED_SOURCE_OPTIONS } from "../feeds/feed-source-options";
 
 function selectedFolderPath(
   folders: FolderType[],

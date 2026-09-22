@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import type { FeedManagementAction } from "../../../feed-management";
+import type { FeedManagementAction } from "../../feeds/feed-management";
 import { ArticleActions } from "../article/article-action-bar";
 import {
   type ArticleSummaryViewState,

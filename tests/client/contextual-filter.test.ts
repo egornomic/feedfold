@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { articlesWithContextReturn } from "../../src/client/contextual-filter.js";
+import { articlesWithContextReturn } from "../../src/client/features/reader/contextual-filter.js";
 import type { Article } from "../../src/shared/types.js";
 
 function article(id: number, contentHtml: string | null = null): Article {

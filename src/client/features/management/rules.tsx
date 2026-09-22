@@ -20,11 +20,11 @@ import type {
   RuleConditionOperator,
   RuleField,
 } from "../../../shared/types";
-import { errorMessage, type RuleInput } from "../../api";
-import type { ReaderDataMutations } from "../../data-resource";
-import { DropdownSelect } from "../../dropdown";
-import { useDelayedPending } from "../../loading";
-import { type MotionState, motionExitDuration, useMotionPresence } from "../../motion";
+import { errorMessage, type RuleInput } from "../../api/api";
+import { DropdownSelect } from "../../ui/dropdown";
+import { useDelayedPending } from "../../ui/loading";
+import { type MotionState, motionExitDuration, useMotionPresence } from "../../ui/motion";
+import type { ReaderDataMutations } from "../reader/data-resource";
 import { PageHeader } from "./shared";
 import "./rules.css";
 

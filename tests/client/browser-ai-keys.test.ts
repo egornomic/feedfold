@@ -6,17 +6,17 @@ import { join, resolve } from "node:path";
 import { build } from "esbuild";
 import { type BrowserContext, chromium } from "playwright";
 import { describe, expect, it } from "vitest";
-import type * as vault from "../../src/client/ai-vault.js";
-import type { api } from "../../src/client/api.js";
-import { createAiProviders } from "../../src/server/ai/providers.js";
+import type * as vault from "../../src/client/api/ai-vault.js";
+import type { api } from "../../src/client/api/api.js";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
+import { createAiProviders } from "../../src/server/features/ai/providers.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { productionLogger } from "../../src/server/logging.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
 
 declare global {
   interface Window {
@@ -76,7 +76,7 @@ describe("browser-held AI keys", () => {
     });
     const bundle = await build({
       stdin: {
-        contents: `import {api} from ${JSON.stringify(resolve("src/client/api.ts"))}; import * as vault from ${JSON.stringify(resolve("src/client/ai-vault.ts"))}; window.feedfoldTest = {api, vault};`,
+        contents: `import {api} from ${JSON.stringify(resolve("src/client/api/api.ts"))}; import * as vault from ${JSON.stringify(resolve("src/client/api/ai-vault.ts"))}; window.feedfoldTest = {api, vault};`,
         resolveDir: process.cwd(),
       },
       bundle: true,

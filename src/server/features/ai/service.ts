@@ -13,6 +13,8 @@ import type {
   ArticleAiSummary,
   ArticleAiTranslation,
 } from "../../../shared/types.js";
+import type { AppDatabase } from "../../database.js";
+import type { StoredArticleAiSummary, StoredArticleAiTranslation } from "../shared.js";
 import {
   ARTICLE_GROUNDED_MAX_OUTPUT_TOKENS,
   ARTICLE_SUMMARY_MAX_OUTPUT_TOKENS,
@@ -21,19 +23,17 @@ import {
   articleSummarySystemPrompt,
   prepareArticleSummary,
   prepareYouTubeVideoSummary,
-} from "../../ai/article-summary.js";
+} from "./article-summary.js";
 import {
   ARTICLE_TRANSLATION_MAX_OUTPUT_TOKENS,
   ARTICLE_TRANSLATION_PROMPT_VERSION,
   prepareArticleTranslation,
   renderArticleTranslation,
-} from "../../ai/article-translation.js";
-import type { CredentialCipherLike } from "../../ai/credential-cipher.js";
-import { AiError } from "../../ai/errors.js";
-import { createAiProviders } from "../../ai/providers.js";
-import type { AiGenerationResult, AiProviderAdapter } from "../../ai/types.js";
-import type { AppDatabase } from "../../database.js";
-import type { StoredArticleAiSummary, StoredArticleAiTranslation } from "../shared.js";
+} from "./article-translation.js";
+import type { CredentialCipherLike } from "./credential-cipher.js";
+import { AiError } from "./errors.js";
+import { createAiProviders } from "./providers.js";
+import type { AiGenerationResult, AiProviderAdapter } from "./types.js";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 const VIDEO_REQUEST_TIMEOUT_MS = 240_000;

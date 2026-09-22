@@ -4,7 +4,7 @@ import {
   analyzeWebFeedDocument,
   extractWebFeedSelection,
   suggestedWebFeedCandidateIds,
-} from "../../src/server/web-feed-dom.js";
+} from "../../src/server/features/feeds/web/dom.js";
 
 const PAGE_URL = "https://example.com/careers";
 

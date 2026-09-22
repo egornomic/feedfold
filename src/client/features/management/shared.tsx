@@ -6,9 +6,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { api, appUrl, errorMessage } from "../../api";
-import type { ReaderDataMutations } from "../../data-resource";
-import { isDesktopApp } from "../../desktop";
+import { api, appUrl, errorMessage } from "../../api/api";
+import { isDesktopApp } from "../../platform/desktop";
+import type { ReaderDataMutations } from "../reader/data-resource";
 
 export function formatDate(value: string | null): string {
   if (!value) return "Never";
@@ -38,10 +38,6 @@ export function formatRefreshInterval(minutes: number): string {
   if (minutes < 60) return `${minutes} minutes`;
   const hours = minutes / 60;
   return `${hours} ${hours === 1 ? "hour" : "hours"}`;
-}
-
-export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd>{children}</kbd>;
 }
 
 export function handleTabListKeyDown(event: ReactKeyboardEvent<HTMLElement>) {

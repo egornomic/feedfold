@@ -4,17 +4,17 @@ import type { WebFeedConfig } from "../shared/types.js";
 import { xVideoPostIds } from "../shared/x.js";
 import type { AppDatabase } from "./database.js";
 import { ApplicationApiError, requireResource } from "./errors.js";
-import type { ExtractionQueue } from "./extraction.js";
 import type { AiService } from "./features/ai/service.js";
+import type { ExtractionQueue } from "./features/extraction/queue.js";
 import {
   FeedSubscriptionService,
   WebFeedUnavailableError,
 } from "./features/feeds/subscription-service.js";
+import type { WebFeedService } from "./features/feeds/web/service.js";
+import type { FeedRefreshService } from "./features/refresh/service.js";
 import { discoverFeed } from "./feed-discovery.js";
 import { QuotaExceededError } from "./quota.js";
-import type { FeedRefreshService } from "./refresh.js";
 import type { TelegramMediaService } from "./telegram-media.js";
-import type { WebFeedService } from "./web-feed.js";
 import type { XMediaService } from "./x-media.js";
 
 export interface ApplicationServices {

@@ -3,9 +3,9 @@ import { assert, describe, expect, it } from "vitest";
 import {
   parseWebFeedSelectionMessage,
   webFeedHighlightMessage,
-} from "../../src/client/web-feed-selection.js";
-import { analyzeWebFeedDocument } from "../../src/server/web-feed-dom.js";
-import { createWebFeedSnapshot } from "../../src/server/web-feed-snapshot.js";
+} from "../../src/client/features/feeds/web-feed-selection.js";
+import { analyzeWebFeedDocument } from "../../src/server/features/feeds/web/dom.js";
+import { createWebFeedSnapshot } from "../../src/server/features/feeds/web/snapshot.js";
 
 describe("web-feed snapshot sanitization", () => {
   it("creates an inert, selectable copy of an analyzed document", async () => {

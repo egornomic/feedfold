@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   groupWebFeedCandidates,
   webFeedCandidateOptionLabel,
-} from "../../src/client/web-feed-candidate-options.js";
+} from "../../src/client/features/feeds/web-feed-candidate-options.js";
 import type { WebFeedCandidate } from "../../src/shared/types.js";
 
 function candidate(id: string, label: string, title: string): WebFeedCandidate {

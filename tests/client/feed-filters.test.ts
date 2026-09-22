@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterFeeds, visibleFeedStatus } from "../../src/client/feed-filters.js";
+import { filterFeeds, visibleFeedStatus } from "../../src/client/features/feeds/feed-filters.js";
 import type { Feed } from "../../src/shared/types.js";
 
 function feed(

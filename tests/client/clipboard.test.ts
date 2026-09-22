@@ -5,7 +5,7 @@ import { build } from "esbuild";
 import { JSDOM } from "jsdom";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
-import { copyText } from "../../src/client/clipboard.js";
+import { copyText } from "../../src/client/platform/clipboard.js";
 
 it("removes temporary text and reports failure when copying is unsupported", async () => {
   const dom = new JSDOM("<body></body>");
@@ -25,7 +25,7 @@ it("copies exact code text on both secure and non-secure pages", async () => {
   const code = '\tconsole.log("<tag>");\n';
   const bundle = await build({
     stdin: {
-      contents: `import { copyText } from ${JSON.stringify(resolve("src/client/clipboard.ts"))};
+      contents: `import { copyText } from ${JSON.stringify(resolve("src/client/platform/clipboard.ts"))};
         document.querySelector('button').onclick = async () => {
           await copyText(${JSON.stringify(code)});
           document.querySelector('output').textContent = 'Copied';

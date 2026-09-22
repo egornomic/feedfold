@@ -5,10 +5,10 @@ import type { InjectOptions } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
 import type { Feed, Folder, Rule } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];

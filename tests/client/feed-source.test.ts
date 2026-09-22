@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { feedSourceUrl } from "../../src/client/feed-source.js";
+import { feedSourceUrl } from "../../src/client/features/feeds/feed-source.js";
 
 describe("add feed source input", () => {
   it("turns YouTube channel handles into discoverable channel URLs", () => {

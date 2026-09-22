@@ -39,40 +39,40 @@ import type {
   WebFeedAnalysis,
   WebPageFeedDiscovery,
 } from "../../../shared/types";
-import { api, errorMessage } from "../../api";
-import type { ReaderDataMutations } from "../../data-resource";
-import { DropdownSelect } from "../../dropdown";
+import { api, errorMessage } from "../../api/api";
+import { handleActionMenuKeyDown } from "../../ui/action-menu";
+import { DropdownSelect } from "../../ui/dropdown";
+import type { MotionState } from "../../ui/motion";
 import {
   type FeedDragState,
   type FeedDropTarget,
   feedDropTarget,
   useFeedDrag,
-} from "../../feed-drag";
-import { FeedEntriesPreview } from "../../feed-entries-preview";
+} from "../feeds/feed-drag";
+import { FeedEntriesPreview } from "../feeds/feed-entries-preview";
 import {
   type FeedStatusFilter,
   type FeedTypeFilter,
   filterFeeds,
   visibleFeedStatus,
-} from "../../feed-filters";
+} from "../feeds/feed-filters";
 import {
   FeedActionMenuItems,
   type FeedManagementAction,
   FolderActionMenuItems,
   type FolderManagementAction,
-  handleActionMenuKeyDown,
-} from "../../feed-management";
+} from "../feeds/feed-management";
 import {
   type AddFeedSourceType,
   feedSourceUrl,
   TELEGRAM_HANDLE_PATTERN,
   X_HANDLE_PATTERN,
   YOUTUBE_HANDLE_PATTERN,
-} from "../../feed-source";
-import { ADD_FEED_SOURCE_OPTIONS } from "../../feed-source-options";
-import { folderBranchFeedCount, folderHierarchy, folderPathLabel } from "../../folder-hierarchy";
-import type { MotionState } from "../../motion";
-import { WebFeedSetup } from "../../web-feed-setup";
+} from "../feeds/feed-source";
+import { ADD_FEED_SOURCE_OPTIONS } from "../feeds/feed-source-options";
+import { folderBranchFeedCount, folderHierarchy, folderPathLabel } from "../feeds/folder-hierarchy";
+import { WebFeedSetup } from "../feeds/web-feed-setup";
+import type { ReaderDataMutations } from "../reader/data-resource";
 import {
   ExportOpmlLink,
   formatDate,

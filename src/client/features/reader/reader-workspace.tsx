@@ -2,7 +2,7 @@ import type { Dispatch, FormEvent, RefObject, SetStateAction } from "react";
 import type { Article, BootstrapData, ReadingMode } from "../../../shared/types";
 import type { AppRouteController } from "../../app/route";
 import { appRoutePath, type ReaderRoute } from "../../app/routes";
-import type { FeedManagementAction } from "../../feed-management";
+import type { FeedManagementAction } from "../feeds/feed-management";
 import {
   EMPTY_ARTICLE_SUMMARY_STATE,
   EMPTY_ARTICLE_TRANSLATION_STATE,

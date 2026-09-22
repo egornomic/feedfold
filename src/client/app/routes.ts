@@ -1,5 +1,5 @@
 import type { ArticleState } from "../../shared/types.js";
-import type { AddFeedSourceType } from "../feed-source.js";
+import type { AddFeedSourceType } from "../features/feeds/feed-source.js";
 
 export interface ReaderRoute {
   kind: "reader";

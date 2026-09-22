@@ -2,9 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { inputs } from "../../../shared/api/inputs.js";
 import type { ApplicationService } from "../../application-service.js";
-import { WebFeedError, type WebFeedService } from "../../web-feed.js";
 import { idParams, missing, type UserId } from "../routes.js";
 import type { FeedService } from "./service.js";
+import { WebFeedError, type WebFeedService } from "./web/service.js";
 
 export async function feedRoutes(
   app: FastifyInstance,

@@ -1,6 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import type { Article } from "../../../../shared/types";
-import { FeedActionMenuItems, type FeedManagementAction } from "../../../feed-management";
+import { FeedActionMenuItems, type FeedManagementAction } from "../../feeds/feed-management";
 import { useActionMenu } from "./article-action-menu";
 import { articleDate, formatViewCount, mediaTypeLabel } from "./article-format";
 

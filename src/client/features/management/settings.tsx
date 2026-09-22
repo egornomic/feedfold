@@ -42,13 +42,14 @@ import type {
   FeedPollIntervalMinutes,
 } from "../../../shared/types";
 import { DUPLICATE_ARTICLE_WINDOW_DAYS } from "../../../shared/types";
-import { ApiError, api, errorMessage } from "../../api";
+import { ApiError, api, errorMessage } from "../../api/api";
 import type { SettingsCategory } from "../../app/routes";
-import { COLOR_PALETTES, type ColorPalette } from "../../color-palettes";
-import type { ReaderDataMutations } from "../../data-resource";
-import { isDesktopApp } from "../../desktop";
-import { DropdownCombobox, DropdownSelect } from "../../dropdown";
-import { useAnimatedDialog } from "../../motion";
+import { isDesktopApp } from "../../platform/desktop";
+import { COLOR_PALETTES, type ColorPalette } from "../../ui/color-palettes";
+import { Kbd } from "../../ui/controls";
+import { DropdownCombobox, DropdownSelect } from "../../ui/dropdown";
+import { useAnimatedDialog } from "../../ui/motion";
+import type { ReaderDataMutations } from "../reader/data-resource";
 import {
   type ColorPalettes,
   clearReaderPreferences,
@@ -61,7 +62,6 @@ import {
   formatRefreshInterval,
   handleTabListKeyDown,
   ImportOpmlButton,
-  Kbd,
   PageHeader,
 } from "./shared";
 import { ShortcutReference } from "./shortcut-help";

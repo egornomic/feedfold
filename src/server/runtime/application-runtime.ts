@@ -1,15 +1,15 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { CredentialCipherLike } from "../ai/credential-cipher.js";
 import { AppDatabase } from "../database.js";
 import { type DeploymentPolicy, PRIVATE_DEPLOYMENT_POLICY } from "../deployment-policy.js";
-import { ExtractionQueue } from "../extraction.js";
+import type { CredentialCipherLike } from "../features/ai/credential-cipher.js";
 import { AiService } from "../features/ai/service.js";
+import { ExtractionQueue } from "../features/extraction/queue.js";
+import { WebFeedService, type WebFeedServiceOptions } from "../features/feeds/web/service.js";
+import { FeedRefreshService } from "../features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../feed-source-loader.js";
 import { closePublicNetwork } from "../public-network.js";
-import { FeedRefreshService } from "../refresh.js";
 import { TelegramMediaService } from "../telegram-media.js";
-import { WebFeedService, type WebFeedServiceOptions } from "../web-feed.js";
 import { XMediaService } from "../x-media.js";
 import type { RuntimeConfiguration } from "./configuration.js";
 

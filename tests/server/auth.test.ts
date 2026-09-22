@@ -1,13 +1,13 @@
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApiClient } from "../../src/client/api-client.js";
-import { createBrowserRequest } from "../../src/client/browser-api.js";
+import { createApiClient } from "../../src/client/api/api-client.js";
+import { createBrowserRequest } from "../../src/client/api/browser-api.js";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
 import { type AuthOptions, AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 

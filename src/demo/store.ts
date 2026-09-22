@@ -1,4 +1,4 @@
-import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../client/api-contract.js";
+import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../shared/api/inputs.js";
 import type { ApiOperation } from "../shared/api/operations.js";
 import type {
   AiArticleSourceKind,

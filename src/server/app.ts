@@ -12,25 +12,25 @@ import { readerMutationRoutes } from "../shared/reader-mutations.js";
 import { applicationError } from "./application-error.js";
 import { ApplicationService } from "./application-service.js";
 import type { AppDatabase } from "./database.js";
-import type { ExtractionQueue } from "./extraction.js";
 import { aiRoutes } from "./features/ai/routes.js";
 import { AiService } from "./features/ai/service.js";
 import { articleRoutes } from "./features/articles/routes.js";
 import { authRoutes } from "./features/auth/routes.js";
 import { type AuthService, sessionToken } from "./features/auth/service.js";
 import { bootstrapRoutes } from "./features/bootstrap/routes.js";
+import type { ExtractionQueue } from "./features/extraction/queue.js";
 import { feedRoutes } from "./features/feeds/routes.js";
+import type { WebFeedService } from "./features/feeds/web/service.js";
 import { folderRoutes } from "./features/folders/routes.js";
 import { opmlRoutes } from "./features/opml/routes.js";
 import { refreshRoutes } from "./features/refresh/routes.js";
+import type { FeedRefreshService } from "./features/refresh/service.js";
 import { browserDeviceId } from "./features/routes.js";
 import { ruleRoutes } from "./features/rules/routes.js";
 import { settingsRoutes } from "./features/settings/routes.js";
 import { registerOperationalLogging } from "./logging.js";
-import type { FeedRefreshService } from "./refresh.js";
 import { responsePolicies } from "./response-policy.js";
 import { TelegramMediaService } from "./telegram-media.js";
-import type { WebFeedService } from "./web-feed.js";
 import { XMediaService } from "./x-media.js";
 
 export interface AppServices {

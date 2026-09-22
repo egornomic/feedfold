@@ -9,7 +9,7 @@ import {
   Star,
 } from "lucide-react";
 import type { ArticleState, ReadingMode } from "../../../shared/types";
-import { BrandLogo } from "../../brand";
+import { BrandLogo } from "../../ui/brand";
 
 export function StartupError({ message, retry }: { message: string; retry: () => void }) {
   return (

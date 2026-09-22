@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseWebFeedSelectionMessage,
   WEB_FEED_SELECT_MESSAGE,
-} from "../../src/client/web-feed-selection.js";
+} from "../../src/client/features/feeds/web-feed-selection.js";
 
 const MESSAGE_TOKEN = "snapshot-message-token";
 const CANDIDATE_IDS = new Set(["articles", "releases"]);

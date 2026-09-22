@@ -1,0 +1,26 @@
+import type { WebFeedCandidate } from "../../../shared/types.js";
+
+export function groupWebFeedCandidates(
+  candidates: WebFeedCandidate[],
+  suggestedCandidateIds: string[],
+): { suggested: WebFeedCandidate[]; other: WebFeedCandidate[] } {
+  const candidatesById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const suggested = suggestedCandidateIds
+    .map((candidateId) => candidatesById.get(candidateId))
+    .filter((candidate): candidate is WebFeedCandidate => candidate !== undefined);
+  const suggestedIds = new Set(suggested.map((candidate) => candidate.id));
+  return {
+    suggested,
+    other: candidates.filter((candidate) => !suggestedIds.has(candidate.id)),
+  };
+}
+
+export function webFeedCandidateOptionLabel(candidate: WebFeedCandidate): string {
+  const count = `${candidate.itemCount} ${candidate.itemCount === 1 ? "item" : "items"}`;
+  const title = candidate.articles[0]?.title.replace(/\s+/g, " ").trim();
+  if (!title || title.toLocaleLowerCase() === candidate.label.toLocaleLowerCase()) {
+    return `${candidate.label} · ${count}`;
+  }
+  const example = title.length > 64 ? `${title.slice(0, 63).trimEnd()}…` : title;
+  return `${candidate.label} · ${count} · ${example}`;
+}

@@ -1,6 +1,6 @@
 import { safeStorage } from "electron";
-import type { CredentialCipherLike } from "../server/ai/credential-cipher.js";
-import { AiError } from "../server/ai/errors.js";
+import type { CredentialCipherLike } from "../server/features/ai/credential-cipher.js";
+import { AiError } from "../server/features/ai/errors.js";
 import type { AiProvider } from "../shared/types.js";
 
 const ENVELOPE_VERSION = "desktop-v1";

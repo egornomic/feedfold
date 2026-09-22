@@ -18,15 +18,21 @@ import type {
   Rule,
   SessionUser,
 } from "../../shared/types";
-import { api, errorMessage } from "../api";
-import { SessionLoading } from "../auth";
-import { type ReaderDataBinding, ReaderDataResource } from "../data-resource";
-import { isDesktopApp } from "../desktop";
+import { api, errorMessage } from "../api/api";
+import { SessionLoading } from "../features/auth/auth";
+import type {
+  FeedManagementAction,
+  FolderManagementAction,
+  ManagementRequest,
+} from "../features/feeds/feed-management";
+import type { AddFeedSourceType } from "../features/feeds/feed-source";
+import { folderPathLabel } from "../features/feeds/folder-hierarchy";
 import type { RuleFormDraft } from "../features/management/rules";
 import { Sidebar } from "../features/navigation/sidebar";
 import { useSidebarMotion } from "../features/navigation/sidebar-motion";
 import { useArticleActions } from "../features/reader/article-actions";
 import { useArticleQueue } from "../features/reader/article-queue";
+import { type ReaderDataBinding, ReaderDataResource } from "../features/reader/data-resource";
 import { useReaderPreferences } from "../features/reader/reader-preferences";
 import {
   filterRuleName,
@@ -35,14 +41,8 @@ import {
 } from "../features/reader/reader-state";
 import { StartupError } from "../features/reader/reader-states";
 import { ReaderWorkspace } from "../features/reader/reader-workspace";
-import type {
-  FeedManagementAction,
-  FolderManagementAction,
-  ManagementRequest,
-} from "../feed-management";
-import type { AddFeedSourceType } from "../feed-source";
-import { folderPathLabel } from "../folder-hierarchy";
-import { useDelayedPending } from "../loading";
+import { isDesktopApp } from "../platform/desktop";
+import { useDelayedPending } from "../ui/loading";
 import { useAppRoute } from "./route";
 import type { AppView } from "./routes";
 import {

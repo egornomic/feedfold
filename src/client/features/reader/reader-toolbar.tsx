@@ -24,9 +24,9 @@ import {
 import { createPortal } from "react-dom";
 import type { ArticleState, MarkReadAgeDays, ReadingMode } from "../../../shared/types";
 import { MARK_READ_AGE_DAYS } from "../../../shared/types";
-import { handleActionMenuKeyDown } from "../../feed-management";
-import { useMotionPresence } from "../../motion";
-import { IconButton } from "../navigation/navigation-controls";
+import { handleActionMenuKeyDown } from "../../ui/action-menu";
+import { IconButton } from "../../ui/controls";
+import { useMotionPresence } from "../../ui/motion";
 
 interface ReaderToolbarProps {
   title: string;
