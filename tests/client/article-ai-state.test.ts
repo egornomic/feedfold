@@ -123,7 +123,6 @@ describe("article AI state", () => {
           const queue = queueModule.useArticleQueue({
             route,
             dataResource,
-            bootstrapReady: true,
             readingMode: "magazine",
             showToast: () => {},
           });

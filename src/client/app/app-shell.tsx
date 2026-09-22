@@ -109,10 +109,14 @@ export default function AppShell({
     setDesktopSidebarCollapsed((current) => !current);
   }, [setDesktopSidebarCollapsed]);
 
+  useLayoutEffect(() => {
+    dataResource.resume();
+    return () => dataResource.pause();
+  }, [dataResource]);
+
   const queue = useArticleQueue({
     route,
     dataResource,
-    bootstrapReady: bootstrap !== null,
     readingMode: preferences.readingMode,
     onReadingModeChange: preferences.setReadingMode,
     showToast,
@@ -189,11 +193,6 @@ export default function AppShell({
     reloadRules,
   };
   dataResource.connect(resourceBinding);
-
-  useEffect(() => {
-    dataResource.resume();
-    return () => dataResource.pause();
-  }, [dataResource]);
 
   useEffect(() => {
     if (route.view === "rules") void dataResource.loadRules();

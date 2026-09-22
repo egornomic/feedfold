@@ -61,7 +61,6 @@ export interface ArticleQueueController {
 interface ArticleQueueOptions {
   route: AppRouteController;
   dataResource: ReaderDataResource;
-  bootstrapReady: boolean;
   readingMode: ReadingMode;
   onReadingModeChange: (mode: ReadingMode) => void;
   showToast: (message: string) => void;
@@ -70,7 +69,6 @@ interface ArticleQueueOptions {
 export function useArticleQueue({
   route,
   dataResource,
-  bootstrapReady,
   readingMode,
   onReadingModeChange,
   showToast,
@@ -125,7 +123,7 @@ export function useArticleQueue({
   const reloadQuery = useCallback(
     async (signal: AbortSignal) => {
       const nextRoute = currentRoute();
-      if (!bootstrapReady || nextRoute.kind !== "reader") return;
+      if (nextRoute.kind !== "reader") return;
       const requestKey = `${appRoutePath(nextRoute)}:${readingMode}`;
       const switchingMode =
         !articleListNeedsReload.current &&
@@ -218,14 +216,7 @@ export function useArticleQueue({
         if (!signal.aborted && requestId.current === currentRequestId) setLoading(false);
       }
     },
-    [
-      bootstrapReady,
-      currentRoute,
-      displayedReadingMode,
-      onReadingModeChange,
-      readingMode,
-      showToast,
-    ],
+    [currentRoute, displayedReadingMode, onReadingModeChange, readingMode, showToast],
   );
 
   const reloadAfterMutation = useCallback(
@@ -322,7 +313,7 @@ export function useArticleQueue({
           : nextRoute.kind === "article"
             ? readerRouteRef.current
             : null;
-      if (!bootstrapReady || !queryRoute) {
+      if (!queryRoute) {
         loadedReaderRequestKey.current = null;
         return;
       }
@@ -450,7 +441,7 @@ export function useArticleQueue({
       );
       setQueryRevision((current) => current + 1);
     },
-    [bootstrapReady, currentRoute, readingMode],
+    [currentRoute, readingMode],
   );
 
   const loadArticles = useCallback(
@@ -465,7 +456,6 @@ export function useArticleQueue({
     const queryRoute =
       nextRoute.kind === "reader" ? nextRoute : nextRoute.kind === "article" ? readerRoute : null;
     if (
-      !bootstrapReady ||
       !nextCursor ||
       loading ||
       loadingMore ||
@@ -521,7 +511,6 @@ export function useArticleQueue({
       if (requestId.current === currentRequestId) setLoadingMore(false);
     }
   }, [
-    bootstrapReady,
     currentRoute,
     dataResource,
     displayedReadingMode,
@@ -538,7 +527,6 @@ export function useArticleQueue({
     dataResource.cancelArticles();
     requestId.current += 1;
     setLoadingMore(false);
-    if (!bootstrapReady) return;
     if (nextRoute.kind === "article") {
       articleListNeedsReload.current = true;
       return;
@@ -555,11 +543,11 @@ export function useArticleQueue({
       setLoading(false);
       setError(null);
     }
-  }, [appRoute, bootstrapReady, dataResource, loadArticles, readingMode]);
+  }, [appRoute, dataResource, loadArticles, readingMode]);
 
   useEffect(() => {
     const articleId = routedArticleId;
-    if (!bootstrapReady || articleId === null) return;
+    if (articleId === null) return;
     void routedArticleRetry;
     let active = true;
     const currentRequestId = requestId.current;
@@ -654,7 +642,6 @@ export function useArticleQueue({
     };
   }, [
     articleContext,
-    bootstrapReady,
     dataResource,
     readingMode,
     routedArticleId,
