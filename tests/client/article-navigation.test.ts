@@ -42,19 +42,28 @@ function readerFixture(path = "/articles/unread", count = 10) {
   });
   const services = createApplicationServices({ database, credentialCipher: null });
   const application = new ApplicationApi(services);
-  const gates = new Map<ApiOperation, { wait: Promise<void>; release: () => void; held: number }>();
+  const gates = new Map<
+    ApiOperation,
+    { wait: Promise<void>; release: () => void; held: number; beforeRequest: boolean }
+  >();
+  const failures: Error[] = [];
   const invoke = async <K extends ApiOperation>(
     request: ApiRequest<K>,
   ): Promise<DesktopResponse<ApiOutput<K>>> => {
     try {
-      const value = await application.invoke(request);
       const gate = gates.get(request.operation);
-      if (gate) {
+      if (gate?.beforeRequest) {
+        gate.held += 1;
+        await gate.wait;
+      }
+      const value = await application.invoke(request);
+      if (gate && !gate.beforeRequest) {
         gate.held += 1;
         await gate.wait;
       }
       return { ok: true, value };
     } catch (error) {
+      if (error instanceof Error) failures.push(error);
       return {
         ok: false,
         error: {
@@ -112,6 +121,7 @@ function readerFixture(path = "/articles/unread", count = 10) {
   return {
     database,
     application,
+    failures,
     container,
     dom,
     async reachListEnd() {
@@ -119,10 +129,11 @@ function readerFixture(path = "/articles/unread", count = 10) {
         for (const notify of [...observers]) notify();
       });
     },
-    hold(operation: ApiOperation) {
+    hold(operation: ApiOperation, beforeRequest = false) {
       let resolve = () => {};
       let reject: (error: Error) => void = () => {};
       const gate = {
+        beforeRequest,
         held: 0,
         wait: new Promise<void>((done, fail) => {
           resolve = done;
@@ -250,6 +261,59 @@ describe("reader navigation", () => {
         expect(titles.includes("Open Article 151")).toBe(state === "all");
         expect(articles.held).toBe(0);
         expect(bootstrap.held).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
+
+  it.each(["saved", "read"] as const)(
+    "restores an article to %s when its state change fails after returning to the queue",
+    async (state) => {
+      const fixture = readerFixture(`/articles/${state}`);
+      try {
+        const selected = fixture.database.articles.listArticlePage(1, { state: "all" }).articles[0];
+        if (!selected) throw new Error("The fixture has no article");
+        await fixture.application.invoke({
+          operation: "updateArticleState",
+          payload: { id: selected.id, state: { isRead: true, isStarred: true } },
+        });
+        await fixture.mount();
+        const row = () =>
+          fixture.container.querySelector<HTMLButtonElement>(".article-open-button");
+        await waitFor("the saved or read article", () => row() !== null);
+        await act(async () => row()?.click());
+        const label = state === "saved" ? "Remove from Saved (S)" : "Mark as unread (U)";
+        const action = () =>
+          fixture.container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
+        await waitFor("the article action", () => action() !== null);
+        const mutation = fixture.hold("updateArticleState", true);
+        // Exercise a real rejected database write, leaving the server's article unchanged.
+        fixture.database.connection.exec(`
+          CREATE TRIGGER reject_article_state BEFORE UPDATE ON feed_articles
+          BEGIN SELECT RAISE(ABORT, 'article state write rejected'); END;
+        `);
+        await act(async () => action()?.click());
+        await waitFor("the pending state change", () => mutation.held > 0);
+        const back = fixture.container.querySelector<HTMLButtonElement>(
+          '[aria-label="Back to articles"]',
+        );
+        if (!back) throw new Error("The reader has no Back action");
+        await act(async () => back.click());
+        await waitFor(
+          "the optimistically filtered queue",
+          () => fixture.dom.window.location.pathname === `/articles/${state}` && row() === null,
+        );
+        await act(async () => mutation.release());
+        await waitFor("the rejected database write", () => fixture.failures.length > 0);
+        expect(fixture.failures[0]?.message).toContain("article state write rejected");
+        const persisted = await fixture.application.invoke({
+          operation: "article",
+          payload: { id: selected.id },
+        });
+        expect(persisted.isStarred).toBe(true);
+        expect(persisted.isRead).toBe(true);
+        await waitFor("the restored article", () => row()?.textContent === "Open Article 1");
       } finally {
         await fixture.close();
       }

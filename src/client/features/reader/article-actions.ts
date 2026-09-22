@@ -77,10 +77,10 @@ export function useArticleActions({
         );
         showToast(`Could not update the article: ${errorMessage(caught)}`);
         await loadBootstrap();
-        if (route.routedArticleId === null) await loadArticles();
+        if (route.current().kind === "reader") await loadArticles();
       }
     },
-    [dataResource, loadArticles, loadBootstrap, queue, route.routedArticleId, showToast],
+    [dataResource, loadArticles, loadBootstrap, queue, route.current, showToast],
   );
 
   const activateArticle = useCallback(
