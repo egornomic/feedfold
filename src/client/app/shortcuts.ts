@@ -3,6 +3,7 @@ import { toast as showToast } from "sonner";
 import type { BootstrapData, ReadingMode } from "../../shared/types";
 import type { ManagementRequest } from "../features/feeds/feed-management";
 import type { useArticleActions } from "../features/reader/article-actions";
+import type { ArticleEnrichmentController } from "../features/reader/article-enrichment";
 import type { ArticleQueueController } from "../features/reader/article-queue";
 import {
   ARTICLE_FONT_MAX,
@@ -20,6 +21,7 @@ interface AppShortcuts {
   route: AppRouteController;
   queue: ArticleQueueController;
   articleActions: ReturnType<typeof useArticleActions>;
+  articleEnrichment: ArticleEnrichmentController;
   preferences: ReturnType<typeof useReaderPreferences>;
   selectScope: AppRouteController["selectScope"];
   navigateTo: AppRouteController["navigateToView"];
@@ -56,6 +58,7 @@ export function useAppShortcuts({
   route,
   queue,
   articleActions,
+  articleEnrichment,
   preferences,
   selectScope,
   navigateTo,
@@ -135,17 +138,17 @@ export function useAppShortcuts({
         o: () => articleActions.openArticleSource(activeArticle),
         w: () => {
           if (activeArticle && (queue.readingMode === "expanded" || route.routedArticleId)) {
-            void articleActions.toggleFullContent(activeArticle);
+            void articleEnrichment.toggleFullContent(activeArticle);
           }
         },
         m: () => {
           if (activeArticle && (queue.readingMode === "expanded" || route.routedArticleId)) {
-            articleActions.toggleArticleSummary(activeArticle);
+            articleEnrichment.toggleArticleSummary(activeArticle);
           }
         },
         t: () => {
           if (activeArticle && (queue.readingMode === "expanded" || route.routedArticleId)) {
-            articleActions.toggleArticleTranslation(activeArticle);
+            articleEnrichment.toggleArticleTranslation(activeArticle);
           }
         },
         r: () => void refresh(),
@@ -173,6 +176,7 @@ export function useAppShortcuts({
     return () => window.removeEventListener("keydown", handleKey);
   }, [
     articleActions,
+    articleEnrichment,
     bootstrap?.capabilities.manualRefresh,
     bootstrap?.settings.singleKeyShortcuts,
     changeReadingMode,

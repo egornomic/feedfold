@@ -5,18 +5,25 @@ import { describe, expect, it } from "vitest";
 import { DemoStore } from "../../src/demo/store.js";
 import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
 import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
-import type { AppSettings, Article, BootstrapData } from "../../src/shared/types.js";
+import type {
+  AppSettings,
+  Article,
+  ArticleAiTranslation,
+  BootstrapData,
+} from "../../src/shared/types.js";
 
 type HarnessState = {
   bootstrap: BootstrapData;
   queue: { articles: Article[] };
-  actions: {
+  enrichment: {
     articleTranslationStates: ReadonlyMap<
       number,
-      { visible: boolean; loading: boolean; translation: { language: string } | null }
+      { visible: boolean; loading: boolean; translation: ArticleAiTranslation | null }
     >;
+    fullContentVisibleIds: ReadonlySet<number>;
     applySettings: (settings: AppSettings) => void;
     toggleArticleTranslation: (article: Article) => void;
+    toggleFullContent: (article: Article) => Promise<void>;
   };
 };
 
@@ -58,7 +65,10 @@ function exposeBrowserGlobals(window: JSDOM["window"]): () => void {
 }
 
 describe("article AI state", () => {
-  it("keeps a newly requested translation visible when an older settings-invalidated response arrives", async () => {
+  it.each([
+    "language",
+    "content",
+  ] as const)("keeps the current translation visible when a response invalidated by a %s change arrives", async (change) => {
     const store = new DemoStore();
     const initialBootstrap = store.invoke("bootstrap", undefined) as BootstrapData;
     let releaseFirstTranslation = () => {};
@@ -128,12 +138,12 @@ describe("article AI state", () => {
     let resource: { pause: () => void } | null = null;
 
     try {
-      const actionsModulePath: string = "../../src/client/features/reader/article-actions.js";
+      const enrichmentModulePath: string = "../../src/client/features/reader/article-enrichment.js";
       const queueModulePath: string = "../../src/client/features/reader/article-queue.js";
       const routeModulePath: string = "../../src/client/app/route.js";
       const resourceModulePath: string = "../../src/client/features/reader/data-resource.js";
-      const [actionsModule, queueModule, routeModule, resourceModule] = await Promise.all([
-        import(actionsModulePath),
+      const [enrichmentModule, queueModule, routeModule, resourceModule] = await Promise.all([
+        import(enrichmentModulePath),
         import(queueModulePath),
         import(routeModulePath),
         import(resourceModulePath),
@@ -153,7 +163,7 @@ describe("article AI state", () => {
           readingMode: "magazine",
           showToast: () => {},
         });
-        const actions = actionsModule.useArticleActions({
+        const enrichment = enrichmentModule.useArticleEnrichment({
           bootstrap,
           queue,
           route,
@@ -176,14 +186,14 @@ describe("article AI state", () => {
                 : queue.reloadAfterMutation(signal),
           reloadRules: async () => {},
         });
-        current = { bootstrap, queue, actions };
+        current = { bootstrap, queue, enrichment };
 
         const article = queue.articles.find((item: Article) => item.media === null);
-        const state = article ? actions.articleTranslationStates.get(article.id) : null;
+        const state = article ? enrichment.articleTranslationStates.get(article.id) : null;
         return createElement(
           "output",
           { "data-testid": "translation-state" },
-          `${bootstrap.settings.translationLanguage}:${state?.loading ? "loading" : state?.visible ? state.translation?.language : "hidden"}`,
+          `${bootstrap.settings.translationLanguage}:${state?.loading ? "loading" : state?.visible ? `${state.translation?.language}:${state.translation?.sourceKind}` : "hidden"}`,
         );
       }
 
@@ -205,34 +215,48 @@ describe("article AI state", () => {
       const germanSettings = store.invoke("updateSettings", {
         translationLanguage: "German",
       }) as AppSettings;
-      await act(async () => current?.actions.applySettings(germanSettings));
+      await act(async () => current?.enrichment.applySettings(germanSettings));
       await waitFor("German settings", () => translationState() === "German:hidden");
 
-      await act(async () => current?.actions.toggleArticleTranslation(article()));
+      await act(async () => current?.enrichment.toggleArticleTranslation(article()));
       await firstTranslationStarted;
       await waitFor(
         "the delayed German translation",
         () => translationState() === "German:loading",
       );
 
-      const polishSettings = store.invoke("updateSettings", {
-        translationLanguage: "Polish",
-      }) as AppSettings;
-      await act(async () => current?.actions.applySettings(polishSettings));
-      await waitFor("the cleared Polish translation", () => translationState() === "Polish:hidden");
+      if (change === "language") {
+        const polishSettings = store.invoke("updateSettings", {
+          translationLanguage: "Polish",
+        }) as AppSettings;
+        await act(async () => current?.enrichment.applySettings(polishSettings));
+      } else {
+        await act(async () => current?.enrichment.toggleFullContent(article()));
+        await waitFor(
+          "the full article to be visible",
+          () => current?.enrichment.fullContentVisibleIds.has(article().id) === true,
+        );
+      }
+      const expectedLanguage = change === "language" ? "Polish" : "German";
+      const expectedSource = change === "content" ? "full" : "feed";
+      const expectedTranslation = `${expectedLanguage}:${expectedLanguage}:${expectedSource}`;
+      await waitFor(
+        "the invalidated translation to clear",
+        () => translationState() === `${expectedLanguage}:hidden`,
+      );
 
-      await act(async () => current?.actions.toggleArticleTranslation(article()));
-      await waitFor("the current Polish translation", () => translationState() === "Polish:Polish");
+      await act(async () => current?.enrichment.toggleArticleTranslation(article()));
+      await waitFor("the current translation", () => translationState() === expectedTranslation);
 
       await act(async () => {
         releaseFirstTranslation();
         await firstTranslationFinished;
       });
       await waitFor(
-        "the stale German translation to be ignored",
-        () => translationState() === "Polish:Polish",
+        "the stale German feed translation to be ignored",
+        () => translationState() === expectedTranslation,
       );
-      expect(translationState()).toBe("Polish:Polish");
+      expect(translationState()).toBe(expectedTranslation);
       expect(translationRequests).toBe(2);
     } finally {
       releaseFirstTranslation();

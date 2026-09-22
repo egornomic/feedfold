@@ -8,6 +8,7 @@ import {
   EMPTY_ARTICLE_TRANSLATION_STATE,
 } from "./article/article-ai-state";
 import type { useArticleActions } from "./article-actions";
+import type { ArticleEnrichmentController } from "./article-enrichment";
 import type { ArticleQueueController } from "./article-queue";
 import type { useReaderPreferences } from "./reader-preferences";
 import { readerRouteForSelection, readerScopeLabel, readerScopeUnreadCount } from "./reader-state";
@@ -21,6 +22,7 @@ interface ReaderWorkspaceProps {
   bootstrap: BootstrapData;
   queue: ArticleQueueController;
   articleActions: ReturnType<typeof useArticleActions>;
+  articleEnrichment: ArticleEnrichmentController;
   route: AppRouteController;
   preferences: ReturnType<typeof useReaderPreferences>;
   displayedReaderRoute: ReaderRoute;
@@ -42,6 +44,7 @@ export function ReaderWorkspace({
   bootstrap,
   queue,
   articleActions,
+  articleEnrichment,
   route,
   preferences,
   displayedReaderRoute,
@@ -184,10 +187,10 @@ export function ReaderWorkspace({
               }
               contentError={
                 queue.activeArticle
-                  ? (articleActions.articleContentErrors.get(queue.activeArticle.id) ?? null)
+                  ? (articleEnrichment.articleContentErrors.get(queue.activeArticle.id) ?? null)
                   : null
               }
-              onRetryContent={articleActions.retryArticleContent}
+              onRetryContent={articleEnrichment.retryArticleContent}
               canPrevious={queue.activeArticleIndex > 0}
               canNext={
                 queue.activeArticleIndex >= 0 &&
@@ -196,18 +199,18 @@ export function ReaderWorkspace({
               }
               fullContentVisible={
                 queue.activeArticle
-                  ? articleActions.fullContentVisibleIds.has(queue.activeArticle.id)
+                  ? articleEnrichment.fullContentVisibleIds.has(queue.activeArticle.id)
                   : false
               }
               summaryState={
                 queue.activeArticle
-                  ? (articleActions.articleSummaryStates.get(queue.activeArticle.id) ??
+                  ? (articleEnrichment.articleSummaryStates.get(queue.activeArticle.id) ??
                     EMPTY_ARTICLE_SUMMARY_STATE)
                   : EMPTY_ARTICLE_SUMMARY_STATE
               }
               translationState={
                 queue.activeArticle
-                  ? (articleActions.articleTranslationStates.get(queue.activeArticle.id) ??
+                  ? (articleEnrichment.articleTranslationStates.get(queue.activeArticle.id) ??
                     EMPTY_ARTICLE_TRANSLATION_STATE)
                   : EMPTY_ARTICLE_TRANSLATION_STATE
               }
@@ -228,10 +231,10 @@ export function ReaderWorkspace({
               onCopy={(article) => void articleActions.copyArticleUrl(article)}
               onOpenSource={articleActions.openArticleSource}
               onFeedAction={openFeedManagementById}
-              onToggleFullContent={(article) => void articleActions.toggleFullContent(article)}
-              onRunSummaryPrompt={articleActions.runArticleSummaryPrompt}
-              onToggleTranslation={articleActions.toggleArticleTranslation}
-              onRegenerateSummary={articleActions.regenerateArticleSummary}
+              onToggleFullContent={(article) => void articleEnrichment.toggleFullContent(article)}
+              onRunSummaryPrompt={articleEnrichment.runArticleSummaryPrompt}
+              onToggleTranslation={articleEnrichment.toggleArticleTranslation}
+              onRegenerateSummary={articleEnrichment.regenerateArticleSummary}
               onOpenAiSettings={() => route.navigate({ kind: "settings", category: "ai" })}
               onFilterSelection={filterSelectedText}
             />
@@ -246,9 +249,9 @@ export function ReaderWorkspace({
             }
             activeId={queue.activeArticleId}
             topAlignedId={queue.expandedKeyboardTargetId}
-            fullContentVisibleIds={articleActions.fullContentVisibleIds}
-            summaryStates={articleActions.articleSummaryStates}
-            translationStates={articleActions.articleTranslationStates}
+            fullContentVisibleIds={articleEnrichment.fullContentVisibleIds}
+            summaryStates={articleEnrichment.articleSummaryStates}
+            translationStates={articleEnrichment.articleTranslationStates}
             translationLanguage={bootstrap.settings.translationLanguage}
             customPrompts={bootstrap.settings.customPrompts}
             showYouTubeDescriptions={bootstrap.settings.showYouTubeDescriptions}
@@ -273,10 +276,10 @@ export function ReaderWorkspace({
             onCopy={(article) => void articleActions.copyArticleUrl(article)}
             onOpenSource={articleActions.openArticleSource}
             onFeedAction={openFeedManagementById}
-            onToggleFullContent={(article) => void articleActions.toggleFullContent(article)}
-            onRunSummaryPrompt={articleActions.runArticleSummaryPrompt}
-            onToggleTranslation={articleActions.toggleArticleTranslation}
-            onRegenerateSummary={articleActions.regenerateArticleSummary}
+            onToggleFullContent={(article) => void articleEnrichment.toggleFullContent(article)}
+            onRunSummaryPrompt={articleEnrichment.runArticleSummaryPrompt}
+            onToggleTranslation={articleEnrichment.toggleArticleTranslation}
+            onRegenerateSummary={articleEnrichment.regenerateArticleSummary}
             onOpenAiSettings={() => route.navigate({ kind: "settings", category: "ai" })}
             onFilterSelection={filterSelectedText}
           />

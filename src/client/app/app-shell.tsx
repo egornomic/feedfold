@@ -30,6 +30,7 @@ import { folderPathLabel } from "../features/feeds/folder-hierarchy";
 import { Sidebar } from "../features/navigation/sidebar";
 import { useSidebarMotion } from "../features/navigation/sidebar-motion";
 import { useArticleActions } from "../features/reader/article-actions";
+import { useArticleEnrichment } from "../features/reader/article-enrichment";
 import { useArticleQueue } from "../features/reader/article-queue";
 import { type ReaderDataBinding, ReaderDataResource } from "../features/reader/data-resource";
 import { useReaderPreferences } from "../features/reader/reader-preferences";
@@ -119,8 +120,16 @@ export default function AppShell({
     onReadingModeChange: preferences.setReadingMode,
     showToast,
   });
-  const articleActions = useArticleActions({
+  const articleEnrichment = useArticleEnrichment({
     bootstrap,
+    queue,
+    route,
+    dataResource,
+    readingMode: queue.readingMode,
+    showToast,
+  });
+  const articleActions = useArticleActions({
+    loadFullArticle: articleEnrichment.loadFullArticle,
     queue,
     route,
     dataResource,
@@ -132,7 +141,7 @@ export default function AppShell({
     queue.readingMode === "magazine" &&
     route.routedArticleId !== null &&
     !queue.fullContentLoadedIds.current.has(route.routedArticleId) &&
-    !articleActions.articleContentErrors.has(route.routedArticleId);
+    !articleEnrichment.articleContentErrors.has(route.routedArticleId);
   const showArticleLoading = useDelayedPending(articlePending, route.routedArticleId);
   const readerWasOpen = useRef(false);
   const readerOpen =
@@ -393,6 +402,7 @@ export default function AppShell({
     route,
     queue,
     articleActions,
+    articleEnrichment,
     preferences,
     selectScope,
     navigateTo,
@@ -464,6 +474,7 @@ export default function AppShell({
             bootstrap={bootstrap}
             queue={queue}
             articleActions={articleActions}
+            articleEnrichment={articleEnrichment}
             route={route}
             preferences={preferences}
             displayedReaderRoute={displayedReaderRoute}
@@ -534,8 +545,8 @@ export default function AppShell({
             onTheme={preferences.setTheme}
             onColorPalette={preferences.setColorPalette}
             onFontSize={preferences.setArticleFontSize}
-            onSettings={articleActions.applySettings}
-            onAiSettings={articleActions.applyAiSettings}
+            onSettings={articleEnrichment.applySettings}
+            onAiSettings={articleEnrichment.applyAiSettings}
             onAccountDeleted={onAccountDeleted}
             showToast={showToast}
           />
