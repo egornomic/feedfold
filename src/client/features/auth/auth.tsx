@@ -22,7 +22,7 @@ export function SessionLoading() {
   return (
     <main className="auth-page" aria-busy="true">
       <div className="session-loading" role="status" aria-label="Opening feedfold">
-        <BrandIdentity decorative />
+        <BrandIdentity decorative loading />
       </div>
     </main>
   );
