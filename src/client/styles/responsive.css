@@ -1030,7 +1030,7 @@
   }
 
   :root .shortcut-dialog,
-  .management-dialog {
+  :root .management-dialog {
     transition:
       opacity var(--duration-reduced) ease,
       display var(--duration-reduced) allow-discrete,
@@ -1038,7 +1038,7 @@
   }
 
   :root .shortcut-dialog::backdrop,
-  .management-dialog::backdrop {
+  :root .management-dialog::backdrop {
     transition:
       opacity var(--duration-reduced) ease,
       display var(--duration-reduced) allow-discrete,
@@ -1061,8 +1061,9 @@
   :root .shortcut-dialog,
   :root .shortcut-dialog[open],
   :root .shortcut-dialog[data-state="closing"],
-  .management-dialog,
-  .management-dialog[open],
+  :root .management-dialog,
+  :root .management-dialog[open],
+  :root .management-dialog[data-state="closing"],
   .pwa-update,
   .pwa-update[data-motion-state="closed"] {
     transform: none;
@@ -1132,6 +1133,10 @@
   }
 
   @starting-style {
+    :root .management-dialog[open] {
+      transform: none;
+    }
+
     .inline-state.empty-state,
     .inline-editor[data-motion-state="open"],
     .add-folder-form[data-motion-state="open"],
