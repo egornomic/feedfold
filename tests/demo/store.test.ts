@@ -33,17 +33,35 @@ describe("static demo data", () => {
   it("keeps reader filters and counts in sync with article actions", () => {
     const store = new DemoStore(DEMO_NOW);
 
-    expect(store.bootstrap().counts).toEqual({ unread: 15, starred: 1, all: 17 });
-    expect(store.articles({ state: "unread" }).articles).toHaveLength(15);
-    expect(store.articles({ state: "starred" }).articles).toHaveLength(1);
+    expect(store.invoke("bootstrap", undefined).counts).toEqual({
+      unread: 15,
+      starred: 1,
+      all: 17,
+    });
+    expect(store.invoke("articles", {}).articles).toHaveLength(15);
+    expect(store.invoke("articles", { state: "starred" }).articles).toHaveLength(1);
 
-    store.updateArticleState(1, { isRead: true, isStarred: true });
+    store.invoke("updateArticleState", { id: 1, state: { isRead: true, isStarred: true } });
 
-    expect(store.bootstrap().counts).toEqual({ unread: 14, starred: 2, all: 17 });
-    expect(store.articles({ state: "unread" }).articles.map((article) => article.id)).not.toContain(
-      1,
+    expect(store.invoke("bootstrap", undefined).counts).toEqual({
+      unread: 14,
+      starred: 2,
+      all: 17,
+    });
+    expect(store.invoke("articles", {}).articles.map((article) => article.id)).not.toContain(1);
+    expect(
+      store.invoke("articles", { state: "all", search: "solar-powered" }).articles,
+    ).toHaveLength(1);
+  });
+
+  it("explains that account management is unavailable without changing the demo session", async () => {
+    await expect(demoApi.changePassword("demo-password")).rejects.toThrow(
+      "Account management is unavailable in the demo.",
     );
-    expect(store.articles({ state: "all", search: "solar-powered" }).articles).toHaveLength(1);
+    await expect(demoApi.passkeyAuthenticationOptions()).rejects.toThrow(
+      "Account management is unavailable in the demo.",
+    );
+    await expect(demoApi.session()).resolves.toMatchObject({ id: "demo", hasPassword: false });
   });
 
   it("can reopen a searched article after marking the search results as read", () => {
@@ -92,17 +110,19 @@ describe("static demo data", () => {
 
   it("moves a feed and its articles into a demo folder", () => {
     const store = new DemoStore(DEMO_NOW);
-    const folder = store.createFolder({
+    const folder = store.invoke("createFolder", {
       name: "Design",
       parentId: null,
       sortDirection: "newest",
     });
 
-    store.updateFeed(1, { folderId: folder.id });
+    store.invoke("updateFeed", { id: 1, input: { folderId: folder.id } });
 
-    const bootstrap = store.bootstrap();
+    const bootstrap = store.invoke("bootstrap", undefined);
     expect(bootstrap.folders.find((candidate) => candidate.id === folder.id)?.unreadCount).toBe(3);
-    expect(store.articles({ state: "all", folderId: folder.id }).articles).toHaveLength(3);
-    expect(store.article(1).folderId).toBe(folder.id);
+    expect(store.invoke("articles", { state: "all", folderId: folder.id }).articles).toHaveLength(
+      3,
+    );
+    expect(store.invoke("article", { id: 1 }).folderId).toBe(folder.id);
   });
 });

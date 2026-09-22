@@ -16,7 +16,7 @@ export async function demoRequest<K extends ApiOperation>(
   operation: K,
   payload: ApiInput<NoInfer<K>>,
 ): Promise<ApiOutput<K>> {
-  return demoStore.invoke(operation, payload) as ApiOutput<K>;
+  return demoStore.invoke(operation, payload);
 }
 
 function request<K extends ApiOperation>(
@@ -28,7 +28,7 @@ function request<K extends ApiOperation>(
   if (init?.signal?.aborted) {
     return Promise.reject(new DOMException("The request was aborted.", "AbortError"));
   }
-  const result = Promise.resolve().then(() => demoStore.invoke(operation, payload) as ApiOutput<K>);
+  const result = Promise.resolve().then(() => demoStore.invoke(operation, payload));
   if (!init?.signal) return result;
   return new Promise<ApiOutput<K>>((resolve, reject) => {
     const abort = () => reject(new DOMException("The request was aborted.", "AbortError"));
