@@ -785,8 +785,8 @@ export function ReaderPane({
             translationState={activeSurface.translationState}
             translationLanguage={translationLanguage}
             customPrompts={customPrompts}
-            onPrevious={() => navigateWithAnimation("previous")}
-            onNext={() => navigateWithAnimation("next")}
+            onPrevious={onPrevious}
+            onNext={onNext}
             canPrevious={canPrevious}
             canNext={canNext}
             navigationPending={navigationPending || activeSurface.article.id !== article?.id}
