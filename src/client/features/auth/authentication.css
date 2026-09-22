@@ -100,10 +100,6 @@
   content: "";
 }
 
-.passkey-login-button {
-  width: 100%;
-}
-
 .auth-switch {
   display: flex;
   align-items: center;

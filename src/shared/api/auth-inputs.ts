@@ -53,17 +53,10 @@ const passkeyRename = z.object({
 });
 
 export const authInputs = {
-  username,
-  loginUsername,
-  password,
   loginCredentials,
-  inviteCode,
   registrationCredentials,
   passkeySignup,
   passwordCredential,
-  ceremonyId,
-  operationId,
-  passkeyResponse,
   passkeyCeremony,
   passkeySignupCeremony,
   stepUpPassword,

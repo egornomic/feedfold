@@ -1,22 +1,6 @@
-import { spawn } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-
-function run(command, args, projectPath) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: projectPath,
-      env: { ...process.env, npm_config_ignore_scripts: "false" },
-      stdio: "inherit",
-    });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (signal) reject(new Error(`${command} stopped with ${signal}`));
-      else if (code === 0) resolve();
-      else reject(new Error(`${command} exited with status ${code ?? "unknown"}`));
-    });
-  });
-}
+import { run } from "./run-command.mjs";
 
 function sqliteBinary(projectPath) {
   return join(
@@ -49,7 +33,7 @@ export async function rebuildSqliteForElectron(projectPath) {
       "--version",
       electronPackage.version,
     ],
-    projectPath,
+    { cwd: projectPath, env: { ...process.env, npm_config_ignore_scripts: "false" } },
   );
 }
 
@@ -58,5 +42,8 @@ export async function rebuildSqliteForNode(projectPath) {
   // Electron ABI in that app while npm creates a separate Node-compatible development binary.
   await rm(sqliteBinary(projectPath), { force: true });
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  await run(npm, ["rebuild", "better-sqlite3"], projectPath);
+  await run(npm, ["rebuild", "better-sqlite3"], {
+    cwd: projectPath,
+    env: { ...process.env, npm_config_ignore_scripts: "false" },
+  });
 }

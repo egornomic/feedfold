@@ -45,7 +45,7 @@ export function clearReaderPreferences(userId: string): void {
   }
 }
 
-export function resolveTheme(theme: Theme, prefersLight: boolean): ResolvedTheme {
+function resolveTheme(theme: Theme, prefersLight: boolean): ResolvedTheme {
   if (theme !== "auto") return theme;
   return prefersLight ? "light" : "dark";
 }

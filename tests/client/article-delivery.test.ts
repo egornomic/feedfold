@@ -12,19 +12,9 @@ import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js"
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
 import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
+import { exposeBrowserGlobals, waitFor } from "./react-harness.js";
 
 const TEST_USER_ID = 1;
-
-async function waitFor(description: string, condition: () => boolean): Promise<void> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
-    if (condition()) return;
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-  }
-  throw new Error(`Timed out waiting for ${description}`);
-}
 
 function parsedArticle(
   externalId: string,
@@ -40,32 +30,6 @@ function parsedArticle(
     summary: `${title} summary`,
     imageUrl: null,
     feedContentHtml: null,
-  };
-}
-
-function exposeBrowserGlobals(window: JSDOM["window"]): () => void {
-  const previous = new Map<PropertyKey, PropertyDescriptor | undefined>();
-  const expose = (key: PropertyKey, value: unknown) => {
-    previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, { configurable: true, value });
-  };
-
-  expose("window", window);
-  expose("document", window.document);
-  expose("navigator", window.navigator);
-  expose("Element", window.Element);
-  expose("HTMLElement", window.HTMLElement);
-  expose("Node", window.Node);
-  expose("Event", window.Event);
-  expose("MouseEvent", window.MouseEvent);
-  expose("KeyboardEvent", window.KeyboardEvent);
-  expose("DOMException", window.DOMException);
-
-  return () => {
-    for (const [key, descriptor] of [...previous].reverse()) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
   };
 }
 

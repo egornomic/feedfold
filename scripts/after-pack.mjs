@@ -1,17 +1,5 @@
-import { spawn } from "node:child_process";
 import { join } from "node:path";
-
-function run(command, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit" });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (signal) reject(new Error(`${command} stopped with ${signal}`));
-      else if (code === 0) resolve();
-      else reject(new Error(`${command} exited with status ${code ?? "unknown"}`));
-    });
-  });
-}
+import { run } from "./run-command.mjs";
 
 export default async function signLocalMacBuild(context) {
   if (context.electronPlatformName !== "darwin") return;
