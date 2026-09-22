@@ -456,7 +456,7 @@ async function createWindow(): Promise<void> {
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     show: false,
-    backgroundColor: "#0f1211",
+    backgroundColor: "#0e0f0e",
     title: "feedfold",
     webPreferences: {
       preload: join(moduleDirectory, "preload.cjs"),
