@@ -247,10 +247,6 @@
 }
 
 @media (min-width: 1021px) {
-  .app-shell {
-    transition: grid-template-columns var(--duration-surface) var(--ease-in-out);
-  }
-
   .app-shell.is-sidebar-collapsed {
     grid-template-columns: 0 minmax(0, 1fr);
   }
@@ -261,11 +257,6 @@
 
   .app-shell.is-sidebar-collapsed > .sidebar {
     pointer-events: none;
-  }
-
-  .reader-title-row,
-  .page-header {
-    transition: padding-left var(--duration-surface) var(--ease-in-out);
   }
 
   .sidebar.is-collapsed::before {
