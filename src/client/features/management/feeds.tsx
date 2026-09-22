@@ -14,7 +14,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import type { BootstrapData, Feed, Folder } from "../../../shared/types";
 import { handleActionMenuKeyDown } from "../../ui/action-menu";
 import { DropdownSelect } from "../../ui/dropdown";
@@ -58,22 +58,6 @@ function feedFaviconUrl(value: string): string {
 
 function formatCompactRefreshInterval(minutes: number): string {
   return minutes < 60 ? `${minutes}m` : `${minutes / 60}h`;
-}
-
-function FeedsDesignContract() {
-  const markerRef = useRef<HTMLSpanElement>(null);
-  useLayoutEffect(() => {
-    markerRef.current?.replaceChildren(
-      document.createComment(`
-THESIS: A compact signal ledger makes subscriptions findable and anomalies obvious; it refuses stacked mobile data cards.
-OWN-WORLD: Feedfold charcoal and sparse moss, thin separators, compact controls, exception-only amber, flat rows, anchored menus.
-STORY: Search or filter, scan health, repair failures in context, and open one menu for deeper management. Folders retain their own clear view.
-FIRST VIEWPORT: Compact app bar, two tabs, one search/filter row, then 60–68px feed rows; Add feed stays top-right.
-FORM: Grounded structure 6, flat adaptive ledger, surface seed acac87d8.
-`),
-    );
-  }, []);
-  return <span ref={markerRef} hidden data-design-contract="feeds" />;
 }
 
 function AnchoredPopover({
@@ -280,7 +264,6 @@ function FeedsPage({
 
   return (
     <div className="management-page feeds-management-page">
-      <FeedsDesignContract />
       <PageHeader
         title="Manage feeds"
         description="Subscriptions, folders, and source health in one place."
