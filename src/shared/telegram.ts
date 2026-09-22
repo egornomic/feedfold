@@ -33,7 +33,3 @@ export function telegramPostIdentity(value: string | null): TelegramPostIdentity
   }
   return { channel, postId };
 }
-
-export function isTelegramPostUrl(value: string | null): boolean {
-  return telegramPostIdentity(value) !== null;
-}

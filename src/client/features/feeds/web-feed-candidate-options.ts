@@ -14,13 +14,3 @@ export function groupWebFeedCandidates(
     other: candidates.filter((candidate) => !suggestedIds.has(candidate.id)),
   };
 }
-
-export function webFeedCandidateOptionLabel(candidate: WebFeedCandidate): string {
-  const count = `${candidate.itemCount} ${candidate.itemCount === 1 ? "item" : "items"}`;
-  const title = candidate.articles[0]?.title.replace(/\s+/g, " ").trim();
-  if (!title || title.toLocaleLowerCase() === candidate.label.toLocaleLowerCase()) {
-    return `${candidate.label} · ${count}`;
-  }
-  const example = title.length > 64 ? `${title.slice(0, 63).trimEnd()}…` : title;
-  return `${candidate.label} · ${count} · ${example}`;
-}

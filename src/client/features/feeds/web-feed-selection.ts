@@ -1,5 +1,5 @@
 export const WEB_FEED_SELECT_MESSAGE = "feedfold:web-feed-select";
-export const WEB_FEED_HIGHLIGHT_MESSAGE = "feedfold:web-feed-highlight";
+const WEB_FEED_HIGHLIGHT_MESSAGE = "feedfold:web-feed-highlight";
 
 export type WebFeedSelectionAction = { kind: "select"; candidateId: string | null };
 

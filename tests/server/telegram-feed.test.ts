@@ -4,7 +4,7 @@ import {
   parseTelegramPostMedia,
   telegramChannelUrls,
 } from "../../src/server/telegram-feed.js";
-import { isTelegramPostUrl } from "../../src/shared/telegram.js";
+import { telegramPostIdentity } from "../../src/shared/telegram.js";
 
 describe("Telegram feed normalization", () => {
   it("recognizes public channel and post URLs without treating other paths as feeds", () => {
@@ -18,9 +18,12 @@ describe("Telegram feed normalization", () => {
     expect(telegramChannelUrls("https://t.me/Example_Channel/42")).toBeNull();
     expect(telegramChannelUrls("https://t.me/share/url")).toBeNull();
     expect(telegramChannelUrls("https://example.com/Example_Channel")).toBeNull();
-    expect(isTelegramPostUrl("https://t.me/Example_Channel/42?single")).toBe(true);
-    expect(isTelegramPostUrl("https://t.me/Example_Channel")).toBe(false);
-    expect(isTelegramPostUrl("https://t.me/s/Example_Channel")).toBe(false);
+    expect(telegramPostIdentity("https://t.me/Example_Channel/42?single")).toEqual({
+      channel: "Example_Channel",
+      postId: "42",
+    });
+    expect(telegramPostIdentity("https://t.me/Example_Channel")).toBeNull();
+    expect(telegramPostIdentity("https://t.me/s/Example_Channel")).toBeNull();
   });
 
   it("normalizes text, links, timestamps, and media-only posts", () => {

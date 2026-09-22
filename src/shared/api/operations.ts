@@ -29,7 +29,7 @@ import type {
 import type { authInputs } from "./auth-inputs.js";
 import type { inputs } from "./inputs.js";
 
-export interface AuthConfig {
+interface AuthConfig {
   registrationMode: RegistrationMode;
   registrationAvailable: boolean;
   passkeysAvailable: boolean;
@@ -49,7 +49,7 @@ type AuthInput<K extends keyof typeof authInputs> = z.input<(typeof authInputs)[
 type ResourceId = { id: number };
 type Operation<Payload, Result> = { input: Payload; output: Result };
 
-export interface ApiOperations {
+interface ApiOperations {
   session: Operation<undefined, { user: SessionUser }>;
   login: Operation<AuthInput<"loginCredentials">, { user: SessionUser }>;
   register: Operation<AuthInput<"registrationCredentials">, { user: SessionUser }>;

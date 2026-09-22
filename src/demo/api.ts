@@ -12,13 +12,6 @@ export { ApiError, AUTH_REQUIRED_EVENT, appUrl, errorMessage } from "../client/a
 
 const demoStore = new DemoStore();
 
-export async function demoRequest<K extends ApiOperation>(
-  operation: K,
-  payload: ApiInput<NoInfer<K>>,
-): Promise<ApiOutput<K>> {
-  return demoStore.invoke(operation, payload);
-}
-
 function request<K extends ApiOperation>(
   operation: K,
   payload: ApiInput<NoInfer<K>>,
@@ -44,7 +37,7 @@ function subscribeReaderDataInvalidations(): () => void {
 }
 
 async function exportOpml(): Promise<void> {
-  const opml = await demoRequest("exportOpml", undefined);
+  const opml = await demoStore.invoke("exportOpml", undefined);
   const url = URL.createObjectURL(new Blob([opml], { type: "application/xml" }));
   const link = document.createElement("a");
   link.href = url;
