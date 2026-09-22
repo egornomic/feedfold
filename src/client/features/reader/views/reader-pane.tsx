@@ -39,7 +39,6 @@ const ARTICLE_SWIPE_SURFACE = "[data-article-swipe-surface], [data-image-lightbo
 const SWIPE_SAMPLE_WINDOW = 100;
 const SWIPE_SAMPLE_LIMIT = 5;
 const SWIPE_SPRING_RESPONSE = 0.32;
-const SWIPE_SPRING_DAMPING = 1;
 const REDUCED_SWIPE_DURATION = 200;
 
 type ArticleNavigationHandler = () => boolean | Promise<boolean>;
@@ -255,7 +254,6 @@ export function ReaderPane({
         initialPosition: position,
         initialVelocity: releaseVelocity,
         target: 0,
-        damping: SWIPE_SPRING_DAMPING,
         response: SWIPE_SPRING_RESPONSE,
         onUpdate: ({ position: nextPosition, progress }) => {
           surface.style.transform = `translate3d(${nextPosition}px, 0, 0)`;
@@ -478,7 +476,6 @@ export function ReaderPane({
       initialPosition: setup.startX,
       initialVelocity: setup.releaseVelocity,
       target: targetX,
-      damping: SWIPE_SPRING_DAMPING,
       response: SWIPE_SPRING_RESPONSE,
       onUpdate: ({ position, progress }) => {
         outgoing.style.transform = `translate3d(${position}px, 0, 0)`;

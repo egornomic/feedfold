@@ -11,7 +11,6 @@ interface HorizontalSpringOptions {
   initialPosition: number;
   initialVelocity: number;
   target: number;
-  damping: 1;
   response: number;
   onUpdate: (update: HorizontalSpringUpdate) => void;
   onComplete?: () => void;
