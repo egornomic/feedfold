@@ -1160,6 +1160,14 @@
   .sidebar
   :is(.brand, .sidebar-navigation, .sidebar-footer, .sidebar-collapse-button),
 :root[data-input-modality="keyboard"] :is(.article-ai-summary, .article-content-layer),
+:root[data-input-modality="keyboard"]
+  :is(
+    .dropdown-select-trigger,
+    .dropdown-select-trigger > svg,
+    .dropdown-combobox > svg,
+    .dropdown-select-menu,
+    .dropdown-select-option
+  ),
 :root[data-input-modality="keyboard"] .shortcut-dialog,
 :root[data-input-modality="keyboard"] .shortcut-dialog::backdrop {
   transition: none;
