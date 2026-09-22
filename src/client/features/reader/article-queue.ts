@@ -534,6 +534,29 @@ export function useArticleQueue({
     if (nextRoute.kind !== "reader") return;
     const requestKey = `${appRoutePath(nextRoute)}:${readingMode}`;
     if (
+      articleListNeedsReload.current &&
+      !contextArticleReturn.current &&
+      loadedReaderRequestKey.current === requestKey
+    ) {
+      const previous = articlesRef.current;
+      const matching = previous.filter((article) => {
+        if (nextRoute.state === "unread") return !article.isRead;
+        if (nextRoute.state === "read") return article.isRead;
+        if (nextRoute.state === "starred") return article.isStarred;
+        return true;
+      });
+      setArticles(matching);
+      setActiveArticleId((current) => {
+        if (matching.some((article) => article.id === current)) return current;
+        const index = Math.max(
+          0,
+          previous.findIndex((article) => article.id === current),
+        );
+        return matching[Math.min(index, matching.length - 1)]?.id ?? null;
+      });
+      articleListNeedsReload.current = false;
+    }
+    if (
       articleListNeedsReload.current ||
       contextArticleReturn.current ||
       loadedReaderRequestKey.current !== requestKey

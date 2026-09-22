@@ -88,6 +88,23 @@ function readerFixture(path = "/articles/unread", count = 10) {
   Object.defineProperty(dom.window.HTMLElement.prototype, "scrollIntoView", { value: () => {} });
   dom.window.document.documentElement.dataset.inputModality = "keyboard";
   const restore = exposeBrowserGlobals(dom.window);
+  const observers = new Set<() => void>();
+  const previousObserver = Object.getOwnPropertyDescriptor(globalThis, "IntersectionObserver");
+  Object.defineProperty(globalThis, "IntersectionObserver", {
+    configurable: true,
+    value: class {
+      readonly notify: () => void;
+      constructor(callback: (entries: Array<{ isIntersecting: boolean }>) => void) {
+        this.notify = () => callback([{ isIntersecting: true }]);
+      }
+      observe() {
+        observers.add(this.notify);
+      }
+      disconnect() {
+        observers.delete(this.notify);
+      }
+    },
+  });
   const previousActEnvironment = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
   const container = dom.window.document.querySelector<HTMLElement>("#app");
@@ -100,6 +117,11 @@ function readerFixture(path = "/articles/unread", count = 10) {
     container,
     dom,
     operations,
+    async reachListEnd() {
+      await act(async () => {
+        for (const notify of [...observers]) notify();
+      });
+    },
     hold(operation: ApiOperation) {
       let resolve = () => {};
       const gate = {
@@ -130,6 +152,9 @@ function readerFixture(path = "/articles/unread", count = 10) {
       database.close();
       dom.window.close();
       restore();
+      if (previousObserver)
+        Object.defineProperty(globalThis, "IntersectionObserver", previousObserver);
+      else Reflect.deleteProperty(globalThis, "IntersectionObserver");
       if (previousActEnvironment === undefined)
         Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
       else Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", previousActEnvironment);
@@ -163,4 +188,68 @@ describe("reader navigation", () => {
       await fixture.close();
     }
   });
+
+  it.each(["all", "unread", "saved"] as const)(
+    "returns to the loaded %s queue without waiting for another download",
+    async (state) => {
+      const fixture = readerFixture(`/articles/${state}`, 250);
+      try {
+        if (state === "saved") {
+          for (const article of fixture.database.articles.listArticlePage(1, {
+            state: "all",
+            limit: 500,
+          }).articles) {
+            await fixture.application.invoke({
+              operation: "updateArticleState",
+              payload: { id: article.id, state: { isStarred: true } },
+            });
+          }
+        }
+        await fixture.mount();
+        const rows = () => fixture.container.querySelectorAll(".article-open-button");
+        await waitFor("the first page", () => rows().length === 100);
+        await fixture.reachListEnd();
+        await waitFor("the second page", () => rows().length === 200);
+        const selected = [...rows()].find((row) => row.textContent === "Open Article 151");
+        expect(selected).toBeDefined();
+        await act(async () => (selected as HTMLButtonElement).click());
+        await waitFor(
+          "the opened article",
+          () =>
+            fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
+              ?.textContent === "Full content 151",
+        );
+        if (state === "saved") {
+          const unsave = fixture.container.querySelector<HTMLButtonElement>(
+            '[aria-label="Remove from Saved (S)"]',
+          );
+          if (!unsave) throw new Error("The article is not saved");
+          await act(async () => unsave.click());
+        }
+        const articles = fixture.hold("articles");
+        const bootstrap = fixture.hold("bootstrap");
+        const back = fixture.container.querySelector<HTMLButtonElement>(
+          '[aria-label="Back to articles"]',
+        );
+        if (!back) throw new Error("The reader has no Back action");
+        await act(async () => back.click());
+        await waitFor(
+          "the retained reading queue",
+          () =>
+            fixture.dom.window.location.pathname === `/articles/${state}` &&
+            rows().length === (state === "all" ? 200 : 199) &&
+            fixture.container.querySelector(".reading-workspace")?.getAttribute("aria-busy") ===
+              "false",
+        );
+        const titles = [...rows()].map((row) => row.textContent);
+        expect(titles).toContain("Open Article 200");
+        expect(titles).toContain("Open Article 152");
+        expect(titles.includes("Open Article 151")).toBe(state === "all");
+        expect(articles.held).toBe(0);
+        expect(bootstrap.held).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
 });
