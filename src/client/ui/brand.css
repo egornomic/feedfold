@@ -1,0 +1,68 @@
+.brand-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+}
+
+.brand-logo {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.brand-logo svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.brand-logo.is-loading rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: brand-logo-sweep 1300ms var(--ease-in-out) infinite;
+  animation-delay: var(--brand-loading-delay, 0ms);
+}
+
+.brand-logo.is-loading rect:nth-of-type(2),
+.brand-logo.is-loading rect:nth-of-type(4) {
+  animation-delay: calc(var(--brand-loading-delay, 0ms) + 100ms);
+}
+
+.brand-logo.is-loading rect:nth-of-type(3),
+.brand-logo.is-loading rect:nth-of-type(5),
+.brand-logo.is-loading rect:nth-of-type(6) {
+  animation-delay: calc(var(--brand-loading-delay, 0ms) + 200ms);
+}
+
+@keyframes brand-logo-sweep {
+  0%,
+  70%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  35% {
+    transform: scale(0.6);
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-logo.is-loading rect {
+    animation: none;
+  }
+}
+
+.brand-wordmark {
+  font-family: var(--font-ui);
+  font-size: var(--type-wordmark);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wordmark);
+  line-height: 1;
+}

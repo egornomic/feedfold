@@ -135,6 +135,7 @@
 }
 
 .session-loading {
+  --brand-loading-delay: 300ms;
   display: flex;
   align-items: center;
   color: var(--text-secondary);
