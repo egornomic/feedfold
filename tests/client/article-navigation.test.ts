@@ -43,12 +43,10 @@ function readerFixture(path = "/articles/unread", count = 10) {
   const services = createApplicationServices({ database, credentialCipher: null });
   const application = new ApplicationApi(services);
   const gates = new Map<ApiOperation, { wait: Promise<void>; release: () => void; held: number }>();
-  const operations: ApiOperation[] = [];
   const invoke = async <K extends ApiOperation>(
     request: ApiRequest<K>,
   ): Promise<DesktopResponse<ApiOutput<K>>> => {
     try {
-      operations.push(request.operation);
       const value = await application.invoke(request);
       const gate = gates.get(request.operation);
       if (gate) {
@@ -116,7 +114,6 @@ function readerFixture(path = "/articles/unread", count = 10) {
     application,
     container,
     dom,
-    operations,
     async reachListEnd() {
       await act(async () => {
         for (const notify of [...observers]) notify();
@@ -124,14 +121,20 @@ function readerFixture(path = "/articles/unread", count = 10) {
     },
     hold(operation: ApiOperation) {
       let resolve = () => {};
+      let reject: (error: Error) => void = () => {};
       const gate = {
         held: 0,
-        wait: new Promise<void>((done) => {
+        wait: new Promise<void>((done, fail) => {
           resolve = done;
+          reject = fail;
         }),
         release() {
           gates.delete(operation);
           resolve();
+        },
+        fail() {
+          gates.delete(operation);
+          reject(new ApplicationApiError(503, "The list is temporarily unavailable"));
         },
       };
       gates.set(operation, gate);
@@ -247,6 +250,110 @@ describe("reader navigation", () => {
         expect(titles.includes("Open Article 151")).toBe(state === "all");
         expect(articles.held).toBe(0);
         expect(bootstrap.held).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
+
+  it("shows a bookmarked article before its neighbors and preserves changes made while they load", async () => {
+    const fixture = readerFixture();
+    const articles = fixture.hold("articles");
+    const selected = fixture.database.articles.listArticlePage(1, { state: "all" }).articles[4];
+    if (!selected) throw new Error("The fixture has no bookmarked article");
+    fixture.dom.window.history.replaceState(null, "", `/articles/${selected.id}`);
+    try {
+      await fixture.mount();
+      await waitFor(
+        "readable content while neighbors are pending",
+        () =>
+          articles.held > 0 &&
+          fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
+            ?.textContent === "Full content 5",
+      );
+      const previous = () =>
+        fixture.container.querySelector<HTMLButtonElement>('[aria-label="Previous article (K)"]');
+      const next = () =>
+        fixture.container.querySelector<HTMLButtonElement>('[aria-label="Next article (J)"]');
+      expect(previous()?.disabled).toBe(true);
+      expect(next()?.disabled).toBe(true);
+      expect(fixture.container.querySelector(".reading-workspace")?.getAttribute("aria-busy")).toBe(
+        "false",
+      );
+      const save = fixture.container.querySelector<HTMLButtonElement>(
+        '[aria-label="Save article (S)"]',
+      );
+      if (!save) throw new Error("The article has no Save action");
+      await act(async () => save.click());
+      await waitFor(
+        "the article to be saved",
+        () => fixture.database.articles.getArticle(1, selected.id)?.isStarred === true,
+      );
+      await act(async () => articles.release());
+      await waitFor(
+        "neighbor navigation",
+        () => previous()?.disabled === false && next()?.disabled === false,
+      );
+      expect(
+        fixture.container.querySelector('[aria-label="Remove from Saved (S)"]'),
+      ).not.toBeNull();
+      expect(
+        fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
+          ?.textContent,
+      ).toBe("Full content 5");
+      await act(async () => next()?.click());
+      await waitFor(
+        "the following article",
+        () =>
+          fixture.container.querySelector(".article-swipe-layer.is-active .article-header h2")
+            ?.textContent === "Article 6",
+      );
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  it.each(["failed", "pending"] as const)(
+    "lets readers return from a bookmarked article while its neighbors are %s",
+    async (result) => {
+      const fixture = readerFixture();
+      const articles = fixture.hold("articles");
+      const selected = fixture.database.articles.listArticlePage(1, { state: "all" }).articles[4];
+      if (!selected) throw new Error("The fixture has no bookmarked article");
+      fixture.dom.window.history.replaceState(null, "", `/articles/${selected.id}`);
+      try {
+        await fixture.mount();
+        await waitFor(
+          "the bookmarked article",
+          () =>
+            articles.held > 0 &&
+            fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
+              ?.textContent === "Full content 5",
+        );
+        if (result === "failed") await act(async () => articles.fail());
+        expect(
+          fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
+            ?.textContent,
+        ).toBe("Full content 5");
+        const back = fixture.container.querySelector<HTMLButtonElement>(
+          '[aria-label="Back to articles"]',
+        );
+        if (!back) throw new Error("The reader has no Back action");
+        await act(async () => back.click());
+        if (result === "pending") await act(async () => articles.release());
+        await waitFor(
+          "the surrounding feed",
+          () =>
+            fixture.dom.window.location.pathname === `/feeds/${selected.feedId}/all` &&
+            fixture.container.querySelectorAll(".article-open-button").length === 10 &&
+            fixture.container.querySelector(".reading-workspace")?.getAttribute("aria-busy") ===
+              "false",
+        );
+        expect(
+          fixture.container
+            .querySelector(".reading-workspace")
+            ?.classList.contains("is-reading-article"),
+        ).toBe(false);
       } finally {
         await fixture.close();
       }

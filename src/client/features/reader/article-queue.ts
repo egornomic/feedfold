@@ -602,12 +602,19 @@ export function useArticleQueue({
 
     const currentQueueReloadId = queueReloadId.current + 1;
     queueReloadId.current = currentQueueReloadId;
+    loadedReaderRequestKey.current = null;
     setLoading(true);
     setError(null);
+    let articleReady = false;
+    const isCurrent = () =>
+      active &&
+      requestId.current === currentRequestId &&
+      queueReloadId.current === currentQueueReloadId;
     void (async () => {
       try {
         await dataResource.requestArticles(async (signal) => {
           const article = await api.article(articleId, signal);
+          if (signal.aborted || !isCurrent()) return;
           const context = articleContext();
           const queueRoute = context?.route ?? {
             kind: "reader" as const,
@@ -616,6 +623,17 @@ export function useArticleQueue({
             state: "all" as const,
             search: "",
           };
+          fullContentLoadedIds.current = new Set([article.id]);
+          setArticleContext(queueRoute, context?.articleIndex);
+          setLoadedReaderRoute(queueRoute);
+          setDisplayedReadingMode(readingMode);
+          setArticles([article]);
+          setNextCursor(null);
+          setActiveArticleId(article.id);
+          setLoading(false);
+          setLoadingMore(true);
+          articleReady = true;
+
           const page = await api.articles(
             articleQueryForReaderRoute(queueRoute, {
               limit: readingMode === "expanded" ? 20 : 100,
@@ -624,19 +642,18 @@ export function useArticleQueue({
             }),
             signal,
           );
-          if (
-            signal.aborted ||
-            !active ||
-            requestId.current !== currentRequestId ||
-            queueReloadId.current !== currentQueueReloadId
-          ) {
-            return;
-          }
+          if (signal.aborted || !isCurrent()) return;
+          const currentArticle =
+            articlesRef.current.find((item) => item.id === article.id) ?? article;
           const pageIndex = page.articles.findIndex((item) => item.id === article.id);
-          const anchoredArticles = articlesWithContextReturn(page.articles, {
-            article,
-            index: page.anchorIndex ?? (pageIndex >= 0 ? pageIndex : (context?.articleIndex ?? 0)),
-          });
+          const anchoredArticles = articlesWithContextReturn(
+            articlesWithUpdatedState(page.articles, [currentArticle]),
+            {
+              article: currentArticle,
+              index:
+                page.anchorIndex ?? (pageIndex >= 0 ? pageIndex : (context?.articleIndex ?? 0)),
+            },
+          );
           const nextArticles = appendUnseenArticles(anchoredArticles, articlesRef.current).articles;
           const actualArticleIndex = nextArticles.findIndex((item) => item.id === article.id);
           setArticleContext(
@@ -653,15 +670,24 @@ export function useArticleQueue({
           setActiveArticleId(article.id);
         });
       } catch (caught) {
-        if (active) setError(errorMessage(caught));
+        if (!isCurrent()) return;
+        if (articleReady) {
+          showToast(
+            `Could not load nearby articles. Refresh to try again: ${errorMessage(caught)}`,
+          );
+        } else {
+          setError(errorMessage(caught));
+        }
       } finally {
-        if (active) setLoading(false);
+        if (isCurrent()) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     })();
 
     return () => {
       active = false;
-      dataResource.cancelArticles();
     };
   }, [
     articleContext,
@@ -670,6 +696,7 @@ export function useArticleQueue({
     routedArticleId,
     routedArticleRetry,
     setArticleContext,
+    showToast,
   ]);
 
   const selectArticle = useCallback((articleId: number, keyboardTarget = false) => {
