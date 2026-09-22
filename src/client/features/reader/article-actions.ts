@@ -270,7 +270,6 @@ export function useArticleActions({
   return {
     markReadPending,
     changeArticleState,
-    activateArticle,
     openArticle,
     moveArticle,
     copyArticleUrl,
