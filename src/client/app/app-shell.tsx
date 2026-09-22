@@ -28,7 +28,6 @@ import type {
 import type { AddFeedSourceType } from "../features/feeds/feed-source";
 import { folderPathLabel } from "../features/feeds/folder-hierarchy";
 import { Sidebar } from "../features/navigation/sidebar";
-import { useSidebarMotion } from "../features/navigation/sidebar-motion";
 import { useArticleActions } from "../features/reader/article-actions";
 import { useArticleEnrichment } from "../features/reader/article-enrichment";
 import { useArticleQueue } from "../features/reader/article-queue";
@@ -106,11 +105,9 @@ export default function AppShell({
   const readingWorkspaceRef = useRef<HTMLDivElement>(null);
   bootstrapRef.current = bootstrap;
 
-  const toggleDesktopSidebar = useSidebarMotion(
-    route.view === "reader",
-    desktopSidebarCollapsed,
-    setDesktopSidebarCollapsed,
-  );
+  const toggleDesktopSidebar = useCallback(() => {
+    setDesktopSidebarCollapsed((current) => !current);
+  }, [setDesktopSidebarCollapsed]);
 
   const queue = useArticleQueue({
     route,
