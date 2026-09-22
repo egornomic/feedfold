@@ -4,7 +4,7 @@ import {
   articleSwipeDownAction,
   articleSwipeIntent,
   articleSwipeOffset,
-} from "../../src/client/article-swipe.js";
+} from "../../src/client/features/reader/interaction/article-swipe.js";
 
 describe("article swipe navigation", () => {
   it("commits a normal 100px swipe in either direction", () => {

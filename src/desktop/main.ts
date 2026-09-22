@@ -19,22 +19,11 @@ import {
 import { chromium } from "playwright";
 import { ApplicationApi, LOCAL_USER_ID } from "../server/application-api.js";
 import { applicationError } from "../server/application-error.js";
-import { AppDatabase } from "../server/database.js";
 import { ApplicationApiError } from "../server/errors.js";
-import { ExtractionQueue } from "../server/extraction.js";
-import { AiService } from "../server/features/ai/service.js";
-import { DefaultFeedSourceLoader } from "../server/feed-source-loader.js";
-import { closePublicNetwork } from "../server/public-network.js";
-import { FeedRefreshService } from "../server/refresh.js";
-import { TelegramMediaService } from "../server/telegram-media.js";
-import { WebFeedService } from "../server/web-feed.js";
-import { XMediaService } from "../server/x-media.js";
-import {
-  DESKTOP_DATA_CHANGED_CHANNEL,
-  DESKTOP_OPERATIONS,
-  type DesktopRequest,
-  type DesktopResponse,
-} from "../shared/desktop.js";
+import { createApplicationRuntime } from "../server/runtime/application-runtime.js";
+import { runtimeConfiguration } from "../server/runtime/configuration.js";
+import { API_OPERATIONS, type UntrustedApiRequest } from "../shared/api/operations.js";
+import { DESKTOP_DATA_CHANGED_CHANNEL, type DesktopResponse } from "../shared/desktop.js";
 import { DesktopCredentialCipher } from "./credential-cipher.js";
 import { youtubeEmbedRequestHeaders } from "./youtube-player.js";
 
@@ -75,15 +64,6 @@ type WindowState = {
   mode: "normal" | "maximized" | "fullscreen";
 };
 
-function positiveInteger(value: string | undefined, fallback: number, name: string): number {
-  if (value === undefined) return fallback;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`);
-  }
-  return parsed;
-}
-
 function desktopBrowserExecutable(): string {
   const browserRoot = app.isPackaged
     ? join(
@@ -118,47 +98,13 @@ function desktopBrowserExecutable(): string {
   throw new Error("The packaged web-feed browser is missing.");
 }
 
-class DesktopRuntime {
-  readonly database: AppDatabase;
-  readonly extractionQueue: ExtractionQueue;
-  readonly webFeedService: WebFeedService;
-  readonly refreshService: FeedRefreshService;
-  readonly application: ApplicationApi;
-  private readonly unsubscribeFromRefresh: () => void;
-
-  constructor() {
-    const databasePath = resolve(join(app.getPath("userData"), "feedfold.db"));
-    const pollIntervalMinutes = positiveInteger(
-      process.env.POLL_INTERVAL_MINUTES,
-      20,
-      "POLL_INTERVAL_MINUTES",
-    );
-    const feedFetchTimeoutMs = positiveInteger(
-      process.env.FEED_FETCH_TIMEOUT_MS,
-      15_000,
-      "FEED_FETCH_TIMEOUT_MS",
-    );
-    const webFeedLoadTimeoutMs = positiveInteger(
-      process.env.WEB_FEED_LOAD_TIMEOUT_MS,
-      30_000,
-      "WEB_FEED_LOAD_TIMEOUT_MS",
-    );
-    const articleFetchTimeoutMs = positiveInteger(
-      process.env.ARTICLE_FETCH_TIMEOUT_MS,
-      20_000,
-      "ARTICLE_FETCH_TIMEOUT_MS",
-    );
-    const aiRequestTimeoutMs = positiveInteger(
-      process.env.AI_REQUEST_TIMEOUT_MS,
-      60_000,
-      "AI_REQUEST_TIMEOUT_MS",
-    );
-
-    mkdirSync(dirname(databasePath), { recursive: true });
-    this.database = new AppDatabase(databasePath, pollIntervalMinutes);
-    this.extractionQueue = new ExtractionQueue(this.database.extractions, 2, articleFetchTimeoutMs);
-    this.webFeedService = new WebFeedService({
-      timeoutMs: webFeedLoadTimeoutMs,
+function createDesktopRuntime() {
+  const shared = createApplicationRuntime({
+    databasePath: resolve(join(app.getPath("userData"), "feedfold.db")),
+    configuration: runtimeConfiguration(process.env),
+    credentialCipher:
+      !smokeTest && safeStorage.isEncryptionAvailable() ? new DesktopCredentialCipher() : null,
+    webFeed: {
       allowPrivateNetworks:
         smokeTest && process.env.FEEDFOLD_DESKTOP_SMOKE_ALLOW_PRIVATE_NETWORKS === "1",
       browserFactory: () =>
@@ -168,52 +114,24 @@ class DesktopRuntime {
           headless: true,
           chromiumSandbox: process.platform === "linux",
         }),
-    });
-    this.refreshService = new FeedRefreshService(
-      this.database.feeds,
-      new DefaultFeedSourceLoader(
-        (task) => this.database.feeds.runOutbound(task),
-        feedFetchTimeoutMs,
-        this.webFeedService,
-      ),
-      3,
-    );
-    this.unsubscribeFromRefresh = this.refreshService.subscribe(
-      LOCAL_USER_ID,
-      notifyRendererDataChanged,
-    );
-    const aiService = new AiService(this.database, {
-      credentialCipher:
-        !smokeTest && safeStorage.isEncryptionAvailable() ? new DesktopCredentialCipher() : null,
-      requestTimeoutMs: aiRequestTimeoutMs,
-    });
-    this.application = new ApplicationApi({
-      database: this.database,
-      extractionQueue: this.extractionQueue,
-      refreshService: this.refreshService,
-      webFeedService: this.webFeedService,
-      aiService,
-      telegramMediaService: new TelegramMediaService(feedFetchTimeoutMs),
-      xMediaService: new XMediaService(feedFetchTimeoutMs),
-      feedDiscoveryTimeoutMs: feedFetchTimeoutMs,
-    });
-  }
-
-  start(): void {
-    this.extractionQueue.start();
-    this.refreshService.start();
-  }
-
-  async close(): Promise<void> {
-    this.unsubscribeFromRefresh();
-    await Promise.all([this.refreshService.stop(), this.extractionQueue.stop()]);
-    await this.webFeedService.close();
-    await closePublicNetwork();
-    this.database.close();
-  }
+    },
+  });
+  const application = new ApplicationApi(shared.services);
+  const unsubscribe = shared.services.refreshService.subscribe(
+    LOCAL_USER_ID,
+    notifyRendererDataChanged,
+  );
+  return {
+    application,
+    start: shared.start,
+    async close(): Promise<void> {
+      unsubscribe();
+      await shared.close();
+    },
+  };
 }
 
-let runtime: DesktopRuntime | null = null;
+let runtime: ReturnType<typeof createDesktopRuntime> | null = null;
 let mainWindow: BrowserWindow | null = null;
 let flushWindowState: (() => Promise<void>) | null = null;
 let shuttingDown = false;
@@ -338,15 +256,13 @@ function notifyRendererDataChanged(): void {
   frame.send(DESKTOP_DATA_CHANGED_CHANNEL);
 }
 
-function validDesktopRequest(value: unknown): value is DesktopRequest {
+function validUntrustedApiRequest(value: unknown): value is UntrustedApiRequest {
   if (!value || typeof value !== "object") return false;
   const operation = (value as { operation?: unknown }).operation;
-  return (
-    typeof operation === "string" && (DESKTOP_OPERATIONS as readonly string[]).includes(operation)
-  );
+  return typeof operation === "string" && (API_OPERATIONS as readonly string[]).includes(operation);
 }
 
-async function invoke(request: DesktopRequest): Promise<DesktopResponse> {
+async function invoke(request: UntrustedApiRequest): Promise<DesktopResponse> {
   if (!runtime) {
     return {
       ok: false,
@@ -365,7 +281,7 @@ function registerIpc(): void {
     if (!trustedIpcSender(event)) {
       return errorResponse(new ApplicationApiError(403, "This request is not allowed."));
     }
-    if (!validDesktopRequest(request)) {
+    if (!validUntrustedApiRequest(request)) {
       return errorResponse(new ApplicationApiError(400, "The desktop request is invalid."));
     }
     return invoke(request);
@@ -610,7 +526,7 @@ async function createWindow(): Promise<void> {
 }
 
 async function start(): Promise<void> {
-  runtime = new DesktopRuntime();
+  runtime = createDesktopRuntime();
   runtime.start();
   registerIpc();
   await registerApplicationProtocol();

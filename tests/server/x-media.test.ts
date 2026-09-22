@@ -4,12 +4,14 @@ import { join } from "node:path";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import { parseXPostMedia, XMediaService, xSyndicationToken } from "../../src/server/x-media.js";
 import type { XArticleMedia } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 const VIDEO_POST_ID = "2086315104472383847";
@@ -138,7 +140,7 @@ describe("X article media", () => {
       feedUrl: "https://x.com/marclou/rss",
       title: "Marc Lou / @marclou",
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -159,7 +161,7 @@ describe("X article media", () => {
         ],
       },
     });
-    const article = database.articles.listArticles(reader.user.id, { state: "all" })[0];
+    const article = database.articles.listArticlePage(reader.user.id, { state: "all" }).articles[0];
     if (!article) throw new Error("Expected a stored article");
 
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
@@ -196,11 +198,14 @@ describe("X article media", () => {
       });
     });
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+        xMediaService: xMedia,
+      }),
       authService,
-      extractionQueue: extraction,
-      refreshService: refresh,
-      xMediaService: xMedia,
     });
     cleanups.push(
       () => rm(directory, { recursive: true, force: true }),

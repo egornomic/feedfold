@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { inputs } from "../../../shared/api-inputs.js";
+import { inputs } from "../../../shared/api/inputs.js";
 import type { ApplicationService } from "../../application-service.js";
-import { WebFeedError, type WebFeedService } from "../../web-feed.js";
 import { idParams, missing, type UserId } from "../routes.js";
 import type { FeedService } from "./service.js";
+import { WebFeedError, type WebFeedService } from "./web/service.js";
 
 export async function feedRoutes(
   app: FastifyInstance,
@@ -20,10 +20,6 @@ export async function feedRoutes(
     userId: UserId;
   },
 ): Promise<void> {
-  app.get("/api/feeds", async (request) => ({
-    feeds: feeds.listFeeds(userId(request)),
-  }));
-
   app.get("/api/feeds/:id", async (request, reply) => {
     const { id } = idParams.parse(request.params);
     const feed = feeds.getFeed(userId(request), id);

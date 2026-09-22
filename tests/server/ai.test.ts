@@ -2,23 +2,25 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
-import { decryptAiKey, encryptAiKey } from "../../src/client/ai-vault.js";
+import { decryptAiKey, encryptAiKey } from "../../src/client/api/ai-vault.js";
+import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
+import { AppDatabase } from "../../src/server/database.js";
 import {
   ARTICLE_SUMMARY_PROMPT_VERSION,
   prepareArticleSummary,
-} from "../../src/server/ai/article-summary.js";
+} from "../../src/server/features/ai/article-summary.js";
 import {
   prepareArticleTranslation,
   renderArticleTranslation,
-} from "../../src/server/ai/article-translation.js";
-import { AiError } from "../../src/server/ai/errors.js";
-import { createAiProviders } from "../../src/server/ai/providers.js";
-import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
-import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+} from "../../src/server/features/ai/article-translation.js";
+import { AiError } from "../../src/server/features/ai/errors.js";
+import { createAiProviders } from "../../src/server/features/ai/providers.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import type { ParsedFeed } from "../../src/server/features/shared.js";
 import { DEFAULT_FACTCHECK_PROMPT } from "../../src/shared/ai-prompts.js";
 import type { AiRequestCredential } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -62,13 +64,13 @@ function addArticle(database: AppDatabase, userId: number): { feedId: number; ar
       },
     ],
   };
-  database.feeds.completeRefresh(feed.id, {
+  completeFeedRefresh(database.feeds, feed.id, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
     parsed,
   });
-  const articleId = database.articles.listArticles(userId, { state: "all" })[0]?.id;
+  const articleId = database.articles.listArticlePage(userId, { state: "all" }).articles[0]?.id;
   if (!articleId) throw new Error("Test article was not stored");
   return { feedId: feed.id, articleId };
 }
@@ -81,7 +83,7 @@ function addYouTubeArticle(database: AppDatabase, userId: number): number {
   const videoUrl = "https://www.youtube.com/watch?v=9hE5-98ZeCg";
   const media = youtubeMediaFromUrl(videoUrl);
   if (!media) throw new Error("Test YouTube media could not be created");
-  database.feeds.completeRefresh(feed.id, {
+  completeFeedRefresh(database.feeds, feed.id, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
@@ -103,7 +105,7 @@ function addYouTubeArticle(database: AppDatabase, userId: number): number {
       ],
     },
   });
-  const articleId = database.articles.listArticles(userId, { state: "all" })[0]?.id;
+  const articleId = database.articles.listArticlePage(userId, { state: "all" }).articles[0]?.id;
   if (!articleId) throw new Error("Test YouTube article was not stored");
   return articleId;
 }
@@ -830,7 +832,7 @@ describe("AI article summaries", () => {
       feedContentHtml:
         "<article><p>The full feed article explains an important result.</p></article>",
     };
-    database.feeds.completeRefresh(feedId, {
+    completeFeedRefresh(database.feeds, feedId, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -844,7 +846,7 @@ describe("AI article summaries", () => {
       "Stored summary",
     );
 
-    database.feeds.completeRefresh(feedId, {
+    completeFeedRefresh(database.feeds, feedId, {
       httpStatus: 200,
       etag: null,
       lastModified: null,

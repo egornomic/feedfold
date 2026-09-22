@@ -1,10 +1,10 @@
 import { SqliteError } from "better-sqlite3";
 import { ZodError } from "zod";
-import { AiError } from "./ai/errors.js";
 import { ApplicationApiError, InvalidRequestError, OperationForbiddenError } from "./errors.js";
+import { AiError } from "./features/ai/errors.js";
+import { WebFeedError } from "./features/feeds/web/error.js";
 import { FeedDiscoveryError } from "./feed-discovery.js";
 import { QuotaExceededError } from "./quota.js";
-import { WebFeedError } from "./web-feed-error.js";
 
 export interface ApplicationErrorResponse {
   status: number;

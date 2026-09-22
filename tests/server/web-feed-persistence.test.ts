@@ -2,10 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+import { AppDatabase } from "../../src/server/database.js";
 import { PUBLIC_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import type { ParsedFeed } from "../../src/server/features/shared.js";
 import type { WebFeedConfig } from "../../src/shared/types.js";
+import { completeFeedRefresh, failFeedRefresh } from "../helpers/feeds.js";
 
 const directories: string[] = [];
 const TEST_USER_ID = 1;
@@ -129,12 +131,12 @@ describe("web feed persistence", () => {
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)?.totalCount).toBe(10);
       expect(
         database.articles
-          .listArticles(TEST_USER_ID, { state: "all", feedId: feed.id })
-          .map(({ title }) => title)
+          .listArticlePage(TEST_USER_ID, { state: "all", feedId: feed.id })
+          .articles.map(({ title }) => title)
           .sort(),
       ).toEqual(Array.from({ length: 10 }, (_, index) => `Update ${index + 1}`).sort());
 
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -146,8 +148,8 @@ describe("web feed persistence", () => {
       });
 
       const refreshedTitles = database.articles
-        .listArticles(TEST_USER_ID, { state: "all", feedId: feed.id })
-        .map(({ title }) => title);
+        .listArticlePage(TEST_USER_ID, { state: "all", feedId: feed.id })
+        .articles.map(({ title }) => title);
       expect(refreshedTitles).toHaveLength(11);
       expect(refreshedTitles).toContain("New update");
       expect(refreshedTitles).not.toContain("Update 11");
@@ -189,7 +191,7 @@ describe("web feed persistence", () => {
         lastMatchCount: 3,
         totalCount: 2,
       });
-      const record = database.feeds.getFeedRecord(feed.id);
+      const record = database.feeds.getRefreshCandidates([feed.id])[0];
       expect(record).toMatchObject({
         sourceKind: "web",
         pollIntervalMinutes: 60,
@@ -201,10 +203,10 @@ describe("web feed persistence", () => {
       expect(database.feeds.getWebFeedConfig(TEST_USER_ID, feed.id)).toEqual(config(pageUrl));
       expect(database.feeds.getWebFeedConfig(999, feed.id)).toBeNull();
 
-      const initialArticles = database.articles.listArticles(TEST_USER_ID, {
+      const initialArticles = database.articles.listArticlePage(TEST_USER_ID, {
         state: "all",
         includeContent: true,
-      });
+      }).articles;
       expect(initialArticles).toHaveLength(2);
       expect(initialArticles.map(({ url }) => url)).toEqual([
         "https://example.test/releases/two",
@@ -252,7 +254,7 @@ describe("web feed persistence", () => {
         ),
       ).toMatchObject({ lastMatchCount: 2, totalCount: 3, pollIntervalMinutes: 60 });
 
-      expect(database.feeds.getFeedRecord(feed.id)).toMatchObject({
+      expect(database.feeds.getRefreshCandidates([feed.id])[0]).toMatchObject({
         sourceKind: "web",
         webConfig: config(pageUrl, "article.release"),
         selectionRevision: 2,
@@ -260,8 +262,8 @@ describe("web feed persistence", () => {
         pollIntervalMinutes: 60,
       });
       const corrected = database.articles
-        .listArticles(TEST_USER_ID, { state: "all" })
-        .find(({ url }) => url === first.url);
+        .listArticlePage(TEST_USER_ID, { state: "all" })
+        .articles.find(({ url }) => url === first.url);
       expect(corrected).toMatchObject({
         title: "Corrected title",
         summary: "Corrected summary",
@@ -270,8 +272,8 @@ describe("web feed persistence", () => {
       });
       expect(
         database.articles
-          .listArticles(TEST_USER_ID, { state: "all" })
-          .map(({ url }) => url)
+          .listArticlePage(TEST_USER_ID, { state: "all" })
+          .articles.map(({ url }) => url)
           .sort(),
       ).toEqual([
         "https://example.test/releases/one",
@@ -279,7 +281,7 @@ describe("web feed persistence", () => {
         "https://example.test/releases/two",
       ]);
 
-      database.feeds.failRefresh(feed.id, {
+      failFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         error: "Stale selection failed",
         errorKind: "selection_broken",
@@ -287,7 +289,7 @@ describe("web feed persistence", () => {
         retryMinutes: 20,
         expectedSelectionRevision: 1,
       });
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -307,12 +309,12 @@ describe("web feed persistence", () => {
       });
       expect(
         database.articles
-          .listArticles(TEST_USER_ID, { state: "all" })
-          .some(({ url }) => url === "https://example.test/releases/stale"),
+          .listArticlePage(TEST_USER_ID, { state: "all" })
+          .articles.some(({ url }) => url === "https://example.test/releases/stale"),
       ).toBe(false);
 
-      database.feeds.markRefreshing(feed.id);
-      database.feeds.failRefresh(feed.id, {
+      database.feeds.markSourceRefreshing(database.feeds.sourceIdForFeed(feed.id));
+      failFeedRefresh(database.feeds, feed.id, {
         httpStatus: null,
         error: "The page could not be reached",
         errorKind: "network",
@@ -325,13 +327,13 @@ describe("web feed persistence", () => {
         lastMatchCount: 2,
         totalCount: 3,
       });
-      database.feeds.markRefreshing(feed.id);
+      database.feeds.markSourceRefreshing(database.feeds.sourceIdForFeed(feed.id));
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
         refreshing: true,
         healthStatus: "failing",
         lastErrorKind: "network",
       });
-      database.feeds.failRefresh(feed.id, {
+      failFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         error: "The saved page selection no longer matches meaningful items",
         errorKind: "selection_broken",
@@ -345,7 +347,7 @@ describe("web feed persistence", () => {
         totalCount: 3,
       });
 
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -462,7 +464,7 @@ describe("web feed persistence", () => {
         lastErrorKind: null,
         lastMatchCount: null,
       });
-      expect(database.feeds.getFeedRecord(published.id)).toMatchObject({
+      expect(database.feeds.getRefreshCandidates([published.id])[0]).toMatchObject({
         sourceKind: "published",
         webConfig: null,
       });

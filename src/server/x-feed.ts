@@ -92,7 +92,7 @@ export function xContentHtml(html: string | null, instanceUrl: string): string |
   }
 }
 
-export function normalizeXFeed(parsed: ParsedFeed, instanceUrl: string): ParsedFeed {
+function normalizeXFeed(parsed: ParsedFeed, instanceUrl: string): ParsedFeed {
   return {
     ...parsed,
     siteUrl: xContentUrl(parsed.siteUrl, instanceUrl),

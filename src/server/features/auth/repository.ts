@@ -498,12 +498,10 @@ export class AuthRepository {
     })();
   }
 
-  touchUserActivity(userId: number, at: string, touchBefore: string): boolean {
-    return (
-      this.sqlite
-        .prepare("UPDATE users SET last_active_at = ? WHERE id = ? AND last_active_at <= ?")
-        .run(at, userId, touchBefore).changes > 0
-    );
+  touchUserActivity(userId: number, at: string, touchBefore: string): void {
+    this.sqlite
+      .prepare("UPDATE users SET last_active_at = ? WHERE id = ? AND last_active_at <= ?")
+      .run(at, userId, touchBefore);
   }
 
   sessionForTokenHash(

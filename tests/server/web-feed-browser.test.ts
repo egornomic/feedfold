@@ -4,12 +4,8 @@ import { type Browser, chromium } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
 import { deploymentPolicy } from "../../src/server/deployment-policy.js";
-import { PublicNetworkError } from "../../src/server/public-network.js";
-import {
-  isBlockedNetworkAddress,
-  type WebFeedError,
-  WebFeedService,
-} from "../../src/server/web-feed.js";
+import { type WebFeedError, WebFeedService } from "../../src/server/features/feeds/web/service.js";
+import { isBlockedNetworkAddress, PublicNetworkError } from "../../src/server/public-network.js";
 import type { WebFeedConfig } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void>> = [];

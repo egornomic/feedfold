@@ -1,13 +1,14 @@
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApiClient } from "../../src/client/api-client.js";
-import { createBrowserRequest } from "../../src/client/browser-api.js";
+import { createApiClient } from "../../src/client/api/api-client.js";
+import { createBrowserRequest } from "../../src/client/api/browser-api.js";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
 import { type AuthOptions, AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -25,10 +26,13 @@ async function authApp(publicOrigin?: string, options?: AuthOptions) {
     1,
   );
   const app = await createApp({
-    database,
+    ...createApplicationServices({
+      credentialCipher: null,
+      database,
+      extractionQueue,
+      refreshService,
+    }),
     authService,
-    extractionQueue,
-    refreshService,
     publicOrigin,
   });
   cleanups.push(
@@ -72,7 +76,6 @@ describe("hosted account authentication", () => {
     await api.register("storage-unavailable", "reader-password");
     expect((await api.session()).username).toBe("storage-unavailable");
     expect((await api.bootstrap()).aiSettings.credentialStorageAvailable).toBe(false);
-    expect((await api.aiSettings()).credentialStorageAvailable).toBe(false);
     await expect(api.saveAiProviderKey("openai", "must-not-be-stored")).rejects.toThrow(
       "Secure key storage is unavailable",
     );

@@ -77,10 +77,6 @@ export class ArticleRepository {
     };
   }
 
-  listArticles(userId: number, query: ArticleQuery): Article[] {
-    return this.listArticlePage(userId, query).articles;
-  }
-
   listArticlePage(userId: number, query: ArticleQuery): ArticlePage {
     const savedOrder = query.state === "starred";
     const sortAtSql = savedOrder

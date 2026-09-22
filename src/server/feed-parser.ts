@@ -165,14 +165,10 @@ function normalizeAtom(feed: UnknownRecord, feedUrl: string): ParsedFeed {
     const itemTitle = string(entry.title) ?? nestedString(mediaGroup.title, "value") ?? "";
     const thumbnail = records(mediaGroup.thumbnails)[0];
     const community = record(mediaGroup.community);
-    const rating = record(community.starRating);
     const media = youtubeMediaFromUrl(itemUrl, {
       videoId: nestedString(entry.yt, "videoId"),
-      channelId: nestedString(entry.yt, "channelId"),
       thumbnailUrl: thumbnail ? url(thumbnail.url, itemUrl ?? siteUrl ?? feedUrl) : null,
       viewCount: number(record(community.statistics).views),
-      ratingAverage: number(rating.average),
-      ratingCount: number(rating.count),
     });
     return {
       externalId: string(entry.id) ?? itemUrl ?? fallbackId([itemTitle, publishedAt, summaryHtml]),

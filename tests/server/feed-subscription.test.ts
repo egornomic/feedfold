@@ -5,15 +5,13 @@ import { createApp } from "../../src/server/app.js";
 import { ApplicationApi } from "../../src/server/application-api.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { PUBLIC_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
-import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
-import { TelegramMediaService } from "../../src/server/telegram-media.js";
-import { WebFeedService } from "../../src/server/web-feed.js";
-import { XMediaService } from "../../src/server/x-media.js";
-import type { FeedInput } from "../../src/shared/api-inputs.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import type { FeedInput } from "../../src/shared/api/inputs.js";
 import type { Feed } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -59,11 +57,14 @@ describe("feed subscription workflow", () => {
     );
     cleanups.push(() => refreshService.stop());
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue,
+        refreshService,
+        webFeedService,
+      }),
       authService: auth,
-      extractionQueue,
-      refreshService,
-      webFeedService,
     });
     cleanups.push(() => app.close());
     const address = await app.listen({ port: 0, host: "127.0.0.1" });
@@ -190,15 +191,13 @@ describe("feed subscription workflow", () => {
       1,
     );
     cleanups.push(() => refreshService.stop());
-    const services = {
+    const services = createApplicationServices({
+      credentialCipher: null,
       database,
       extractionQueue,
       refreshService,
       webFeedService,
-      aiService: new AiService(database, { credentialCipher: null }),
-      telegramMediaService: new TelegramMediaService(),
-      xMediaService: new XMediaService(),
-    };
+    });
     const application = new ApplicationApi(services);
     const app = await createApp({ ...services, authService: new AuthService(database.auth) });
     cleanups.push(() => app.close());
@@ -227,9 +226,9 @@ describe("feed subscription workflow", () => {
     const fresh = await createFeed({ sourceKind: "published", feedUrl: `${origin}/feed` });
     await refreshService.waitForIdle();
     expect(requestedPaths).toEqual(["/feed"]);
-    expect(database.articles.listArticles(1, { feedId: fresh.id, state: "all" })).toMatchObject([
-      { title: "Published story" },
-    ]);
+    expect(
+      database.articles.listArticlePage(1, { feedId: fresh.id, state: "all" }).articles,
+    ).toMatchObject([{ title: "Published story" }]);
 
     const paused = await createFeed({
       sourceKind: "published",
@@ -239,7 +238,9 @@ describe("feed subscription workflow", () => {
     await refreshService.waitForIdle();
     expect(paused).toMatchObject({ paused: true, refreshing: false });
     expect(requestedPaths).toEqual(["/feed"]);
-    expect(database.articles.listArticles(1, { feedId: paused.id, state: "all" })).toEqual([]);
+    expect(
+      database.articles.listArticlePage(1, { feedId: paused.id, state: "all" }).articles,
+    ).toEqual([]);
 
     await expect(createFeed({ sourceKind: "published", feedUrl: fresh.feedUrl })).rejects.toThrow();
     expect(
@@ -279,7 +280,7 @@ describe("feed subscription workflow", () => {
     cleanups.push(
       refreshService.subscribe(1, () => {
         deliveredTitles.push(
-          database.articles.listArticles(1, { state: "all" }).map(({ title }) => title),
+          database.articles.listArticlePage(1, { state: "all" }).articles.map(({ title }) => title),
         );
       }),
     );

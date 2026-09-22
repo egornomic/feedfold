@@ -1,10 +1,10 @@
 import type { FeedErrorKind, FeedHealthStatus } from "../shared/types.js";
 import { xFeedUrl } from "../shared/x.js";
+import { WebFeedError, type WebFeedService } from "./features/feeds/web/service.js";
 import type { FeedRecord, ParsedFeed } from "./features/shared.js";
 import { fetchFeed } from "./feed-http.js";
 import { parseAndNormalizeFeed, parseAndNormalizeWordPressPosts } from "./feed-parser.js";
 import { parseAndNormalizeTelegramFeed, telegramChannelUrls } from "./telegram-feed.js";
-import { WebFeedError, type WebFeedService } from "./web-feed.js";
 import { fetchXFeed, nitterBaseUrls, XFeedError } from "./x-feed.js";
 
 export interface LoadedFeedSource {

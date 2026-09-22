@@ -3,9 +3,9 @@ import type { AddressInfo } from "node:net";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { discoverFeed } from "../../src/server/feed-discovery.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
 import { fetchXFeed, nitterBaseUrls, xContentHtml } from "../../src/server/x-feed.js";
 import { xFeedUrl, xVideoPostIds } from "../../src/shared/x.js";
 
@@ -265,7 +265,7 @@ describe("X RSS instances", () => {
     refresh.request([feed.id]);
     await refresh.waitForIdle();
     expect(requests).toEqual(["primary"]);
-    const article = database.articles.listArticles(1, { state: "all" })[0];
+    const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
     if (!article) throw new Error("Expected the initial X post");
     database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
 

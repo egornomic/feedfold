@@ -3,33 +3,20 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
 import { ApplicationApi } from "../../src/server/application-api.js";
-import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+import { AppDatabase } from "../../src/server/database.js";
 import { ApplicationApiError } from "../../src/server/errors.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
-import { AiService } from "../../src/server/features/ai/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
+import type { ParsedFeed } from "../../src/server/features/shared.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
-import { TelegramMediaService } from "../../src/server/telegram-media.js";
-import { WebFeedService } from "../../src/server/web-feed.js";
-import { XMediaService } from "../../src/server/x-media.js";
-import type {
-  DesktopRequest,
-  DesktopResponse,
-  FeedfoldDesktopBridge,
-} from "../../src/shared/desktop.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
+import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
+import { exposeBrowserGlobals, waitFor } from "./react-harness.js";
 
 const TEST_USER_ID = 1;
-
-async function waitFor(description: string, condition: () => boolean): Promise<void> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
-    if (condition()) return;
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-  }
-  throw new Error(`Timed out waiting for ${description}`);
-}
 
 function parsedArticle(
   externalId: string,
@@ -45,32 +32,6 @@ function parsedArticle(
     summary: `${title} summary`,
     imageUrl: null,
     feedContentHtml: null,
-  };
-}
-
-function exposeBrowserGlobals(window: JSDOM["window"]): () => void {
-  const previous = new Map<PropertyKey, PropertyDescriptor | undefined>();
-  const expose = (key: PropertyKey, value: unknown) => {
-    previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, { configurable: true, value });
-  };
-
-  expose("window", window);
-  expose("document", window.document);
-  expose("navigator", window.navigator);
-  expose("Element", window.Element);
-  expose("HTMLElement", window.HTMLElement);
-  expose("Node", window.Node);
-  expose("Event", window.Event);
-  expose("MouseEvent", window.MouseEvent);
-  expose("KeyboardEvent", window.KeyboardEvent);
-  expose("DOMException", window.DOMException);
-
-  return () => {
-    for (const [key, descriptor] of [...previous].reverse()) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
   };
 }
 
@@ -163,15 +124,15 @@ describe("live article delivery", () => {
       ),
       1,
     );
-    const application = new ApplicationApi({
-      database,
-      extractionQueue: extraction,
-      refreshService: refresh,
-      webFeedService: webFeeds,
-      aiService: new AiService(database, { credentialCipher: null }),
-      telegramMediaService: new TelegramMediaService(1_000),
-      xMediaService: new XMediaService(1_000),
-    });
+    const application = new ApplicationApi(
+      createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+        webFeedService: webFeeds,
+      }),
+    );
     for (const initialFeed of database.feeds.listFeeds(TEST_USER_ID)) {
       database.feeds.deleteFeed(TEST_USER_ID, initialFeed.id);
     }
@@ -180,7 +141,7 @@ describe("live article delivery", () => {
       feedUrl: "https://example.test/live-reading.xml",
       folderId: null,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -213,7 +174,9 @@ describe("live article delivery", () => {
     });
     let failNextRuleLoad = false;
     let loadedRules: Array<{ id: number; matchedCount: number }> = [];
-    const invoke = async (request: DesktopRequest): Promise<DesktopResponse> => {
+    const invoke = async <K extends ApiOperation>(
+      request: ApiRequest<K>,
+    ): Promise<DesktopResponse<ApiOutput<K>>> => {
       try {
         if (request.operation === "rules" && failNextRuleLoad) {
           failNextRuleLoad = false;
@@ -262,7 +225,10 @@ describe("live article delivery", () => {
     const bridge: FeedfoldDesktopBridge = {
       platform: "desktop",
       invoke,
-      exportOpml: () => invoke({ operation: "exportOpml" }),
+      exportOpml: async () => {
+        const response = await invoke({ operation: "exportOpml" });
+        return response.ok ? { ok: true, value: undefined } : response;
+      },
       onDataChanged: (listener) => refresh.subscribe(TEST_USER_ID, listener),
     };
 
@@ -297,7 +263,7 @@ describe("live article delivery", () => {
     const root = createRoot(container);
 
     try {
-      const appModulePath: string = "../../src/client/App.js";
+      const appModulePath: string = "../../src/client/app/app.js";
       const { App } = await import(appModulePath);
       await act(async () => root.render(createElement(App)));
       await waitFor(

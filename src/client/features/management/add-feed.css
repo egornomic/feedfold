@@ -1,0 +1,26 @@
+@media (max-width: 620px) {
+  .add-feed-page .page-header {
+    min-height: 64px;
+    flex-wrap: nowrap;
+  }
+
+  .add-feed-page .page-header-actions {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .add-feed-page .page-header-actions .secondary-button {
+    width: var(--control-size);
+    min-height: var(--control-size);
+    flex: 0 0 auto;
+    padding: 0;
+  }
+
+  .add-feed-page .page-header-actions .secondary-button svg {
+    display: block;
+  }
+
+  .add-feed-back-label {
+    display: none;
+  }
+}

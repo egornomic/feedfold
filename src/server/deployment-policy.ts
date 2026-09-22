@@ -1,6 +1,6 @@
 import type { RegistrationMode } from "../shared/types.js";
 
-export type DeploymentMode = "private" | "public";
+type DeploymentMode = "private" | "public";
 
 export interface ResourceQuotas {
   feedDiscoveriesPerDay: number | null;
@@ -46,7 +46,7 @@ const UNLIMITED_QUOTAS: ResourceQuotas = {
   globalStoredBytes: null,
 };
 
-export const PUBLIC_RESOURCE_QUOTAS: ResourceQuotas = {
+const PUBLIC_RESOURCE_QUOTAS: ResourceQuotas = {
   feedDiscoveriesPerDay: 100,
   webAnalysesPerDay: 20,
   chromiumConcurrent: 2,

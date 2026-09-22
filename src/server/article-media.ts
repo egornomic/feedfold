@@ -2,11 +2,8 @@ import type { ArticleMedia } from "../shared/types.js";
 
 interface YouTubeMediaDetails {
   videoId?: string | null;
-  channelId?: string | null;
   thumbnailUrl?: string | null;
   viewCount?: number | null;
-  ratingAverage?: number | null;
-  ratingCount?: number | null;
 }
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"]);
@@ -35,23 +32,12 @@ export function youtubeMediaFromUrl(
           : null)));
   if (!videoId || !/^[A-Za-z0-9_-]+$/.test(videoId)) return null;
 
-  const rating =
-    details.ratingAverage !== null &&
-    details.ratingAverage !== undefined &&
-    details.ratingCount !== null &&
-    details.ratingCount !== undefined
-      ? { average: details.ratingAverage, count: details.ratingCount }
-      : null;
-
   return {
     provider: "youtube",
     type: segments[0] === "shorts" ? "short" : "video",
-    videoId,
-    channelId: details.channelId ?? null,
     embedUrl: `https://www.youtube.com/embed/${videoId}`,
     thumbnailUrl: details.thumbnailUrl ?? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
     viewCount: details.viewCount ?? null,
-    rating,
   };
 }
 

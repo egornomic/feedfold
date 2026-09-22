@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import Database from "better-sqlite3";
 
@@ -21,7 +21,6 @@ const devCommand = ["npm", "run", "dev"];
 const startupTimeoutMs = 60_000;
 
 const worktreePath = realpathSync(process.env.CODEX_WORKTREE_PATH ?? process.cwd());
-const sourceTreePath = realpathSync(process.env.CODEX_SOURCE_TREE_PATH ?? worktreePath);
 const commonGitResult = spawnSync(
   "git",
   ["rev-parse", "--path-format=absolute", "--git-common-dir"],
@@ -306,7 +305,6 @@ async function start() {
     detached: true,
     env: {
       ...process.env,
-      COMPOSE_PROJECT_NAME: basename(sourceTreePath),
       FEEDFOLD_DEV_API_ORIGIN: apiOrigin,
       FEEDFOLD_DEV_PORT: String(webPort),
       DATABASE_PATH: worktreeDatabasePath,

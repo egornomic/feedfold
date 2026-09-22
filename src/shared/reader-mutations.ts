@@ -1,4 +1,4 @@
-import type { DesktopOperation } from "./desktop.js";
+import type { ApiOperation } from "./api/operations.js";
 
 /** Management operations whose committed changes must reach every open reader for the account. */
 export const readerMutationRoutes = {
@@ -14,4 +14,4 @@ export const readerMutationRoutes = {
   deleteRule: "DELETE /api/rules/:id",
   updateSettings: "PATCH /api/settings",
   importOpml: "POST /api/opml/import",
-} satisfies Partial<Record<DesktopOperation, string>>;
+} satisfies Partial<Record<ApiOperation, string>>;

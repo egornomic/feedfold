@@ -197,21 +197,12 @@ export class FeedService {
     return this.repository.deleteFeed(userId, id);
   }
 
-  getFeedRecord(id: number): FeedRecord | null {
-    const sourceId = this.repository.sourceIdForFeed(id);
-    return sourceId ? this.repository.getFeedRecord(sourceId) : null;
-  }
-
   getWebFeedConfig(userId: number, id: number): WebFeedConfig | null {
     return this.repository.getWebFeedConfig(userId, id);
   }
 
   getRefreshCandidates(ids?: number[]): FeedRecord[] {
     return this.repository.getRefreshCandidates(ids);
-  }
-
-  getUserRefreshFeedIds(userId: number, requestedIds?: number[]): number[] {
-    return this.repository.getUserRefreshFeedIds(userId, requestedIds);
   }
 
   sourceIdForFeed(feedId: number): number {
@@ -226,11 +217,6 @@ export class FeedService {
     return this.repository.getDueFeedIds(at);
   }
 
-  markRefreshing(id: number): void {
-    const sourceId = this.repository.sourceIdForFeed(id);
-    if (sourceId) this.repository.markFeedRefreshing(sourceId);
-  }
-
   markSourceRefreshing(sourceId: number): void {
     this.repository.markFeedRefreshing(sourceId);
   }
@@ -239,22 +225,8 @@ export class FeedService {
     return this.repository.listSourceSubscriptions(sourceId);
   }
 
-  listDeliverableSourceSubscriptions(sourceId: number): SourceSubscription[] {
-    return this.repository.listDeliverableSourceSubscriptions(sourceId);
-  }
-
-  completeRefresh(id: number, input: SuccessfulFeedRefresh): boolean {
-    const sourceId = this.repository.sourceIdForFeed(id);
-    return sourceId ? this.ingestion.completeRefresh(sourceId, input) : false;
-  }
-
   completeSourceRefresh(sourceId: number, input: SuccessfulFeedRefresh): boolean {
     return this.ingestion.completeRefresh(sourceId, input);
-  }
-
-  failRefresh(id: number, input: Parameters<FeedRepository["markFeedFailure"]>[1]): void {
-    const sourceId = this.repository.sourceIdForFeed(id);
-    if (sourceId) this.repository.markFeedFailure(sourceId, input);
   }
 
   failSourceRefresh(

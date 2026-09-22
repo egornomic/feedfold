@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
 import { deploymentPolicy } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -31,7 +32,7 @@ function sharedArticleFeed() {
 }
 
 function publishSharedArticle(database: AppDatabase, feedId: number): void {
-  database.feeds.completeRefresh(feedId, {
+  completeFeedRefresh(database.feeds, feedId, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
@@ -44,7 +45,7 @@ function manuallyUnreadSharedArticle(
   userId: number,
   feedId: number,
 ): number {
-  const sharedArticle = database.articles.listArticles(userId, { state: "all" })[0];
+  const sharedArticle = database.articles.listArticlePage(userId, { state: "all" }).articles[0];
   if (!sharedArticle) throw new Error("Shared article was not delivered");
   database.rules.createRule(userId, {
     name: "Mark shared articles read",
@@ -106,8 +107,10 @@ describe("shared feed sources", () => {
     expect(database.connection.prepare("SELECT COUNT(*) FROM articles").pluck().get()).toBe(1);
     expect(database.connection.prepare("SELECT COUNT(*) FROM feed_articles").pluck().get()).toBe(2);
 
-    const firstArticle = database.articles.listArticles(firstUser.id, { state: "all" })[0];
-    const secondArticle = database.articles.listArticles(secondUser.id, { state: "all" })[0];
+    const firstArticle = database.articles.listArticlePage(firstUser.id, { state: "all" })
+      .articles[0];
+    const secondArticle = database.articles.listArticlePage(secondUser.id, { state: "all" })
+      .articles[0];
     expect(firstArticle).toMatchObject({ id: secondArticle?.id, isRead: false, isStarred: false });
 
     if (!firstArticle) throw new Error("Shared article was not delivered");
@@ -226,7 +229,7 @@ describe("shared feed sources", () => {
     const sharedArticleId = manuallyUnreadSharedArticle(database, readingUser.id, readingFeed.id);
 
     database.feeds.updateFeed(resumingUser.id, pausedFeed.id, { paused: false });
-    database.feeds.completeRefresh(readingFeed.id, {
+    completeFeedRefresh(database.feeds, readingFeed.id, {
       httpStatus: 304,
       etag: null,
       lastModified: null,
@@ -254,7 +257,7 @@ describe("shared feed sources", () => {
     const fullFeed = database.feeds.createFeed(fullUser.id, {
       feedUrl: "https://publisher.example.test/full.xml",
     });
-    database.feeds.completeRefresh(fullFeed.id, {
+    completeFeedRefresh(database.feeds, fullFeed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -280,7 +283,7 @@ describe("shared feed sources", () => {
     const blockedFeed = database.feeds.createFeed(fullUser.id, { feedUrl: sharedUrl });
     const deliveredFeed = database.feeds.createFeed(availableUser.id, { feedUrl: sharedUrl });
     expect(
-      database.feeds.completeRefresh(deliveredFeed.id, {
+      completeFeedRefresh(database.feeds, deliveredFeed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -303,14 +306,14 @@ describe("shared feed sources", () => {
       }),
     ).toBe(true);
 
-    expect(database.articles.listArticles(fullUser.id, { state: "all" })).toMatchObject([
-      { title: "Existing article" },
-    ]);
+    expect(database.articles.listArticlePage(fullUser.id, { state: "all" }).articles).toMatchObject(
+      [{ title: "Existing article" }],
+    );
     expect(database.feeds.getFeed(fullUser.id, blockedFeed.id)).toMatchObject({ totalCount: 0 });
     expect(database.feeds.subscriptionNeedsRefresh(blockedFeed.id)).toBe(true);
-    expect(database.articles.listArticles(availableUser.id, { state: "all" })).toMatchObject([
-      { title: "Shared article" },
-    ]);
+    expect(
+      database.articles.listArticlePage(availableUser.id, { state: "all" }).articles,
+    ).toMatchObject([{ title: "Shared article" }]);
     expect(database.feeds.getFeed(availableUser.id, deliveredFeed.id)).toMatchObject({
       healthStatus: "healthy",
       lastHttpStatus: 200,
@@ -328,7 +331,7 @@ describe("shared feed sources", () => {
     const feedUrl = "https://publisher.example.test/paused.xml";
     const pausedFeed = database.feeds.createFeed(pausedUser.id, { feedUrl, paused: true });
     const activeFeed = database.feeds.createFeed(activeUser.id, { feedUrl });
-    database.feeds.completeRefresh(activeFeed.id, {
+    completeFeedRefresh(database.feeds, activeFeed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -350,18 +353,22 @@ describe("shared feed sources", () => {
       },
     });
 
-    expect(database.articles.listArticles(pausedUser.id, { state: "all" })).toHaveLength(0);
-    expect(database.articles.listArticles(activeUser.id, { state: "all" })).toHaveLength(1);
+    expect(
+      database.articles.listArticlePage(pausedUser.id, { state: "all" }).articles,
+    ).toHaveLength(0);
+    expect(
+      database.articles.listArticlePage(activeUser.id, { state: "all" }).articles,
+    ).toHaveLength(1);
 
     database.feeds.updateFeed(pausedUser.id, pausedFeed.id, { paused: false });
-    database.feeds.completeRefresh(activeFeed.id, {
+    completeFeedRefresh(database.feeds, activeFeed.id, {
       httpStatus: 304,
       etag: null,
       lastModified: null,
     });
-    expect(database.articles.listArticles(pausedUser.id, { state: "all" })).toMatchObject([
-      { title: "Shared article" },
-    ]);
+    expect(
+      database.articles.listArticlePage(pausedUser.id, { state: "all" }).articles,
+    ).toMatchObject([{ title: "Shared article" }]);
   });
 
   it("initializes a later subscription from the shared cache without backfilling old entries", async () => {
@@ -389,7 +396,7 @@ describe("shared feed sources", () => {
         feedContentHtml: null,
       })),
     };
-    database.feeds.completeRefresh(firstFeed.id, {
+    completeFeedRefresh(database.feeds, firstFeed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -404,7 +411,7 @@ describe("shared feed sources", () => {
     expect(pausedFeed.totalCount).toBe(0);
     expect(database.feeds.subscriptionNeedsRefresh(pausedFeed.id)).toBe(true);
 
-    database.feeds.completeRefresh(firstFeed.id, {
+    completeFeedRefresh(database.feeds, firstFeed.id, {
       httpStatus: 304,
       etag: null,
       lastModified: null,

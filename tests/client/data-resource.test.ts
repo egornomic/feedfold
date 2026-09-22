@@ -10,15 +10,17 @@ import {
   type FeedInput,
   type FeedUpdateInput,
   type FolderInput,
-} from "../../src/client/api.js";
-import { ReaderDataResource } from "../../src/client/data-resource.js";
+} from "../../src/client/api/api.js";
+import { ReaderDataResource } from "../../src/client/features/reader/data-resource.js";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type { ArticlePage, BootstrapData, Feed, Rule } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -70,7 +72,7 @@ describe("reader data resource", () => {
       feedUrl: "https://example.test/moving.xml",
       folderId: sourceFolder.id,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -243,7 +245,7 @@ describe("reader data resource", () => {
       reloadArticles: async () => {
         if (deliverDuringReload) {
           deliverDuringReload = false;
-          database.feeds.completeRefresh(feed.id, {
+          completeFeedRefresh(database.feeds, feed.id, {
             httpStatus: 200,
             etag: null,
             lastModified: null,
@@ -376,7 +378,7 @@ describe("reader data resource", () => {
     await resource.loadBootstrap();
     expect(currentBootstrap().counts.unread).toBe(0);
 
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -425,7 +427,7 @@ describe("reader data resource", () => {
       feedUrl: "https://example.test/concurrent.xml",
       folderId: null,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -507,7 +509,7 @@ describe("reader data resource", () => {
     await resource.loadBootstrap();
     expect(currentBootstrap().counts.unread).toBe(1);
 
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -662,10 +664,13 @@ describe("reader data resource", () => {
       1,
     );
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     cleanups.push(
       () => rm(directory, { recursive: true, force: true }),

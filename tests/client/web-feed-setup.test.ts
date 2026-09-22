@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  groupWebFeedCandidates,
-  webFeedCandidateOptionLabel,
-} from "../../src/client/web-feed-candidate-options.js";
+import { groupWebFeedCandidates } from "../../src/client/features/feeds/web-feed-candidate-options.js";
 import type { WebFeedCandidate } from "../../src/shared/types.js";
 
 function candidate(id: string, label: string, title: string): WebFeedCandidate {
@@ -45,8 +42,5 @@ describe("web feed setup options", () => {
       suggested: [suggested],
       other: [manual],
     });
-    expect(webFeedCandidateOptionLabel(manual)).toBe(
-      "Repeated page entries · 2 items · Manual release",
-    );
   });
 });

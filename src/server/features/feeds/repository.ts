@@ -271,19 +271,6 @@ export class FeedRepository {
     return value === undefined ? 0 : Number(value);
   }
 
-  getFeedRecord(sourceId: number): FeedRecord | null {
-    const row = this.sqlite
-      .prepare(
-        `SELECT ${feedRecordColumns}
-         FROM feed_sources
-         LEFT JOIN source_web_feed_configs
-           ON source_web_feed_configs.source_id = feed_sources.id
-         WHERE feed_sources.id = ?`,
-      )
-      .get(sourceId) as Row | undefined;
-    return row ? mapFeedRecord(row) : null;
-  }
-
   getWebFeedConfig(userId: number, feedId: number): WebFeedConfig | null {
     const row = this.sqlite
       .prepare(

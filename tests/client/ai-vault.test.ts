@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type AiDevice, decryptAiKey, encryptAiKey } from "../../src/client/ai-vault.js";
+import { type AiDevice, decryptAiKey, encryptAiKey } from "../../src/client/api/ai-vault.js";
 
 async function device(): Promise<AiDevice> {
   return {

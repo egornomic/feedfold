@@ -13,6 +13,7 @@ import {
   DEFAULT_CUSTOM_PROMPTS,
 } from "../../src/shared/ai-prompts.js";
 import { xVideoPostIds } from "../../src/shared/x.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const directories: string[] = [];
 
@@ -70,7 +71,7 @@ describe("database migrations", () => {
       const feed = database.feeds.createFeed(1, { feedUrl: "https://x.com/newmichwill/rss" });
       const canonical = "https://x.com/Ikebillion_/status/2095202646969778335#m";
       const original = "https://nitter.xitter.cc/Ikebillion_/status/2095202646969778335#m";
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -91,7 +92,7 @@ describe("database migrations", () => {
           ],
         },
       });
-      const article = database.articles.listArticles(1, { state: "all" })[0];
+      const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
       if (!article) throw new Error("Expected the existing X post");
       database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
       database.connection
@@ -126,7 +127,7 @@ describe("database migrations", () => {
       const feed = database.feeds.createFeed(1, { feedUrl: "https://x.com/VitalikButerin/rss" });
       const imageUrl =
         "https://nitter.xitter.cc/pic/card_img%2F2095563548252368896%2F8Ls6L-DN%3Fformat%3Dpng%26name%3D386x202";
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -147,7 +148,7 @@ describe("database migrations", () => {
           ],
         },
       });
-      const article = database.articles.listArticles(1, { state: "all" })[0];
+      const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
       if (!article) throw new Error("Expected the existing X post");
       database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
       database.connection
@@ -187,7 +188,7 @@ describe("database migrations", () => {
           "UPDATE feed_sources SET feed_url = ? WHERE id = (SELECT source_id FROM feeds WHERE id = ?)",
         )
         .run("https://nitter.net/person/rss", feed.id);
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: "old-instance-etag",
         lastModified: null,
@@ -209,7 +210,7 @@ describe("database migrations", () => {
           ],
         },
       });
-      const article = database.articles.listArticles(1, { state: "all" })[0];
+      const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
       if (!article) throw new Error("Expected the existing X post");
       database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
       database.connection.prepare("DELETE FROM migrations WHERE version = 42").run();
@@ -319,7 +320,7 @@ describe("database migrations", () => {
         title: "Quoted articles",
         feedUrl: "https://example.test/quotes.xml",
       });
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -340,7 +341,7 @@ describe("database migrations", () => {
           ],
         },
       });
-      const articleId = database.articles.listArticles(1, { state: "all" })[0]?.id;
+      const articleId = database.articles.listArticlePage(1, { state: "all" }).articles[0]?.id;
       if (!articleId) throw new Error("Test article was not created");
 
       database.connection
@@ -501,7 +502,7 @@ Return only the summary in plain text.`,
         title: "AI news",
         feedUrl: "https://example.test/ai.xml",
       });
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -522,7 +523,8 @@ Return only the summary in plain text.`,
           ],
         },
       });
-      const articleId = database.articles.listArticles(reader.id, { state: "all" })[0]?.id;
+      const articleId = database.articles.listArticlePage(reader.id, { state: "all" }).articles[0]
+        ?.id;
       const article = articleId ? database.ai.getArticleForAi(reader.id, articleId) : null;
       if (!article) throw new Error("Test article was not created");
       database.ai.saveArticleAiSummary(reader.id, article.id, article.revision, {
@@ -758,9 +760,11 @@ Return only the summary in plain text.`,
         },
       ]);
       database.rules.recomputeRulesForArticle(1);
-      expect(database.articles.listArticles(1, { state: "all" })).toHaveLength(4);
+      expect(database.articles.listArticlePage(1, { state: "all" }).articles).toHaveLength(4);
       expect(
-        database.articles.listArticles(1, { state: "all" }).map((article) => article.title),
+        database.articles
+          .listArticlePage(1, { state: "all" })
+          .articles.map((article) => article.title),
       ).not.toContain("Video");
       const storedUser = database.connection
         .prepare("SELECT username, password_hash AS passwordHash FROM users WHERE id = 1")
@@ -842,7 +846,6 @@ Return only the summary in plain text.`,
         media: {
           provider: "youtube",
           type: "short",
-          videoId: "short123",
           embedUrl: "https://www.youtube.com/embed/short123",
         },
       });

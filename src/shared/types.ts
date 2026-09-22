@@ -137,15 +137,9 @@ export interface RuleCondition {
 export interface ArticleMedia {
   provider: "youtube";
   type: "video" | "short";
-  videoId: string;
-  channelId: string | null;
   embedUrl: string;
   thumbnailUrl: string;
   viewCount: number | null;
-  rating: {
-    average: number;
-    count: number;
-  } | null;
 }
 
 interface TelegramArticleMediaItem {

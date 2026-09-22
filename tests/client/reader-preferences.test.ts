@@ -3,20 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   clearReaderPreferences,
   resolveAppearance,
-  resolveTheme,
-} from "../../src/client/reader-preferences.js";
+} from "../../src/client/features/reader/reader-preferences.js";
 
 describe("theme preference", () => {
-  it("follows the device appearance in auto mode", () => {
-    expect(resolveTheme("auto", true)).toBe("light");
-    expect(resolveTheme("auto", false)).toBe("dark");
-  });
-
-  it("keeps an explicit appearance regardless of the device", () => {
-    expect(resolveTheme("light", false)).toBe("light");
-    expect(resolveTheme("dark", true)).toBe("dark");
-  });
-
   it("uses independently chosen light and dark palettes as the device changes in auto mode", () => {
     const palettes = { light: "sand", dark: "slate" } as const;
     expect(resolveAppearance("auto", palettes, true)).toEqual({ mode: "light", palette: "sand" });

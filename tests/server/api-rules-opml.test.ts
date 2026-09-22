@@ -6,16 +6,18 @@ import { join } from "node:path";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import {
   DEFAULT_ARTICLE_SUMMARY_PROMPT,
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
   DEFAULT_CUSTOM_PROMPTS,
 } from "../../src/shared/ai-prompts.js";
 import type { Article, BootstrapData, ImportResult, Rule } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 const TEST_ACCOUNTS = [
@@ -54,10 +56,13 @@ describe("live API, OPML, and filtering rules", () => {
       1,
     );
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     cleanups.push(async () => {
       await app.close();
@@ -175,7 +180,7 @@ describe("live API, OPML, and filtering rules", () => {
     const readerFeed = readerFeedResponse.json() as { id: number };
     const partnerFeed = partnerFeedResponse.json() as { id: number };
 
-    database.feeds.completeRefresh(readerFeed.id, {
+    completeFeedRefresh(database.feeds, readerFeed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -271,7 +276,7 @@ describe("live API, OPML, and filtering rules", () => {
     });
     expect(crossAccountRefresh.json()).toEqual({ requested: 0, refreshingFeedIds: [] });
 
-    database.feeds.completeRefresh(readerFeed.id, {
+    completeFeedRefresh(database.feeds, readerFeed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -442,10 +447,10 @@ describe("live API, OPML, and filtering rules", () => {
       (
         await app.inject({
           method: "GET",
-          url: "/api/settings",
+          url: "/api/bootstrap",
           headers: { cookie: partnerCookie },
         })
-      ).json(),
+      ).json<BootstrapData>().settings,
     ).toMatchObject({
       markReadOnScroll: true,
       showYouTubeDescriptions: false,
@@ -607,10 +612,13 @@ describe("live API, OPML, and filtering rules", () => {
       2,
     );
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     await app.listen({ host: "127.0.0.1", port: 0 });
     const apiBase = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
@@ -669,7 +677,9 @@ describe("live API, OPML, and filtering rules", () => {
         body: JSON.stringify({ markReadOnScroll: false }),
       }),
     ).toMatchObject({ markReadOnScroll: false });
-    expect(await asReader("/api/settings")).toMatchObject({ markReadOnScroll: false });
+    expect((await asReader<BootstrapData>("/api/bootstrap")).settings).toMatchObject({
+      markReadOnScroll: false,
+    });
     const parent = bootstrap.folders.find((folder) => folder.name === "Parent");
     const child = bootstrap.folders.find((folder) => folder.name === "Child");
     expect(child?.parentId).toBe(parent?.id);

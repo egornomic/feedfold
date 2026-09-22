@@ -3,13 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InjectOptions } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
-import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
 import type { ArticlePage, Folder } from "../../src/shared/types.js";
+import { createTestApp } from "../helpers/app.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -22,23 +20,11 @@ describe("folder article sorting", () => {
     const directory = await mkdtemp(join(tmpdir(), "feedfold-sorting-test-"));
     const database = new AppDatabase(join(directory, "feedfold.db"));
     const authService = new AuthService(database.auth);
-    const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refresh = new FeedRefreshService(
-      database.feeds,
-      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
-      1,
-    );
-    const app = await createApp({
-      database,
-      authService,
-      extractionQueue: extraction,
-      refreshService: refresh,
-    });
+    const { app, close } = await createTestApp(database, authService);
     cleanups.push(
       () => rm(directory, { recursive: true, force: true }),
       () => database.close(),
-      () => Promise.all([refresh.stop(), extraction.stop()]).then(() => undefined),
-      () => app.close(),
+      close,
     );
 
     const registration = await app.inject({
@@ -107,7 +93,7 @@ describe("folder article sorting", () => {
       title: string,
       articles: Array<{ externalId: string; title: string; publishedAt: string }>,
     ) =>
-      database.feeds.completeRefresh(feedId, {
+      completeFeedRefresh(database.feeds, feedId, {
         httpStatus: 200,
         etag: null,
         lastModified: null,

@@ -10,11 +10,8 @@ import Fastify, {
 } from "fastify";
 import { readerMutationRoutes } from "../shared/reader-mutations.js";
 import { applicationError } from "./application-error.js";
-import { ApplicationService } from "./application-service.js";
-import type { AppDatabase } from "./database.js";
-import type { ExtractionQueue } from "./extraction.js";
+import { ApplicationService, type ApplicationServices } from "./application-service.js";
 import { aiRoutes } from "./features/ai/routes.js";
-import { AiService } from "./features/ai/service.js";
 import { articleRoutes } from "./features/articles/routes.js";
 import { authRoutes } from "./features/auth/routes.js";
 import { type AuthService, sessionToken } from "./features/auth/service.js";
@@ -27,22 +24,10 @@ import { browserDeviceId } from "./features/routes.js";
 import { ruleRoutes } from "./features/rules/routes.js";
 import { settingsRoutes } from "./features/settings/routes.js";
 import { registerOperationalLogging } from "./logging.js";
-import type { FeedRefreshService } from "./refresh.js";
 import { responsePolicies } from "./response-policy.js";
-import { TelegramMediaService } from "./telegram-media.js";
-import type { WebFeedService } from "./web-feed.js";
-import { XMediaService } from "./x-media.js";
 
-export interface AppServices {
-  database: AppDatabase;
+export interface AppServices extends ApplicationServices {
   authService: AuthService;
-  extractionQueue: ExtractionQueue;
-  refreshService: FeedRefreshService;
-  webFeedService?: WebFeedService;
-  aiService?: AiService;
-  telegramMediaService?: TelegramMediaService;
-  xMediaService?: XMediaService;
-  feedDiscoveryTimeoutMs?: number;
   staticDir?: string;
   demoDir?: string;
   logger?: FastifyServerOptions["logger"];
@@ -63,31 +48,8 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
     trustProxy: ["loopback", "linklocal", "uniquelocal"],
   });
   registerOperationalLogging(app);
-  const ai =
-    services.aiService ??
-    new AiService(services.database, {
-      credentialCipher: null,
-    });
-  const telegramMedia =
-    services.telegramMediaService ??
-    new TelegramMediaService(
-      services.feedDiscoveryTimeoutMs ?? 15_000,
-      undefined,
-      services.database.quotas,
-    );
-  const xMedia =
-    services.xMediaService ??
-    new XMediaService(
-      services.feedDiscoveryTimeoutMs ?? 15_000,
-      undefined,
-      services.database.quotas,
-    );
-  const application = new ApplicationService({
-    ...services,
-    aiService: ai,
-    telegramMediaService: telegramMedia,
-    xMediaService: xMedia,
-  });
+  const { aiService: ai, xMediaService: xMedia } = services;
+  const application = new ApplicationService(services);
   const requestUsers = new WeakMap<FastifyRequest, { id: number; username: string }>();
   const userId = (request: FastifyRequest): number => {
     const user = requestUsers.get(request);

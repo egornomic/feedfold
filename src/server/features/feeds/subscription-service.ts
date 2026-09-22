@@ -1,9 +1,9 @@
-import type { FeedInput } from "../../../shared/api-inputs.js";
+import type { FeedInput } from "../../../shared/api/inputs.js";
 import type { Feed } from "../../../shared/types.js";
 import { ApplicationApiError } from "../../errors.js";
-import type { FeedRefreshService } from "../../refresh.js";
-import type { WebFeedService } from "../../web-feed.js";
+import type { FeedRefreshService } from "../refresh/service.js";
 import type { FeedService } from "./service.js";
+import type { WebFeedService } from "./web/service.js";
 
 export class WebFeedUnavailableError extends ApplicationApiError {
   constructor() {

@@ -15,9 +15,11 @@ import {
   refreshFeedIds,
   shouldAutoMarkRoutedArticleRead,
   updateBootstrapCounts,
-} from "../../src/client/reader-state.js";
-import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+} from "../../src/client/features/reader/reader-state.js";
+import { AppDatabase } from "../../src/server/database.js";
+import type { ParsedFeed } from "../../src/server/features/shared.js";
 import type { Article, BootstrapData, Feed, Folder } from "../../src/shared/types.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 function folder(id: number, parentId: number | null, name: string): Folder {
   return {
@@ -254,7 +256,7 @@ describe("reader state", () => {
       imageUrl: null,
       feedContentHtml: null,
     });
-    database.feeds.completeRefresh(feed.id, {
+    completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
       lastModified: null,
@@ -325,7 +327,7 @@ describe("reader state", () => {
         feedUrl: "https://example.test/react.xml",
         folderId: child.id,
       });
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,

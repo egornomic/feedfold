@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
 import { observeScheduledRefresh } from "../../src/server/features/feeds/schedule.js";
+import { completeFeedRefresh, failFeedRefresh } from "../helpers/feeds.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -122,7 +123,7 @@ describe("adaptive feed scheduling", () => {
         imageUrl: null,
         feedContentHtml: null,
       });
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -140,7 +141,7 @@ describe("adaptive feed scheduling", () => {
         )
         .run(feed.id);
 
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -163,7 +164,7 @@ describe("adaptive feed scheduling", () => {
       ).toEqual({ pollIntervalMinutes: 30, activityRatePerHour: 1 });
 
       vi.setSystemTime(new Date("2026-08-12T11:30:00.000Z"));
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -173,7 +174,7 @@ describe("adaptive feed scheduling", () => {
           articles: [article("three", "Three")],
         },
       });
-      database.feeds.failRefresh(feed.id, {
+      failFeedRefresh(database.feeds, feed.id, {
         httpStatus: 503,
         error: "Unavailable",
         errorKind: "http",

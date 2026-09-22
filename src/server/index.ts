@@ -1,30 +1,16 @@
-import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
-import { AppDatabase } from "./database.js";
 import {
   deploymentPolicy,
   type ResourceQuotas,
   registrationAccountCap,
   registrationMode,
 } from "./deployment-policy.js";
-import { ExtractionQueue } from "./extraction.js";
-import { AiService } from "./features/ai/service.js";
 import { AuthService } from "./features/auth/service.js";
-import { DefaultFeedSourceLoader } from "./feed-source-loader.js";
 import { productionListenMessage, productionLogger } from "./logging.js";
-import { closePublicNetwork } from "./public-network.js";
-import { FeedRefreshService } from "./refresh.js";
-import { WebFeedService } from "./web-feed.js";
-
-function positiveInteger(value: string | undefined, fallback: number, name: string): number {
-  if (value === undefined) return fallback;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0)
-    throw new Error(`${name} must be a positive integer`);
-  return parsed;
-}
+import { createApplicationRuntime } from "./runtime/application-runtime.js";
+import { positiveInteger, runtimeConfiguration } from "./runtime/configuration.js";
 
 function quotaOverrides(environment: NodeJS.ProcessEnv): Partial<ResourceQuotas> {
   const overrides: Partial<ResourceQuotas> = {};
@@ -77,31 +63,7 @@ const host = process.env.HOST ?? "127.0.0.1";
 const port = positiveInteger(process.env.PORT, 3000, "PORT");
 const configuredDatabasePath = process.env.DATABASE_PATH;
 const databasePath = resolve(configuredDatabasePath ?? "./data/feedfold.db");
-const pollIntervalMinutes = positiveInteger(
-  process.env.POLL_INTERVAL_MINUTES,
-  20,
-  "POLL_INTERVAL_MINUTES",
-);
-const feedFetchTimeoutMs = positiveInteger(
-  process.env.FEED_FETCH_TIMEOUT_MS,
-  15_000,
-  "FEED_FETCH_TIMEOUT_MS",
-);
-const webFeedLoadTimeoutMs = positiveInteger(
-  process.env.WEB_FEED_LOAD_TIMEOUT_MS,
-  30_000,
-  "WEB_FEED_LOAD_TIMEOUT_MS",
-);
-const articleFetchTimeoutMs = positiveInteger(
-  process.env.ARTICLE_FETCH_TIMEOUT_MS,
-  20_000,
-  "ARTICLE_FETCH_TIMEOUT_MS",
-);
-const aiRequestTimeoutMs = positiveInteger(
-  process.env.AI_REQUEST_TIMEOUT_MS,
-  60_000,
-  "AI_REQUEST_TIMEOUT_MS",
-);
+const configuration = runtimeConfiguration(process.env);
 const staticDir = fileURLToPath(new URL("../client", import.meta.url));
 const demoDir = fileURLToPath(new URL("../demo", import.meta.url));
 const publicOrigin = configuredPublicOrigin(process.env.FEEDFOLD_PUBLIC_ORIGIN);
@@ -122,9 +84,14 @@ const stepUpCooldownMinutes = positiveInteger(
   "FEEDFOLD_STEP_UP_COOLDOWN_MINUTES",
 );
 
-mkdirSync(dirname(databasePath), { recursive: true });
-const database = new AppDatabase(databasePath, pollIntervalMinutes, policy);
-const authService = new AuthService(database.auth, pollIntervalMinutes, {
+const runtime = createApplicationRuntime({
+  databasePath,
+  configuration,
+  deploymentPolicy: policy,
+  credentialCipher: null,
+});
+const { database } = runtime.services;
+const authService = new AuthService(database.auth, configuration.pollIntervalMinutes, {
   maxAccounts: registrationAccountCap(policy, process.env.FEEDFOLD_MAX_ACCOUNTS),
   registrationMode: registrationMode(policy, process.env.FEEDFOLD_REGISTRATION_MODE),
   recentAuthenticationSeconds: positiveInteger(
@@ -167,32 +134,9 @@ const authService = new AuthService(database.auth, pollIntervalMinutes, {
     },
   },
 });
-const extractionQueue = new ExtractionQueue(database.extractions, 2, articleFetchTimeoutMs);
-const webFeedService = new WebFeedService({
-  timeoutMs: webFeedLoadTimeoutMs,
-  quotas: database.quotas,
-});
-const refreshService = new FeedRefreshService(
-  database.feeds,
-  new DefaultFeedSourceLoader(
-    (task) => database.feeds.runOutbound(task),
-    feedFetchTimeoutMs,
-    webFeedService,
-  ),
-  3,
-);
-const aiService = new AiService(database, {
-  credentialCipher: null,
-  requestTimeoutMs: aiRequestTimeoutMs,
-});
 const app = await createApp({
-  database,
+  ...runtime.services,
   authService,
-  extractionQueue,
-  refreshService,
-  webFeedService,
-  aiService,
-  feedDiscoveryTimeoutMs: feedFetchTimeoutMs,
   staticDir,
   demoDir,
   logger: process.env.NODE_ENV === "production" ? productionLogger() : false,
@@ -206,10 +150,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, "Stopping feedfold");
   try {
     await app.close();
-    await Promise.all([refreshService.stop(), extractionQueue.stop()]);
-    await webFeedService.close();
-    await closePublicNetwork();
-    database.close();
+    await runtime.close();
   } catch {
     app.log.error({ event: "shutdown_failed" }, "feedfold did not shut down cleanly");
     process.exitCode = 1;
@@ -220,14 +161,10 @@ process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 try {
-  extractionQueue.start();
-  refreshService.start();
+  runtime.start();
   await app.listen({ host, port, listenTextResolver: productionListenMessage });
 } catch {
   app.log.error({ event: "startup_failed" }, "feedfold failed to start");
-  await Promise.all([refreshService.stop(), extractionQueue.stop()]);
-  await webFeedService.close();
-  await closePublicNetwork();
-  database.close();
+  await runtime.close();
   process.exitCode = 1;
 }

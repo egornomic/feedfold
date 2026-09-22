@@ -1,5 +1,6 @@
-import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../client/api-contract.js";
-import type { DesktopOperation } from "../shared/desktop.js";
+import { generateOpml } from "feedsmith";
+import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../shared/api/inputs.js";
+import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
 import type {
   AiArticleSourceKind,
   AiFeature,
@@ -15,13 +16,10 @@ import type {
   FeedDiscoveryResult,
   Folder,
   ImportResult,
-  MarkReadRequest,
   RefreshResult,
   Rule,
   SessionUser,
-  TelegramArticleMedia,
   WebFeedAnalysis,
-  XArticleMedia,
 } from "../shared/types.js";
 import { createDemoData, DEMO_RELEASE_ARTICLE_ID, type DemoData } from "./fixtures.js";
 
@@ -47,6 +45,10 @@ function titleFromUrl(value: string): string {
   } catch {
     return "New feed";
   }
+}
+
+function accountManagementUnavailable(): never {
+  throw new Error("Account management is unavailable in the demo.");
 }
 
 export class DemoStore {
@@ -154,7 +156,7 @@ export class DemoStore {
     return clone(article);
   }
 
-  markRead(request: MarkReadRequest): { updated: number } {
+  markRead(request: ApiInput<"markRead">): { updated: number } {
     const ids = request.articleIds ? new Set(request.articleIds) : null;
     const cutoff = request.olderThanDays
       ? Date.now() - request.olderThanDays * 24 * 60 * 60 * 1_000
@@ -391,7 +393,7 @@ export class DemoStore {
     return clone(this.data.settings);
   }
 
-  aiSettings(): AiSettings {
+  private aiSettings(): AiSettings {
     return clone(this.data.aiSettings);
   }
 
@@ -456,131 +458,91 @@ export class DemoStore {
   }
 
   exportOpml(): string {
-    const outlines = this.data.feeds
-      .map(
-        (feed) =>
-          `<outline text="${feed.title}" title="${feed.title}" type="rss" xmlUrl="${feed.feedUrl}" />`,
-      )
-      .join("");
-    return `<?xml version="1.0" encoding="UTF-8"?><opml version="2.0"><head><title>feedfold demo</title></head><body>${outlines}</body></opml>`;
+    return generateOpml({
+      head: { title: "feedfold demo" },
+      body: {
+        outlines: this.data.feeds.map((feed) => ({
+          text: feed.title,
+          title: feed.title,
+          type: "rss",
+          xmlUrl: feed.feedUrl,
+        })),
+      },
+    });
   }
 
-  invoke(operation: DesktopOperation, payload: unknown): unknown {
-    switch (operation) {
-      case "session":
-      case "login":
-      case "register":
-        return { user: this.session() };
-      case "authConfig":
-        return {
-          registrationAvailable: false,
-          registrationMode: "closed",
-          passkeysAvailable: false,
-        };
-      case "invitations":
-        return {
-          enabled: false,
-          allowance: { kind: "limited", remaining: 0 },
-          invitations: [],
-        };
-      case "passkeys":
-        return { passkeys: [], hasPassword: false };
-      case "logout":
-      case "deleteAccount":
-        return undefined;
-      case "bootstrap":
-        return this.bootstrap();
-      case "articles":
-        return this.articles(payload as ArticleQuery);
-      case "article":
-      case "loadFullContent":
-        return this.article((payload as { id: number }).id);
-      case "telegramArticleMedia":
-        return { items: [] } satisfies TelegramArticleMedia;
-      case "xArticleMedia":
-        return {
-          sourceUrl: "",
-          posterUrl: null,
-          aspectRatio: null,
-        } satisfies XArticleMedia;
-      case "summarizeArticle": {
-        const input = payload as { id: number; promptId: string | null };
-        return this.summarizeArticle(input.id, input.promptId);
-      }
-      case "translateArticle": {
-        const input = payload as { id: number; sourceKind: AiArticleSourceKind };
-        return this.translateArticle(input.id, input.sourceKind);
-      }
-      case "updateArticleState": {
-        const input = payload as {
-          id: number;
-          state: { isRead?: boolean; isStarred?: boolean };
-        };
-        return this.updateArticleState(input.id, input.state);
-      }
-      case "markRead":
-        return this.markRead(payload as MarkReadRequest);
-      case "refresh":
-        return this.refresh((payload as { feedIds?: number[] }).feedIds);
-      case "discoverFeed":
-        return this.discoverFeed((payload as { url: string }).url);
-      case "analyzeWebPage":
-        return this.analyzeWebPage((payload as { url: string }).url);
-      case "createFeed":
-        return this.createFeed(payload as FeedInput);
-      case "feed":
-        return this.feed((payload as { id: number }).id);
-      case "updateFeed": {
-        const input = payload as { id: number; input: FeedUpdateInput };
-        return this.updateFeed(input.id, input.input);
-      }
-      case "deleteFeed":
-        return this.deleteFeed((payload as { id: number }).id);
-      case "analyzeWebFeed": {
-        const feed = this.requireFeed((payload as { id: number }).id);
-        return this.analyzeWebPage(feed.siteUrl ?? feed.feedUrl, "demo-articles");
-      }
-      case "updateWebFeedSelection":
-        return this.feed((payload as { id: number }).id);
-      case "createFolder":
-        return this.createFolder(payload as FolderInput);
-      case "updateFolder": {
-        const input = payload as { id: number; input: Partial<FolderInput> };
-        return this.updateFolder(input.id, input.input);
-      }
-      case "deleteFolder":
-        return this.deleteFolder((payload as { id: number }).id);
-      case "rules":
-        return { rules: this.rules() };
-      case "createRule":
-        return this.createRule(payload as RuleInput);
-      case "updateRule": {
-        const input = payload as { id: number; input: Partial<RuleInput> };
-        return this.updateRule(input.id, input.input);
-      }
-      case "deleteRule":
-        return this.deleteRule((payload as { id: number }).id);
-      case "updateSettings":
-        return this.updateSettings(payload as Partial<AppSettings>);
-      case "aiSettings":
-        return this.aiSettings();
-      case "updateAiFeature": {
-        const input = payload as {
-          feature: AiFeature;
-          input: { provider: AiProvider; model?: string };
-        };
-        return this.updateAiFeature(input.feature, input.input);
-      }
-      case "saveAiProviderKey":
-        return this.setProviderConfigured((payload as { provider: AiProvider }).provider, true);
-      case "deleteAiProviderKey":
-        return this.setProviderConfigured((payload as { provider: AiProvider }).provider, false);
-      case "importOpml":
-        return this.importOpml((payload as { opml: string }).opml);
-      case "exportOpml":
-        return this.exportOpml();
-    }
+  invoke<K extends ApiOperation>(operation: K, payload: ApiInput<NoInfer<K>>): ApiOutput<K> {
+    return this.handlers[operation](payload);
   }
+
+  private readonly handlers: { [K in ApiOperation]: (payload: ApiInput<K>) => ApiOutput<K> } = {
+    session: () => ({ user: this.session() }),
+    login: () => ({ user: this.session() }),
+    register: () => ({ user: this.session() }),
+    authConfig: () => ({
+      registrationAvailable: false,
+      registrationMode: "closed",
+      passkeysAvailable: false,
+    }),
+    invitations: () => ({
+      enabled: false,
+      allowance: { kind: "limited", remaining: 0 },
+      invitations: [],
+    }),
+    passkeys: () => ({ passkeys: [], hasPassword: false }),
+    logout: () => undefined,
+    deleteAccount: () => undefined,
+    createInvitation: accountManagementUnavailable,
+    revokeInvitation: accountManagementUnavailable,
+    changePassword: accountManagementUnavailable,
+    removePassword: accountManagementUnavailable,
+    passkeySignupOptions: accountManagementUnavailable,
+    completePasskeySignup: accountManagementUnavailable,
+    stepUpPassword: accountManagementUnavailable,
+    stepUpPasskeyOptions: accountManagementUnavailable,
+    stepUpPasskey: accountManagementUnavailable,
+    passkeyRegistrationOptions: accountManagementUnavailable,
+    registerPasskey: accountManagementUnavailable,
+    renamePasskey: accountManagementUnavailable,
+    deletePasskey: accountManagementUnavailable,
+    passkeyAuthenticationOptions: accountManagementUnavailable,
+    passkeyLogin: accountManagementUnavailable,
+    bootstrap: () => this.bootstrap(),
+    articles: (query) => this.articles({ ...query, state: query.state ?? "unread" }),
+    article: ({ id }) => this.article(id),
+    loadFullContent: ({ id }) => this.article(id),
+    telegramArticleMedia: () => ({ items: [] }),
+    xArticleMedia: () => ({ sourceUrl: "", posterUrl: null, aspectRatio: null }),
+    summarizeArticle: ({ id, promptId }) => this.summarizeArticle(id, promptId),
+    translateArticle: ({ id, sourceKind }) => this.translateArticle(id, sourceKind),
+    updateArticleState: ({ id, state }) => this.updateArticleState(id, state),
+    markRead: (request) => this.markRead(request),
+    refresh: ({ feedIds }) => this.refresh(feedIds),
+    discoverFeed: ({ url }) => this.discoverFeed(url),
+    analyzeWebPage: ({ url }) => this.analyzeWebPage(url),
+    createFeed: (input) => this.createFeed(input),
+    feed: ({ id }) => this.feed(id),
+    updateFeed: ({ id, input }) => this.updateFeed(id, input),
+    deleteFeed: ({ id }) => this.deleteFeed(id),
+    analyzeWebFeed: ({ id }) => {
+      const feed = this.requireFeed(id);
+      return this.analyzeWebPage(feed.siteUrl ?? feed.feedUrl, "demo-articles");
+    },
+    updateWebFeedSelection: ({ id }) => this.feed(id),
+    createFolder: (input) => this.createFolder(input),
+    updateFolder: ({ id, input }) => this.updateFolder(id, input),
+    deleteFolder: ({ id }) => this.deleteFolder(id),
+    rules: () => ({ rules: this.rules() }),
+    createRule: (input) => this.createRule(input),
+    updateRule: ({ id, input }) => this.updateRule(id, input),
+    deleteRule: ({ id }) => this.deleteRule(id),
+    updateSettings: (input) => this.updateSettings(input),
+    updateAiFeature: ({ feature, input }) => this.updateAiFeature(feature, input),
+    saveAiProviderKey: ({ provider }) => this.setProviderConfigured(provider, true),
+    deleteAiProviderKey: ({ provider }) => this.setProviderConfigured(provider, false),
+    importOpml: ({ opml }) => this.importOpml(opml),
+    exportOpml: () => this.exportOpml(),
+  };
 
   private filteredArticles(query: ArticleQuery): Article[] {
     const folderIds = query.folderId === undefined ? null : this.folderBranchIds(query.folderId);

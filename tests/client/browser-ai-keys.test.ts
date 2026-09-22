@@ -6,17 +6,19 @@ import { join, resolve } from "node:path";
 import { build } from "esbuild";
 import { type BrowserContext, chromium } from "playwright";
 import { describe, expect, it } from "vitest";
-import type * as vault from "../../src/client/ai-vault.js";
-import type { api } from "../../src/client/api.js";
-import { createAiProviders } from "../../src/server/ai/providers.js";
+import type * as vault from "../../src/client/api/ai-vault.js";
+import type { api } from "../../src/client/api/api.js";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { ExtractionQueue } from "../../src/server/extraction.js";
+import { createAiProviders } from "../../src/server/features/ai/providers.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
+import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { productionLogger } from "../../src/server/logging.js";
-import { FeedRefreshService } from "../../src/server/refresh.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 declare global {
   interface Window {
@@ -60,14 +62,17 @@ describe("browser-held AI keys", () => {
     );
     let logs = "";
     const app = await createApp({
-      database,
-      authService,
-      extractionQueue,
-      refreshService,
-      aiService: new AiService(database, {
+      ...createApplicationServices({
         credentialCipher: null,
-        providers: createAiProviders({ openai: providerUrl }),
+        database,
+        extractionQueue,
+        refreshService,
+        aiService: new AiService(database, {
+          credentialCipher: null,
+          providers: createAiProviders({ openai: providerUrl }),
+        }),
       }),
+      authService,
       logger: productionLogger({
         write: (line) => {
           logs += line;
@@ -76,7 +81,7 @@ describe("browser-held AI keys", () => {
     });
     const bundle = await build({
       stdin: {
-        contents: `import {api} from ${JSON.stringify(resolve("src/client/api.ts"))}; import * as vault from ${JSON.stringify(resolve("src/client/ai-vault.ts"))}; window.feedfoldTest = {api, vault};`,
+        contents: `import {api} from ${JSON.stringify(resolve("src/client/api/api.ts"))}; import * as vault from ${JSON.stringify(resolve("src/client/api/ai-vault.ts"))}; window.feedfoldTest = {api, vault};`,
         resolveDir: process.cwd(),
       },
       bundle: true,
@@ -141,7 +146,7 @@ describe("browser-held AI keys", () => {
         title: "Test",
         feedUrl: "https://example.test/feed",
       });
-      database.feeds.completeRefresh(feed.id, {
+      completeFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         etag: null,
         lastModified: null,
@@ -162,7 +167,8 @@ describe("browser-held AI keys", () => {
           ],
         },
       });
-      const articleId = database.articles.listArticles(userId, { state: "all" })[0]?.id as number;
+      const articleId = database.articles.listArticlePage(userId, { state: "all" }).articles[0]
+        ?.id as number;
       const summarize = () =>
         first.page.evaluate(
           (id) => window.feedfoldTest.api.summarizeArticle(id, null, true, "openai"),
@@ -200,7 +206,7 @@ describe("browser-held AI keys", () => {
       const secondState = await second.page.evaluate(async () => {
         const { api } = window.feedfoldTest;
         await api.login("reader", "reader-password");
-        const before = await api.aiSettings();
+        const before = (await api.bootstrap()).aiSettings;
         await api.saveAiProviderKey("openai", "SECOND_DEVICE_SECRET");
         return before.providers.find((provider) => provider.id === "openai")?.configured;
       });
@@ -227,14 +233,19 @@ describe("browser-held AI keys", () => {
       const afterLogout = await first.page.evaluate(async () => {
         const { api, vault } = window.feedfoldTest;
         const user = await api.login("reader", "reader-password");
-        return { device: (await vault.aiDevice(user.id)).id, settings: await api.aiSettings() };
+        return {
+          device: (await vault.aiDevice(user.id)).id,
+          settings: (await api.bootstrap()).aiSettings,
+        };
       });
       expect(afterLogout.device).not.toBe(identity.device);
       expect(afterLogout.settings.providers.every((provider) => !provider.configured)).toBe(true);
       expect(
-        (await second.page.evaluate(() => window.feedfoldTest.api.aiSettings())).providers.find(
-          (provider) => provider.id === "openai",
-        )?.configured,
+        (
+          await second.page.evaluate(
+            async () => (await window.feedfoldTest.api.bootstrap()).aiSettings,
+          )
+        ).providers.find((provider) => provider.id === "openai")?.configured,
       ).toBe(true);
 
       await first.page.evaluate(() =>
@@ -248,9 +259,11 @@ describe("browser-held AI keys", () => {
       );
       await expect(summarize()).rejects.toThrow("account changed");
       expect(
-        (await otherTab.evaluate(() => window.feedfoldTest.api.aiSettings())).providers.every(
-          (provider) => !provider.configured,
-        ),
+        (
+          await otherTab.evaluate(
+            async () => (await window.feedfoldTest.api.bootstrap()).aiSettings,
+          )
+        ).providers.every((provider) => !provider.configured),
       ).toBe(true);
       await second.page.evaluate(() => window.feedfoldTest.api.deleteAccount());
       expect(database.connection.prepare("SELECT COUNT(*) FROM ai_credentials").pluck().get()).toBe(

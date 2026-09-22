@@ -3,7 +3,7 @@ import {
   folderBranchFeedCount,
   folderHierarchy,
   folderPathLabel,
-} from "../../src/client/folder-hierarchy.js";
+} from "../../src/client/features/feeds/folder-hierarchy.js";
 import type { Feed, Folder } from "../../src/shared/types.js";
 
 function folder(id: number, name: string, parentId: number | null = null): Folder {
