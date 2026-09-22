@@ -373,7 +373,7 @@ describe("deployment policy", () => {
           .get(),
       ).toBe(0);
     } finally {
-      refresh.stop();
+      await refresh.stop();
       database.close();
     }
   });

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
   "files": {
     "includes": [
       "**",
@@ -20,7 +20,14 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      },
+      "style": {
+        "noDescendingSpecificity": "off"
+      }
     }
   },
   "javascript": {

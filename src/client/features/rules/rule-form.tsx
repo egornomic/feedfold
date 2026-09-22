@@ -32,8 +32,8 @@ export function RuleForm({
   showToast,
 }: {
   bootstrap: BootstrapData;
-  initial?: Rule;
-  preset?: RuleFormPreset;
+  initial?: Rule | undefined;
+  preset?: RuleFormPreset | undefined;
   motionState: MotionState;
   mutations: ReaderDataMutations;
   onCancel: () => void;

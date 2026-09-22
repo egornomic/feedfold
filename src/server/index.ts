@@ -140,7 +140,7 @@ const app = await createApp({
   staticDir,
   demoDir,
   logger: process.env.NODE_ENV === "production" ? productionLogger() : false,
-  publicOrigin,
+  ...(publicOrigin === undefined ? {} : { publicOrigin }),
 });
 
 let shuttingDown = false;

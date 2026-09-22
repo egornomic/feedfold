@@ -109,7 +109,7 @@ describe("account activity", () => {
         2,
       );
     } finally {
-      refresh.stop();
+      await refresh.stop();
       database.close();
     }
   });

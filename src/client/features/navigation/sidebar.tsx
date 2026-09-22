@@ -73,7 +73,7 @@ interface SidebarProps {
   bootstrap: BootstrapData;
   user: SessionUser;
   localApp?: boolean;
-  sourceUrl?: string;
+  sourceUrl?: string | undefined;
   currentState: ArticleState;
   selectedFeedId: number | null;
   selectedFolderId: number | null;

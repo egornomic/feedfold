@@ -104,10 +104,15 @@ export function createApiClient(runtime: ApiRuntime) {
 
     invitations: () => request("invitations", undefined, "/api/auth/invitations"),
     createInvitation: (replaceId?: string) =>
-      request("createInvitation", { replaceId }, "/api/auth/invitations", {
-        method: "POST",
-        body: JSON.stringify({ replaceId }),
-      }),
+      request(
+        "createInvitation",
+        replaceId === undefined ? {} : { replaceId },
+        "/api/auth/invitations",
+        {
+          method: "POST",
+          body: JSON.stringify({ replaceId }),
+        },
+      ),
     revokeInvitation: (id: string) =>
       request("revokeInvitation", { id }, `/api/auth/invitations/${id}`, {
         method: "DELETE",
@@ -186,21 +191,25 @@ export function createApiClient(runtime: ApiRuntime) {
     },
 
     bootstrap: (signal?: AbortSignal) =>
-      request("bootstrap", undefined, "/api/bootstrap", { signal }),
+      request("bootstrap", undefined, "/api/bootstrap", { signal: signal ?? null }),
 
     subscribeReaderDataInvalidations: runtime.subscribeReaderDataInvalidations,
 
     articles: (query: ArticleQuery, signal?: AbortSignal) =>
-      request("articles", query, `/api/articles?${queryString(query)}`, { signal }),
+      request("articles", query, `/api/articles?${queryString(query)}`, { signal: signal ?? null }),
 
     article: (id: number, signal?: AbortSignal) =>
-      request("article", { id }, `/api/articles/${id}`, { signal }),
+      request("article", { id }, `/api/articles/${id}`, { signal: signal ?? null }),
 
     telegramArticleMedia: (id: number, signal?: AbortSignal) =>
-      request("telegramArticleMedia", { id }, `/api/articles/${id}/telegram-media`, { signal }),
+      request("telegramArticleMedia", { id }, `/api/articles/${id}/telegram-media`, {
+        signal: signal ?? null,
+      }),
 
     xArticleMedia: (id: number, postId: string, signal?: AbortSignal) =>
-      request("xArticleMedia", { id, postId }, `/api/articles/${id}/x-media/${postId}`, { signal }),
+      request("xArticleMedia", { id, postId }, `/api/articles/${id}/x-media/${postId}`, {
+        signal: signal ?? null,
+      }),
 
     loadFullContent: (id: number) =>
       request("loadFullContent", { id }, `/api/articles/${id}/extract`, {
@@ -311,7 +320,7 @@ export function createApiClient(runtime: ApiRuntime) {
 
     async rules(signal?: AbortSignal): Promise<Rule[]> {
       const body = await request("rules", undefined, "/api/rules", {
-        signal,
+        signal: signal ?? null,
       });
       return body.rules;
     },

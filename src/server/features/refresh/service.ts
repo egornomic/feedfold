@@ -96,7 +96,7 @@ export class FeedRefreshService {
         ...result,
         httpStatus: result.httpStatus ?? 200,
         scheduled,
-        expectedSelectionRevision,
+        ...(expectedSelectionRevision === undefined ? {} : { expectedSelectionRevision }),
       });
     } catch (error) {
       const failure =
@@ -111,7 +111,7 @@ export class FeedRefreshService {
         ...failure,
         error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
         retryMinutes: feed.pollIntervalMinutes,
-        expectedSelectionRevision,
+        ...(expectedSelectionRevision === undefined ? {} : { expectedSelectionRevision }),
       });
     }
   }

@@ -105,7 +105,9 @@ function fixturePage(mode: Exclude<FixtureMode, "http_error">): string {
     </html>`;
 }
 
-function cookieFrom(response: { headers: { "set-cookie"?: string | string[] | number } }): string {
+function cookieFrom(response: {
+  headers: { "set-cookie"?: string | string[] | number | undefined };
+}): string {
   const header = response.headers["set-cookie"];
   const setCookie = typeof header === "number" ? undefined : header;
   const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";", 1)[0];

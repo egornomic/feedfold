@@ -102,7 +102,7 @@ export function createApplicationRuntime({
     database,
     configuration,
     credentialCipher,
-    webFeed,
+    ...(webFeed === undefined ? {} : { webFeed }),
   });
   const { extractionQueue, refreshService, webFeedService } = services;
 

@@ -101,7 +101,7 @@ class LatestRequest {
   }
 
   async waitUntilIdle(): Promise<void> {
-    while (this.settled) await this.settled;
+    while (this.settled !== null) await this.settled;
   }
 }
 
@@ -146,7 +146,7 @@ export class ReaderDataResource implements ReaderDataMutations {
     if (!this.invalidationUnsubscribe) {
       this.invalidationUnsubscribe = this.subscribeToInvalidations(this.queueInvalidation);
     }
-    if (this.hasTrackedWork()) this.ensurePolling();
+    if (this.hasTrackedWork()) void this.ensurePolling();
   }
 
   pause(): void {
@@ -440,7 +440,7 @@ export class ReaderDataResource implements ReaderDataMutations {
     if (!this.active) return;
     this.invalidationPending = true;
     this.finishInvalidationRetry();
-    if (this.invalidationTask) return;
+    if (this.invalidationTask !== null) return;
     const task = this.flushInvalidations();
     this.invalidationTask = task;
     void task.finally(() => {
@@ -503,13 +503,13 @@ export class ReaderDataResource implements ReaderDataMutations {
   }
 
   private ensurePolling(): Promise<void> {
-    if (this.pollTask) return this.pollTask;
+    if (this.pollTask !== null) return this.pollTask;
     const task = this.pollRefreshing();
     this.pollTask = task;
     void task.finally(() => {
       if (this.pollTask === task) {
         this.pollTask = null;
-        if (this.active && this.hasTrackedWork()) this.ensurePolling();
+        if (this.active && this.hasTrackedWork()) void this.ensurePolling();
       }
     });
     return task;

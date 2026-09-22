@@ -158,7 +158,7 @@ function FeedConfirmationBar({
   folderId: number | null;
   folders: Folder[];
   disabled: boolean;
-  existingFeed?: Feed;
+  existingFeed?: Feed | undefined;
   canSave: boolean;
   onCancel: () => void;
   onTitleChange: (title: string) => void;
@@ -239,7 +239,7 @@ export function AddFeedForm({
   feeds: Feed[];
   folders: Folder[];
   initialSourceUrl: string;
-  initialSourceType?: AddFeedSourceType;
+  initialSourceType?: AddFeedSourceType | undefined;
   mutations: ReaderDataMutations;
   onCancel: () => void;
   onSaved: (feed: Feed) => Promise<void> | void;
@@ -412,7 +412,7 @@ export function AddFeedForm({
           })
         : selectedCandidate
           ? await mutations.createFeed({
-              title: title.trim() || webAnalysis?.title,
+              title: title.trim() || webAnalysis?.title || selectedCandidate.config.pageUrl,
               feedUrl: selectedCandidate.config.pageUrl,
               siteUrl: selectedCandidate.config.pageUrl,
               folderId,
