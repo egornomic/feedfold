@@ -3,14 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InjectOptions } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
-import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
-import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
-import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type { Feed, Folder, Rule } from "../../src/shared/types.js";
+import { createTestApp } from "../helpers/app.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -23,26 +19,11 @@ describe("feed and folder management", () => {
     const directory = await mkdtemp(join(tmpdir(), "feedfold-feed-management-test-"));
     const database = new AppDatabase(join(directory, "feedfold.db"), 37);
     const authService = new AuthService(database.auth, 37, { maxAccounts: 100 });
-    const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refresh = new FeedRefreshService(
-      database.feeds,
-      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
-      1,
-    );
-    const app = await createApp({
-      ...createApplicationServices({
-        credentialCipher: null,
-        database,
-        extractionQueue: extraction,
-        refreshService: refresh,
-      }),
-      authService,
-    });
+    const { app, close } = await createTestApp(database, authService);
     cleanups.push(
       () => rm(directory, { recursive: true, force: true }),
       () => database.close(),
-      () => Promise.all([refresh.stop(), extraction.stop()]).then(() => undefined),
-      () => app.close(),
+      close,
     );
 
     const register = async (username: string): Promise<string> => {

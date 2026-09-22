@@ -19,8 +19,6 @@ import { WEB_FEED_POLL_INTERVAL_MINUTES } from "./features/shared.js";
 import { migrateDatabase } from "./migrations.js";
 import { QuotaService } from "./quota.js";
 
-export type { ParsedArticle, ParsedFeed } from "./features/shared.js";
-
 export class AppDatabase {
   readonly connection: Sqlite.Database;
   readonly wasNewDatabase: boolean;

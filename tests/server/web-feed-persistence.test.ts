@@ -2,9 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+import { AppDatabase } from "../../src/server/database.js";
 import { PUBLIC_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import type { ParsedFeed } from "../../src/server/features/shared.js";
 import type { WebFeedConfig } from "../../src/shared/types.js";
 import { completeFeedRefresh, failFeedRefresh } from "../helpers/feeds.js";
 

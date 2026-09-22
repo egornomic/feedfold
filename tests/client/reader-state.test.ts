@@ -16,7 +16,8 @@ import {
   shouldAutoMarkRoutedArticleRead,
   updateBootstrapCounts,
 } from "../../src/client/features/reader/reader-state.js";
-import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+import { AppDatabase } from "../../src/server/database.js";
+import type { ParsedFeed } from "../../src/server/features/shared.js";
 import type { Article, BootstrapData, Feed, Folder } from "../../src/shared/types.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
 

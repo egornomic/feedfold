@@ -4,7 +4,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import { decryptAiKey, encryptAiKey } from "../../src/client/api/ai-vault.js";
 import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
-import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
+import { AppDatabase } from "../../src/server/database.js";
 import {
   ARTICLE_SUMMARY_PROMPT_VERSION,
   prepareArticleSummary,
@@ -17,6 +17,7 @@ import { AiError } from "../../src/server/features/ai/errors.js";
 import { createAiProviders } from "../../src/server/features/ai/providers.js";
 import { AiService } from "../../src/server/features/ai/service.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import type { ParsedFeed } from "../../src/server/features/shared.js";
 import { DEFAULT_FACTCHECK_PROMPT } from "../../src/shared/ai-prompts.js";
 import type { AiRequestCredential } from "../../src/shared/types.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";

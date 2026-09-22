@@ -16,7 +16,6 @@ import {
 import { WebFeedError } from "./error.js";
 import { createWebFeedSnapshot } from "./snapshot.js";
 
-export { isBlockedNetworkAddress } from "../../../public-network.js";
 export { WebFeedError } from "./error.js";
 
 const DEFAULT_SNAPSHOT_TTL_MS = 15 * 60 * 1_000;

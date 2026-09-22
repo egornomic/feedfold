@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { AppDatabase, type ParsedArticle } from "../../src/server/database.js";
+import { AppDatabase } from "../../src/server/database.js";
+import type { ParsedArticle } from "../../src/server/features/shared.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const TEST_USER_ID = 1;
