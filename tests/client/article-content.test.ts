@@ -89,12 +89,9 @@ describe("article content source selection", () => {
       media: {
         provider: "youtube",
         type: "video",
-        videoId: "video-id",
-        channelId: "channel-id",
         embedUrl: "https://www.youtube.com/embed/video-id",
         thumbnailUrl: "https://i.ytimg.com/vi/video-id/hqdefault.jpg",
         viewCount: null,
-        rating: null,
       },
     };
 

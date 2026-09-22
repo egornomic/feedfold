@@ -842,7 +842,6 @@ Return only the summary in plain text.`,
         media: {
           provider: "youtube",
           type: "short",
-          videoId: "short123",
           embedUrl: "https://www.youtube.com/embed/short123",
         },
       });

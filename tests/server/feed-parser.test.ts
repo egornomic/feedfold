@@ -155,12 +155,9 @@ describe("feed normalization", () => {
       media: {
         provider: "youtube",
         type: "video",
-        videoId: "regular123",
-        channelId: "UCexample",
         embedUrl: "https://www.youtube.com/embed/regular123",
         thumbnailUrl: "https://i2.ytimg.com/vi/regular123/hqdefault.jpg",
         viewCount: 269,
-        rating: { average: 4.75, count: 8 },
       },
     });
     expect(youtube.articles[1]).toMatchObject({
@@ -169,9 +166,8 @@ describe("feed normalization", () => {
       imageUrl: "https://i3.ytimg.com/vi/short123/hqdefault.jpg",
       media: {
         type: "short",
-        videoId: "short123",
+        embedUrl: "https://www.youtube.com/embed/short123",
         viewCount: 10566,
-        rating: null,
       },
     });
   });
