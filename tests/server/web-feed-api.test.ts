@@ -10,6 +10,7 @@ import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type {
   Article,
   ArticlePage,
@@ -163,11 +164,14 @@ describe("authenticated web-feed API", () => {
     );
     cleanups.push(() => refreshService.stop());
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue,
+        refreshService,
+        webFeedService,
+      }),
       authService,
-      extractionQueue,
-      refreshService,
-      webFeedService,
     });
     cleanups.push(() => app.close());
 

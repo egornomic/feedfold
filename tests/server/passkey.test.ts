@@ -7,6 +7,7 @@ import { AuthService } from "../../src/server/features/auth/service.js";
 import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -39,10 +40,13 @@ describe("passkey authentication", () => {
       1,
     );
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue,
+        refreshService,
+      }),
       authService,
-      extractionQueue,
-      refreshService,
     });
     await app.listen({ host: "127.0.0.1", port: 0 });
     const origin = `http://localhost:${(app.server.address() as AddressInfo).port}`;

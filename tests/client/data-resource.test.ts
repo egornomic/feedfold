@@ -18,6 +18,7 @@ import { AuthService } from "../../src/server/features/auth/service.js";
 import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type { ArticlePage, BootstrapData, Feed, Rule } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -662,10 +663,13 @@ describe("reader data resource", () => {
       1,
     );
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     cleanups.push(
       () => rm(directory, { recursive: true, force: true }),

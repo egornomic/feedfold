@@ -11,7 +11,70 @@ import { DefaultFeedSourceLoader } from "../feed-source-loader.js";
 import { closePublicNetwork } from "../public-network.js";
 import { TelegramMediaService } from "../telegram-media.js";
 import { XMediaService } from "../x-media.js";
-import type { RuntimeConfiguration } from "./configuration.js";
+import { type RuntimeConfiguration, runtimeConfiguration } from "./configuration.js";
+
+export interface ApplicationServicesOptions {
+  database: AppDatabase;
+  credentialCipher: CredentialCipherLike | null;
+  configuration?: RuntimeConfiguration;
+  webFeed?: Omit<WebFeedServiceOptions, "quotas" | "timeoutMs">;
+  extractionQueue?: ExtractionQueue;
+  refreshService?: FeedRefreshService;
+  webFeedService?: WebFeedService;
+  aiService?: AiService;
+  telegramMediaService?: TelegramMediaService;
+  xMediaService?: XMediaService;
+  feedDiscoveryTimeoutMs?: number;
+}
+
+/** Builds services for an existing database; the caller owns their lifetime. */
+export function createApplicationServices({
+  database,
+  credentialCipher,
+  configuration = runtimeConfiguration({}),
+  extractionQueue = new ExtractionQueue(
+    database.extractions,
+    2,
+    configuration.articleFetchTimeoutMs,
+  ),
+  webFeed,
+  webFeedService = new WebFeedService({
+    ...webFeed,
+    timeoutMs: configuration.webFeedLoadTimeoutMs,
+    quotas: database.quotas,
+  }),
+  refreshService = new FeedRefreshService(
+    database.feeds,
+    new DefaultFeedSourceLoader(
+      (task) => database.feeds.runOutbound(task),
+      configuration.feedFetchTimeoutMs,
+      webFeedService,
+    ),
+    3,
+  ),
+  aiService = new AiService(database, {
+    credentialCipher,
+    requestTimeoutMs: configuration.aiRequestTimeoutMs,
+  }),
+  feedDiscoveryTimeoutMs = configuration.feedFetchTimeoutMs,
+  telegramMediaService = new TelegramMediaService(
+    feedDiscoveryTimeoutMs,
+    undefined,
+    database.quotas,
+  ),
+  xMediaService = new XMediaService(feedDiscoveryTimeoutMs, undefined, database.quotas),
+}: ApplicationServicesOptions) {
+  return {
+    database,
+    extractionQueue,
+    webFeedService,
+    refreshService,
+    aiService,
+    telegramMediaService,
+    xMediaService,
+    feedDiscoveryTimeoutMs,
+  };
+}
 
 export interface ApplicationRuntimeOptions {
   databasePath: string;
@@ -35,43 +98,13 @@ export function createApplicationRuntime({
     configuration.pollIntervalMinutes,
     deploymentPolicy,
   );
-  const extractionQueue = new ExtractionQueue(
-    database.extractions,
-    2,
-    configuration.articleFetchTimeoutMs,
-  );
-  const webFeedService = new WebFeedService({
-    ...webFeed,
-    timeoutMs: configuration.webFeedLoadTimeoutMs,
-    quotas: database.quotas,
-  });
-  const refreshService = new FeedRefreshService(
-    database.feeds,
-    new DefaultFeedSourceLoader(
-      (task) => database.feeds.runOutbound(task),
-      configuration.feedFetchTimeoutMs,
-      webFeedService,
-    ),
-    3,
-  );
-  const aiService = new AiService(database, {
-    credentialCipher,
-    requestTimeoutMs: configuration.aiRequestTimeoutMs,
-  });
-  const services = {
+  const services = createApplicationServices({
     database,
-    extractionQueue,
-    webFeedService,
-    refreshService,
-    aiService,
-    telegramMediaService: new TelegramMediaService(
-      configuration.feedFetchTimeoutMs,
-      undefined,
-      database.quotas,
-    ),
-    xMediaService: new XMediaService(configuration.feedFetchTimeoutMs, undefined, database.quotas),
-    feedDiscoveryTimeoutMs: configuration.feedFetchTimeoutMs,
-  };
+    configuration,
+    credentialCipher,
+    webFeed,
+  });
+  const { extractionQueue, refreshService, webFeedService } = services;
 
   return {
     services,

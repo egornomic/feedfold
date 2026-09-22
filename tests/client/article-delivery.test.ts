@@ -5,13 +5,11 @@ import { describe, expect, it } from "vitest";
 import { ApplicationApi } from "../../src/server/application-api.js";
 import { AppDatabase, type ParsedFeed } from "../../src/server/database.js";
 import { ApplicationApiError } from "../../src/server/errors.js";
-import { AiService } from "../../src/server/features/ai/service.js";
 import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
-import { TelegramMediaService } from "../../src/server/telegram-media.js";
-import { XMediaService } from "../../src/server/x-media.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
 import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
 
@@ -160,15 +158,15 @@ describe("live article delivery", () => {
       ),
       1,
     );
-    const application = new ApplicationApi({
-      database,
-      extractionQueue: extraction,
-      refreshService: refresh,
-      webFeedService: webFeeds,
-      aiService: new AiService(database, { credentialCipher: null }),
-      telegramMediaService: new TelegramMediaService(1_000),
-      xMediaService: new XMediaService(1_000),
-    });
+    const application = new ApplicationApi(
+      createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+        webFeedService: webFeeds,
+      }),
+    );
     for (const initialFeed of database.feeds.listFeeds(TEST_USER_ID)) {
       database.feeds.deleteFeed(TEST_USER_ID, initialFeed.id);
     }

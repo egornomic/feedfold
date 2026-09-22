@@ -15,6 +15,7 @@ import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -83,10 +84,13 @@ describe("deployment policy", () => {
       1,
     );
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService: auth,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     cleanups.push(async () => {
       await app.close();
@@ -149,11 +153,14 @@ describe("deployment policy", () => {
     );
     const webFeeds = new WebFeedService({ quotas: database.quotas });
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+        webFeedService: webFeeds,
+      }),
       authService: auth,
-      extractionQueue: extraction,
-      refreshService: refresh,
-      webFeedService: webFeeds,
     });
     cleanups.push(async () => {
       await app.close();
@@ -215,10 +222,13 @@ describe("deployment policy", () => {
       1,
     );
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService: auth,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     cleanups.push(async () => {
       await app.close();

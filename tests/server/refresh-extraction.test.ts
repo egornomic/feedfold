@@ -11,6 +11,7 @@ import { AuthService } from "../../src/server/features/auth/service.js";
 import { ExtractionQueue, extractArticle } from "../../src/server/features/extraction/queue.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 const TEST_USER_ID = 1;
@@ -187,10 +188,13 @@ describe("feed refresh and full-text extraction", () => {
     const authService = new AuthService(database.auth);
     expect(await authService.register(TEST_ACCOUNT.username, TEST_ACCOUNT.password)).not.toBeNull();
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     cleanups.push(async () => {
       await app.close();
@@ -926,10 +930,13 @@ describe("feed refresh and full-text extraction", () => {
     const authService = new AuthService(database.auth);
     expect(await authService.register(TEST_ACCOUNT.username, TEST_ACCOUNT.password)).not.toBeNull();
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     cleanups.push(async () => {
       releaseFirst?.();

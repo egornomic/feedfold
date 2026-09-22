@@ -6,6 +6,7 @@ import { AuthService } from "../../src/server/features/auth/service.js";
 import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
 const FEED_SOURCE = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -125,10 +126,13 @@ describe("feed refresh delivery events", () => {
       1,
     );
     const app = await createApp({
-      database,
+      ...createApplicationServices({
+        credentialCipher: null,
+        database,
+        extractionQueue: extraction,
+        refreshService: refresh,
+      }),
       authService: auth,
-      extractionQueue: extraction,
-      refreshService: refresh,
     });
     let appClosed = false;
     const controller = new AbortController();

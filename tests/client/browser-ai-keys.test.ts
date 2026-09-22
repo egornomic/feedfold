@@ -17,6 +17,7 @@ import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { productionLogger } from "../../src/server/logging.js";
+import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
 declare global {
   interface Window {
@@ -60,14 +61,17 @@ describe("browser-held AI keys", () => {
     );
     let logs = "";
     const app = await createApp({
-      database,
-      authService,
-      extractionQueue,
-      refreshService,
-      aiService: new AiService(database, {
+      ...createApplicationServices({
         credentialCipher: null,
-        providers: createAiProviders({ openai: providerUrl }),
+        database,
+        extractionQueue,
+        refreshService,
+        aiService: new AiService(database, {
+          credentialCipher: null,
+          providers: createAiProviders({ openai: providerUrl }),
+        }),
       }),
+      authService,
       logger: productionLogger({
         write: (line) => {
           logs += line;
