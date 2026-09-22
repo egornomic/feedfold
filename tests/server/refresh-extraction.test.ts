@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, assert, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
 import { AppDatabase } from "../../src/server/database.js";
@@ -549,11 +549,11 @@ describe("feed refresh and full-text extraction", () => {
 
     const firstPage = database.articles.listArticlePage(TEST_USER_ID, { state: "all", limit: 100 });
     expect(firstPage.articles).toHaveLength(100);
-    expect(firstPage.nextCursor).not.toBeNull();
+    assert(firstPage.nextCursor !== null);
     const secondPage = database.articles.listArticlePage(TEST_USER_ID, {
       state: "all",
       limit: 100,
-      cursor: firstPage.nextCursor ?? undefined,
+      cursor: firstPage.nextCursor,
     });
     expect(secondPage.articles).toHaveLength(25);
     expect(secondPage.nextCursor).toBeNull();
@@ -586,10 +586,11 @@ describe("feed refresh and full-text extraction", () => {
     expect(unreadAnchoredPage.articles[9]?.id).toBe(fullQueue[targetIndex - 1]?.id);
     expect(unreadAnchoredPage.articles[10]?.id).toBe(target.id);
     expect(unreadAnchoredPage.articles[11]?.id).toBe(fullQueue[targetIndex + 1]?.id);
+    assert(unreadAnchoredPage.nextCursor !== null);
     const unreadOlderPage = database.articles.listArticlePage(TEST_USER_ID, {
       state: "unread",
       limit: 20,
-      cursor: unreadAnchoredPage.nextCursor ?? undefined,
+      cursor: unreadAnchoredPage.nextCursor,
     });
     expect(unreadOlderPage.articles.map((article) => article.id)).toEqual(
       fullQueue.slice(targetIndex + 10).map((article) => article.id),

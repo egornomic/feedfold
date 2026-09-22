@@ -42,25 +42,25 @@ const webFeedConfig = z
   .strict();
 const feedFields = z
   .object({
-    title: z.string().trim().min(1).max(300).optional(),
+    title: z.string().trim().min(1).max(300).exactOptional(),
     feedUrl: httpUrl,
-    siteUrl: httpUrl.nullable().optional(),
-    folderId: nullableId.optional(),
+    siteUrl: httpUrl.nullable().exactOptional(),
+    folderId: nullableId.exactOptional(),
   })
   .strict();
 const folderFields = z
   .object({
     name: z.string().trim().min(1).max(200),
-    parentId: nullableId.optional(),
-    position: z.number().int().min(0).optional(),
-    sortDirection: z.enum(["newest", "oldest"]).optional(),
+    parentId: nullableId.exactOptional(),
+    position: z.number().int().min(0).exactOptional(),
+    sortDirection: z.enum(["newest", "oldest"]).exactOptional(),
   })
   .strict();
 const ruleFields = z
   .object({
     name: z.string().trim().min(1).max(200),
-    feedId: nullableId.optional(),
-    folderId: nullableId.optional(),
+    feedId: nullableId.exactOptional(),
+    folderId: nullableId.exactOptional(),
     conditions: z
       .array(
         z
@@ -73,7 +73,7 @@ const ruleFields = z
       .min(1),
     conditionOperator: z.enum(["and", "or"]),
     action: z.enum(["hide", "keep", "mark_read"]),
-    enabled: z.boolean().optional(),
+    enabled: z.boolean().exactOptional(),
   })
   .strict();
 const aiProvider = z.enum(["gemini", "openai", "anthropic"]);
@@ -86,19 +86,19 @@ export const inputs = {
   articles: z
     .object({
       state: z.enum(["all", "unread", "read", "starred"]).default("unread"),
-      feedId: resourceId.optional(),
-      folderId: resourceId.optional(),
-      search: z.string().trim().max(300).optional(),
-      limit: z.number().int().min(1).max(500).optional(),
-      cursor: z.string().min(1).max(50_000).optional(),
-      anchorId: resourceId.optional(),
-      includeContent: z.boolean().optional(),
+      feedId: resourceId.exactOptional(),
+      folderId: resourceId.exactOptional(),
+      search: z.string().trim().max(300).exactOptional(),
+      limit: z.number().int().min(1).max(500).exactOptional(),
+      cursor: z.string().min(1).max(50_000).exactOptional(),
+      anchorId: resourceId.exactOptional(),
+      includeContent: z.boolean().exactOptional(),
     })
     .strict(),
   updateArticleState: z
     .object({
-      isRead: z.boolean().optional(),
-      isStarred: z.boolean().optional(),
+      isRead: z.boolean().exactOptional(),
+      isStarred: z.boolean().exactOptional(),
     })
     .strict()
     .refine(
@@ -107,9 +107,9 @@ export const inputs = {
     ),
   markRead: z
     .object({
-      articleIds: z.array(resourceId).max(1_000).optional(),
-      feedId: resourceId.optional(),
-      folderId: resourceId.optional(),
+      articleIds: z.array(resourceId).max(1_000).exactOptional(),
+      feedId: resourceId.exactOptional(),
+      folderId: resourceId.exactOptional(),
       olderThanDays: z
         .number()
         .int()
@@ -117,33 +117,33 @@ export const inputs = {
           (value) => MARK_READ_AGE_DAYS.includes(value as MarkReadAgeDays),
           "Choose one of the available age thresholds.",
         )
-        .optional(),
+        .exactOptional(),
     })
     .strict(),
   summarizeArticle: z
     .object({
       promptId: z.uuid().nullable(),
       regenerate: z.boolean(),
-      credential: aiRequestCredential.optional(),
+      credential: aiRequestCredential.exactOptional(),
     })
     .strict(),
   translateArticle: z
     .object({
       sourceKind: z.enum(["full", "feed", "excerpt"]),
-      credential: aiRequestCredential.optional(),
+      credential: aiRequestCredential.exactOptional(),
     })
     .strict(),
-  refresh: z.object({ feedIds: z.array(resourceId).max(1_000).optional() }).strict(),
+  refresh: z.object({ feedIds: z.array(resourceId).max(1_000).exactOptional() }).strict(),
   createFeed: z.discriminatedUnion("sourceKind", [
-    feedFields.extend({ sourceKind: z.literal("published"), paused: z.boolean().optional() }),
+    feedFields.extend({ sourceKind: z.literal("published"), paused: z.boolean().exactOptional() }),
     feedFields.extend({ sourceKind: z.literal("web"), webConfig: webFeedConfig }),
   ]),
-  updateFeed: feedFields.partial().extend({ paused: z.boolean().optional() }),
+  updateFeed: feedFields.exactPartial().extend({ paused: z.boolean().exactOptional() }),
   updateWebFeedSelection: z.object({ config: webFeedConfig }).strict(),
   createFolder: folderFields,
-  updateFolder: folderFields.partial(),
+  updateFolder: folderFields.exactPartial(),
   createRule: ruleFields,
-  updateRule: ruleFields.partial(),
+  updateRule: ruleFields.exactPartial(),
   updateSettings: z
     .object({
       pollIntervalMinutes: z
@@ -153,7 +153,7 @@ export const inputs = {
             FEED_POLL_INTERVAL_MINUTES.includes(value as FeedPollIntervalMinutes),
           "Choose 5, 10, 20, 30, or 60 minutes.",
         )
-        .optional(),
+        .exactOptional(),
       duplicateArticleWindowDays: z
         .custom<DuplicateArticleWindowDays>(
           (value) =>
@@ -161,13 +161,13 @@ export const inputs = {
             DUPLICATE_ARTICLE_WINDOW_DAYS.includes(value as DuplicateArticleWindowDays),
           "Choose 1, 7, or 30 days.",
         )
-        .optional(),
-      singleKeyShortcuts: z.boolean().optional(),
-      markReadOnScroll: z.boolean().optional(),
-      showYouTubeDescriptions: z.boolean().optional(),
-      translationLanguage: z.string().trim().min(1).max(80).optional(),
-      summaryPrompt: z.string().trim().min(1).max(AI_PROMPT_MAX_LENGTH).optional(),
-      translationPrompt: z.string().trim().min(1).max(AI_PROMPT_MAX_LENGTH).optional(),
+        .exactOptional(),
+      singleKeyShortcuts: z.boolean().exactOptional(),
+      markReadOnScroll: z.boolean().exactOptional(),
+      showYouTubeDescriptions: z.boolean().exactOptional(),
+      translationLanguage: z.string().trim().min(1).max(80).exactOptional(),
+      summaryPrompt: z.string().trim().min(1).max(AI_PROMPT_MAX_LENGTH).exactOptional(),
+      translationPrompt: z.string().trim().min(1).max(AI_PROMPT_MAX_LENGTH).exactOptional(),
       customPrompts: z
         .array(
           z
@@ -178,13 +178,13 @@ export const inputs = {
             })
             .strict(),
         )
-        .optional(),
+        .exactOptional(),
     })
     .strict(),
   aiFeature: z.literal("article_summary"),
   aiProvider,
   updateAiFeature: z
-    .object({ provider: aiProvider, model: z.string().trim().min(1).max(200).optional() })
+    .object({ provider: aiProvider, model: z.string().trim().min(1).max(200).exactOptional() })
     .strict(),
   saveAiProviderKey: z.object({ apiKey: z.string().trim().min(1).max(10_000) }).strict(),
   saveBrowserAiKey: z

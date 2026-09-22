@@ -52,7 +52,11 @@ function groupOptions(options: readonly DropdownOption[]): DropdownOptionGroup[]
   for (const option of options) {
     const previous = groups.at(-1);
     if (previous && previous.label === option.group) previous.options.push(option);
-    else groups.push({ label: option.group, options: [option] });
+    else
+      groups.push({
+        ...(option.group === undefined ? {} : { label: option.group }),
+        options: [option],
+      });
   }
   return groups;
 }

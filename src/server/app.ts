@@ -160,9 +160,10 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
     }
   });
 
+  // biome-ignore-start lint/nursery/noMisusedPromises: Fastify awaits async plugins; Biome incorrectly selects its callback overload.
   await app.register(authRoutes, {
     authService: services.authService,
-    configuredOrigin: services.publicOrigin,
+    ...(services.publicOrigin === undefined ? {} : { configuredOrigin: services.publicOrigin }),
   });
   await app.register(bootstrapRoutes, {
     application,
@@ -178,7 +179,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   await app.register(feedRoutes, {
     feeds: services.database.feeds,
     application,
-    webFeedService: services.webFeedService,
+    ...(services.webFeedService === undefined ? {} : { webFeedService: services.webFeedService }),
     userId,
   });
   await app.register(folderRoutes, { folders: services.database.folders, userId });
@@ -196,6 +197,8 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
     application,
     userId,
   });
+
+  // biome-ignore-end lint/nursery/noMisusedPromises: End of async plugin registrations.
 
   if (services.staticDir && existsSync(join(services.staticDir, "index.html"))) {
     const demoDir =

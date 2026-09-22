@@ -6,7 +6,9 @@ import { AiMarkdown } from "../../src/client/features/reader/article/ai-markdown
 import type { AiGrounding } from "../../src/shared/types.js";
 
 function renderMarkdown(text: string, grounding?: AiGrounding): DocumentFragment {
-  return JSDOM.fragment(renderToStaticMarkup(createElement(AiMarkdown, { text, grounding })));
+  return JSDOM.fragment(
+    renderToStaticMarkup(createElement(AiMarkdown, { text, grounding: grounding ?? null })),
+  );
 }
 
 describe("AI Markdown", () => {

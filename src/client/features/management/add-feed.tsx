@@ -17,7 +17,7 @@ export default function AddFeedPage({
 }: {
   bootstrap: BootstrapData;
   initialSourceUrl: string;
-  initialSourceType?: AddFeedSourceType;
+  initialSourceType?: AddFeedSourceType | undefined;
   mutations: ReaderDataMutations;
   onMenu: () => void;
   onBack: () => void;

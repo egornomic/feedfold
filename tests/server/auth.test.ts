@@ -33,7 +33,7 @@ async function authApp(publicOrigin?: string, options?: AuthOptions) {
       refreshService,
     }),
     authService,
-    publicOrigin,
+    ...(publicOrigin === undefined ? {} : { publicOrigin }),
   });
   cleanups.push(
     () => app.close(),

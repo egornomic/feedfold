@@ -71,7 +71,7 @@ async function fixture() {
           ...(body === undefined ? {} : { "Content-Type": "application/json" }),
           ...(cookie ? { cookie } : {}),
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? null : JSON.stringify(body),
       });
       const payload = response.status === 204 ? null : await response.json();
       return {
@@ -98,76 +98,73 @@ async function fixture() {
 }
 
 describe("invitation registration through HTTP", () => {
-  it.each([
-    "revoked",
-    "expired",
-    "redeemed",
-    "closed",
-    "open",
-  ] as const)("rechecks admission when a passkey registration finishes after the invitation becomes %s", async (change) => {
-    const { database, server, ownerCookie } = await fixture();
-    const api = await server("invite");
-    const issued = await api.create();
-    const browser = await chromium.launch({ headless: true });
-    cleanups.push(() => browser.close());
-    const page = await browser.newPage();
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send("WebAuthn.enable");
-    await cdp.send("WebAuthn.addVirtualAuthenticator", {
-      options: {
-        protocol: "ctap2",
-        transport: "internal",
-        hasResidentKey: true,
-        hasUserVerification: true,
-        isUserVerified: true,
-        automaticPresenceSimulation: true,
-      },
-    });
-    await page.goto(`${api.origin}/health`);
-    const completion = await page.evaluate(async (inviteCode) => {
-      const response = await fetch("/api/auth/register/passkey/options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "passkey-friend", inviteCode }),
+  it.each(["revoked", "expired", "redeemed", "closed", "open"] as const)(
+    "rechecks admission when a passkey registration finishes after the invitation becomes %s",
+    async (change) => {
+      const { database, server, ownerCookie } = await fixture();
+      const api = await server("invite");
+      const issued = await api.create();
+      const browser = await chromium.launch({ headless: true });
+      cleanups.push(() => browser.close());
+      const page = await browser.newPage();
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("WebAuthn.enable");
+      await cdp.send("WebAuthn.addVirtualAuthenticator", {
+        options: {
+          protocol: "ctap2",
+          transport: "internal",
+          hasResidentKey: true,
+          hasUserVerification: true,
+          isUserVerified: true,
+          automaticPresenceSimulation: true,
+        },
       });
-      const pending = await response.json();
-      if (!response.ok) throw new Error(JSON.stringify(pending));
-      const credential = (await navigator.credentials.create({
-        publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(pending.options),
-      })) as PublicKeyCredential;
-      return { registrationId: pending.registrationId, response: credential.toJSON() };
-    }, issued.body.code);
-    let completionServer = api;
-    if (change === "revoked")
-      expect(
-        (
-          await api.request(
-            "DELETE",
-            `/api/auth/invitations/${issued.body.id}`,
-            undefined,
-            ownerCookie,
-          )
-        ).status,
-      ).toBe(204);
-    if (change === "expired")
-      database.connection
-        .prepare("UPDATE invitations SET expires_at = '2000-01-01T00:00:00.000Z' WHERE id = ?")
-        .run(issued.body.id);
-    if (change === "redeemed")
-      expect((await api.register("password-friend", issued.body.code)).status).toBe(201);
-    if (change === "closed" || change === "open") completionServer = await server(change);
-    const completed = await completionServer.request(
-      "POST",
-      "/api/auth/register/passkey",
-      completion,
-    );
-    expect(completed.status).toBe(change === "open" ? 201 : 403);
-    expect(database.auth.findEnabledUser("passkey-friend") !== null).toBe(change === "open");
-    if (change === "open") {
-      expect((await api.list()).invitations[0]?.redeemedAt).toBeNull();
-      expect((await api.register("next-friend", issued.body.code)).status).toBe(201);
-    }
-  });
+      await page.goto(`${api.origin}/health`);
+      const completion = await page.evaluate(async (inviteCode) => {
+        const response = await fetch("/api/auth/register/passkey/options", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: "passkey-friend", inviteCode }),
+        });
+        const pending = await response.json();
+        if (!response.ok) throw new Error(JSON.stringify(pending));
+        const credential = (await navigator.credentials.create({
+          publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(pending.options),
+        })) as PublicKeyCredential;
+        return { registrationId: pending.registrationId, response: credential.toJSON() };
+      }, issued.body.code);
+      let completionServer = api;
+      if (change === "revoked")
+        expect(
+          (
+            await api.request(
+              "DELETE",
+              `/api/auth/invitations/${issued.body.id}`,
+              undefined,
+              ownerCookie,
+            )
+          ).status,
+        ).toBe(204);
+      if (change === "expired")
+        database.connection
+          .prepare("UPDATE invitations SET expires_at = '2000-01-01T00:00:00.000Z' WHERE id = ?")
+          .run(issued.body.id);
+      if (change === "redeemed")
+        expect((await api.register("password-friend", issued.body.code)).status).toBe(201);
+      if (change === "closed" || change === "open") completionServer = await server(change);
+      const completed = await completionServer.request(
+        "POST",
+        "/api/auth/register/passkey",
+        completion,
+      );
+      expect(completed.status).toBe(change === "open" ? 201 : 403);
+      expect(database.auth.findEnabledUser("passkey-friend") !== null).toBe(change === "open");
+      if (change === "open") {
+        expect((await api.list()).invitations[0]?.redeemedAt).toBeNull();
+        expect((await api.register("next-friend", issued.body.code)).status).toBe(201);
+      }
+    },
+  );
 
   it("defaults public registration to closed and changes admission without changing accounts or invite history", async () => {
     const { server, database, ownerCookie } = await fixture();

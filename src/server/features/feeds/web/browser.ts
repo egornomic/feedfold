@@ -482,7 +482,7 @@ export class WebFeedBrowserLoader {
     this.#closed = true;
     const browserPromise = this.#browserPromise;
     this.#browserPromise = null;
-    if (browserPromise) {
+    if (browserPromise !== null) {
       const browser = await browserPromise.catch(() => null);
       await browser?.close().catch(() => undefined);
     }
@@ -578,7 +578,7 @@ export class WebFeedBrowserLoader {
         acceptDownloads: false,
         javaScriptEnabled: true,
         permissions: [],
-        proxy: this.#allowPrivateNetworks ? undefined : { server: await this.#proxyUrl() },
+        ...(this.#allowPrivateNetworks ? {} : { proxy: { server: await this.#proxyUrl() } }),
         serviceWorkers: "block",
         viewport: { width: 900, height: 900 },
       });

@@ -249,8 +249,12 @@ export function useArticleActions({
         const readerRoute = route.readerRoute;
         const result = await api.markRead({
           olderThanDays: days,
-          ...(readerRoute.scope === "feed" ? { feedId: readerRoute.scopeId ?? undefined } : {}),
-          ...(readerRoute.scope === "folder" ? { folderId: readerRoute.scopeId ?? undefined } : {}),
+          ...(readerRoute.scope === "feed" && readerRoute.scopeId !== null
+            ? { feedId: readerRoute.scopeId }
+            : {}),
+          ...(readerRoute.scope === "folder" && readerRoute.scopeId !== null
+            ? { folderId: readerRoute.scopeId }
+            : {}),
         });
         await Promise.all([loadBootstrap(), loadArticles()]);
         showToast(

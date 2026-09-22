@@ -95,6 +95,42 @@ async function transportClient(transport: "web" | "desktop", services: Applicati
 }
 
 describe("local application API", () => {
+  it("preserves omitted folder fields, rejects undefined edits, and clears an explicit parent", async () => {
+    const services = applicationServices();
+    const application = new ApplicationApi(services);
+    const parent = (await application.invoke({
+      operation: "createFolder",
+      payload: { name: "Reading" },
+    })) as Folder;
+    const child = (await application.invoke({
+      operation: "createFolder",
+      payload: { name: "News", parentId: parent.id },
+    })) as Folder;
+
+    await expect(
+      application.invoke({
+        operation: "updateFolder",
+        payload: { id: child.id, input: { name: "Daily" } },
+      }),
+    ).resolves.toMatchObject({ name: "Daily", parentId: parent.id });
+    await expect(
+      application.invoke({
+        operation: "updateFolder",
+        payload: { id: child.id, input: { name: "Invalid", parentId: undefined } },
+      }),
+    ).rejects.toThrow();
+    expect(services.database.folders.getFolder(1, child.id)).toMatchObject({
+      name: "Daily",
+      parentId: parent.id,
+    });
+    await expect(
+      application.invoke({
+        operation: "updateFolder",
+        payload: { id: child.id, input: { parentId: null } },
+      }),
+    ).resolves.toMatchObject({ name: "Daily", parentId: null });
+  });
+
   it("publishes committed management changes and leaves failed edits silent", async () => {
     const services = applicationServices();
     const { database } = services;
@@ -223,168 +259,171 @@ describe("local application API", () => {
     expect(opml).toEqual(expect.stringContaining("https://example.test/feed.xml"));
   });
 
-  it.each([
-    "web",
-    "desktop",
-  ] as const)("accepts the shared reading and management inputs through %s", async (transport) => {
-    const services = applicationServices();
-    const { database } = services;
-    const client = await transportClient(transport, services);
+  it.each(["web", "desktop"] as const)(
+    "accepts the shared reading and management inputs through %s",
+    async (transport) => {
+      const services = applicationServices();
+      const { database } = services;
+      const client = await transportClient(transport, services);
 
-    const parent = await client.createFolder({ name: "Reading" });
-    expect(parent).toMatchObject({ parentId: null, sortDirection: "newest" });
-    const folder = await client.createFolder({
-      name: "Updates",
-      parentId: parent.id,
-      position: 7,
-      sortDirection: "oldest",
-    });
-    expect(folder).toMatchObject({ parentId: parent.id, position: 7, sortDirection: "oldest" });
-    expect(await client.updateFolder(folder.id, { position: 42 })).toMatchObject({ position: 42 });
-    await expect(client.updateFolder(folder.id, { position: -1 })).rejects.toThrow();
-    expect((await client.bootstrap()).folders.find(({ id }) => id === folder.id)?.position).toBe(
-      42,
-    );
+      const parent = await client.createFolder({ name: "Reading" });
+      expect(parent).toMatchObject({ parentId: null, sortDirection: "newest" });
+      const folder = await client.createFolder({
+        name: "Updates",
+        parentId: parent.id,
+        position: 7,
+        sortDirection: "oldest",
+      });
+      expect(folder).toMatchObject({ parentId: parent.id, position: 7, sortDirection: "oldest" });
+      expect(await client.updateFolder(folder.id, { position: 42 })).toMatchObject({
+        position: 42,
+      });
+      await expect(client.updateFolder(folder.id, { position: -1 })).rejects.toThrow();
+      expect((await client.bootstrap()).folders.find(({ id }) => id === folder.id)?.position).toBe(
+        42,
+      );
 
-    const feed = await client.createFeed({
-      sourceKind: "published",
-      title: "Contract feed",
-      feedUrl: "https://example.test/contracts.xml",
-      folderId: folder.id,
-    });
-    expect(feed).toMatchObject({ paused: false, folderId: folder.id });
-    completeFeedRefresh(database.feeds, feed.id, {
-      httpStatus: 200,
-      etag: null,
-      lastModified: null,
-      parsed: {
-        title: feed.title,
-        siteUrl: null,
-        articles: [
-          {
-            externalId: "contract-story",
-            title: "Contract story",
-            url: null,
-            author: null,
-            publishedAt: null,
-            summary: "Available in both apps.",
-            feedContentHtml: null,
-            imageUrl: null,
-          },
-        ],
-      },
-    });
-    const article = (
-      await client.articles({ state: "all", feedId: feed.id, limit: 1, includeContent: true })
-    ).articles[0];
-    assert.isDefined(article);
-    expect(article).toMatchObject({ title: "Contract story", isRead: false, isStarred: false });
-    expect(await client.updateArticleState(article.id, { isStarred: true })).toMatchObject({
-      isStarred: true,
-    });
-    await expect(client.updateArticleState(article.id, {})).rejects.toThrow();
-    expect((await client.article(article.id)).isStarred).toBe(true);
+      const feed = await client.createFeed({
+        sourceKind: "published",
+        title: "Contract feed",
+        feedUrl: "https://example.test/contracts.xml",
+        folderId: folder.id,
+      });
+      expect(feed).toMatchObject({ paused: false, folderId: folder.id });
+      completeFeedRefresh(database.feeds, feed.id, {
+        httpStatus: 200,
+        etag: null,
+        lastModified: null,
+        parsed: {
+          title: feed.title,
+          siteUrl: null,
+          articles: [
+            {
+              externalId: "contract-story",
+              title: "Contract story",
+              url: null,
+              author: null,
+              publishedAt: null,
+              summary: "Available in both apps.",
+              feedContentHtml: null,
+              imageUrl: null,
+            },
+          ],
+        },
+      });
+      const article = (
+        await client.articles({ state: "all", feedId: feed.id, limit: 1, includeContent: true })
+      ).articles[0];
+      assert.isDefined(article);
+      expect(article).toMatchObject({ title: "Contract story", isRead: false, isStarred: false });
+      expect(await client.updateArticleState(article.id, { isStarred: true })).toMatchObject({
+        isStarred: true,
+      });
+      await expect(client.updateArticleState(article.id, {})).rejects.toThrow();
+      expect((await client.article(article.id)).isStarred).toBe(true);
 
-    const rule = await client.createRule({
-      name: "Read updates",
-      feedId: feed.id,
-      conditions: [{ field: "title", pattern: "Contract" }],
-      conditionOperator: "and",
-      action: "mark_read",
-    });
-    expect(rule).toMatchObject({ enabled: true, folderId: null, matchedCount: 1 });
-    expect((await client.article(article.id)).isRead).toBe(true);
-    await expect(client.updateRule(rule.id, { folderId: folder.id })).rejects.toThrow(
-      "Choose either one feed or one folder for this rule.",
-    );
-    expect(await client.updateSettings({ pollIntervalMinutes: 10 })).toMatchObject({
-      pollIntervalMinutes: 10,
-    });
-  });
-  it.each([
-    "web",
-    "desktop",
-  ] as const)("subscribes to a website, repairs its selection, and rejects invalid operations through %s", async (transport) => {
-    let updated = false;
-    const source = createServer((_request, response) => {
-      response.setHeader("Content-Type", "text/html");
-      const titles = ["Alpha", "Beta", updated ? "Delta" : "Gamma"];
-      response.end(
-        `<!doctype html><title>Release updates</title><main><section aria-label="Releases">
+      const rule = await client.createRule({
+        name: "Read updates",
+        feedId: feed.id,
+        conditions: [{ field: "title", pattern: "Contract" }],
+        conditionOperator: "and",
+        action: "mark_read",
+      });
+      expect(rule).toMatchObject({ enabled: true, folderId: null, matchedCount: 1 });
+      expect((await client.article(article.id)).isRead).toBe(true);
+      await expect(client.updateRule(rule.id, { folderId: folder.id })).rejects.toThrow(
+        "Choose either one feed or one folder for this rule.",
+      );
+      expect(await client.updateSettings({ pollIntervalMinutes: 10 })).toMatchObject({
+        pollIntervalMinutes: 10,
+      });
+    },
+  );
+  it.each(["web", "desktop"] as const)(
+    "subscribes to a website, repairs its selection, and rejects invalid operations through %s",
+    async (transport) => {
+      let updated = false;
+      const source = createServer((_request, response) => {
+        response.setHeader("Content-Type", "text/html");
+        const titles = ["Alpha", "Beta", updated ? "Delta" : "Gamma"];
+        response.end(
+          `<!doctype html><title>Release updates</title><main><section aria-label="Releases">
           ${titles.map((title) => `<article><h2><a href="/${title}">${title}</a></h2><p>A release announcement.</p></article>`).join("")}
         </section></main>`,
+        );
+      });
+      await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
+      cleanups.push(
+        () =>
+          new Promise<void>((resolve) => {
+            source.closeAllConnections();
+            source.close(() => resolve());
+          }),
       );
-    });
-    await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
-    cleanups.push(
-      () =>
-        new Promise<void>((resolve) => {
-          source.closeAllConnections();
-          source.close(() => resolve());
-        }),
-    );
-    const sourceUrl = `http://127.0.0.1:${(source.address() as AddressInfo).port}/`;
-    const services = applicationServices({
-      deploymentPolicy: {
-        ...PRIVATE_DEPLOYMENT_POLICY,
-        quotas: { ...PRIVATE_DEPLOYMENT_POLICY.quotas, opmlFeedsPerImport: 1 },
-      },
-      webFeed: { allowPrivateNetworks: true, settleQuietMs: 100, settleTimeoutMs: 2_000 },
-    });
-    const client = await transportClient(transport, services);
-    const analysis = await client.analyzeWebPage(sourceUrl);
-    const candidate = analysis.candidates.find((candidate) => candidate.articles.length === 3);
-    assert.isDefined(candidate);
-    const feed = await client.createFeed({
-      sourceKind: "web",
-      feedUrl: analysis.pageUrl,
-      webConfig: candidate.config,
-    });
-    const titles = async () =>
-      (await client.articles({ state: "all", feedId: feed.id })).articles.map(
-        (article) => article.title,
+      const sourceUrl = `http://127.0.0.1:${(source.address() as AddressInfo).port}/`;
+      const services = applicationServices({
+        deploymentPolicy: {
+          ...PRIVATE_DEPLOYMENT_POLICY,
+          quotas: { ...PRIVATE_DEPLOYMENT_POLICY.quotas, opmlFeedsPerImport: 1 },
+        },
+        webFeed: { allowPrivateNetworks: true, settleQuietMs: 100, settleTimeoutMs: 2_000 },
+      });
+      const client = await transportClient(transport, services);
+      const analysis = await client.analyzeWebPage(sourceUrl);
+      const candidate = analysis.candidates.find((candidate) => candidate.articles.length === 3);
+      assert.isDefined(candidate);
+      const feed = await client.createFeed({
+        sourceKind: "web",
+        feedUrl: analysis.pageUrl,
+        webConfig: candidate.config,
+      });
+      const titles = async () =>
+        (await client.articles({ state: "all", feedId: feed.id })).articles.map(
+          (article) => article.title,
+        );
+      expect(await titles()).toEqual(expect.arrayContaining(["Alpha", "Beta", "Gamma"]));
+      expect((await client.analyzeWebFeed(feed.id)).savedSelectionMatched).toBe(true);
+      updated = true;
+      await client.updateWebFeedSelection(feed.id, candidate.config);
+      expect(await titles()).toEqual(expect.arrayContaining(["Alpha", "Beta", "Gamma", "Delta"]));
+      await expect(client.analyzeWebFeed(999_999)).rejects.toMatchObject({ status: 404 });
+      await expect(client.updateWebFeedSelection(999_999, candidate.config)).rejects.toMatchObject({
+        status: 404,
+      });
+      const published = (await client.bootstrap()).feeds.find(
+        (feed) => feed.sourceKind === "published",
       );
-    expect(await titles()).toEqual(expect.arrayContaining(["Alpha", "Beta", "Gamma"]));
-    expect((await client.analyzeWebFeed(feed.id)).savedSelectionMatched).toBe(true);
-    updated = true;
-    await client.updateWebFeedSelection(feed.id, candidate.config);
-    expect(await titles()).toEqual(expect.arrayContaining(["Alpha", "Beta", "Gamma", "Delta"]));
-    await expect(client.analyzeWebFeed(999_999)).rejects.toMatchObject({ status: 404 });
-    await expect(client.updateWebFeedSelection(999_999, candidate.config)).rejects.toMatchObject({
-      status: 404,
-    });
-    const published = (await client.bootstrap()).feeds.find(
-      (feed) => feed.sourceKind === "published",
-    );
-    assert.isDefined(published);
-    await expect(client.analyzeWebFeed(published.id)).rejects.toMatchObject({ status: 400 });
-    await expect(
-      client.updateWebFeedSelection(published.id, candidate.config),
-    ).rejects.toMatchObject({ status: 400 });
-    await expect(client.loadFullContent(999_999)).rejects.toMatchObject({ status: 404 });
-    await expect(client.telegramArticleMedia(999_999)).rejects.toMatchObject({ status: 404 });
-    await expect(client.xArticleMedia(999_999, "123")).rejects.toMatchObject({ status: 404 });
-    await client.updateFeed(feed.id, { paused: true });
-    await expect(client.refresh([feed.id])).rejects.toMatchObject({ status: 400 });
-    await client.updateFeed(feed.id, { paused: false });
-    await client.refresh([feed.id]);
-    await services.refreshService.waitForIdle();
-    expect((await client.feed(feed.id)).healthStatus).toBe("healthy");
-    const opml = (outlines: string) =>
-      new File(
-        [`<?xml version="1.0"?><opml version="2.0"><body>${outlines}</body></opml>`],
-        "feeds.opml",
-      );
-    const outline =
-      '<outline text="Releases" xmlUrl="https://github.com/egornomic/feedfold/releases.atom"/>';
-    expect(await client.importOpml(opml(outline))).toMatchObject({
-      imported: 0,
-      duplicates: 1,
-      failed: [],
-    });
-    await expect(client.importOpml(opml(outline + outline))).rejects.toMatchObject({
-      status: 429,
-      code: "quota_exceeded",
-    });
-  }, 20_000);
+      assert.isDefined(published);
+      await expect(client.analyzeWebFeed(published.id)).rejects.toMatchObject({ status: 400 });
+      await expect(
+        client.updateWebFeedSelection(published.id, candidate.config),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(client.loadFullContent(999_999)).rejects.toMatchObject({ status: 404 });
+      await expect(client.telegramArticleMedia(999_999)).rejects.toMatchObject({ status: 404 });
+      await expect(client.xArticleMedia(999_999, "123")).rejects.toMatchObject({ status: 404 });
+      await client.updateFeed(feed.id, { paused: true });
+      await expect(client.refresh([feed.id])).rejects.toMatchObject({ status: 400 });
+      await client.updateFeed(feed.id, { paused: false });
+      await client.refresh([feed.id]);
+      await services.refreshService.waitForIdle();
+      expect((await client.feed(feed.id)).healthStatus).toBe("healthy");
+      const opml = (outlines: string) =>
+        new File(
+          [`<?xml version="1.0"?><opml version="2.0"><body>${outlines}</body></opml>`],
+          "feeds.opml",
+        );
+      const outline =
+        '<outline text="Releases" xmlUrl="https://github.com/egornomic/feedfold/releases.atom"/>';
+      expect(await client.importOpml(opml(outline))).toMatchObject({
+        imported: 0,
+        duplicates: 1,
+        failed: [],
+      });
+      await expect(client.importOpml(opml(outline + outline))).rejects.toMatchObject({
+        status: 429,
+        code: "quota_exceeded",
+      });
+    },
+    20_000,
+  );
 });

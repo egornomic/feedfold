@@ -52,7 +52,7 @@ export function productionLogger(
 ): FastifyServerOptions["logger"] {
   return {
     level: "info",
-    stream,
+    ...(stream === undefined ? {} : { stream }),
     redact: {
       paths: REDACTED_LOG_FIELDS,
       remove: true,
