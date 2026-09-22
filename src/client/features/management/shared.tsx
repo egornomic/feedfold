@@ -6,8 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { api, appUrl, errorMessage } from "../../api/api";
-import { isDesktopApp } from "../../platform/desktop";
+import { api, errorMessage } from "../../api/api";
 import type { ReaderDataMutations } from "../reader/data-resource";
 
 export function formatDate(value: string | null): string {
@@ -147,43 +146,30 @@ export function ImportOpmlButton({
 
 export function ExportOpmlLink({ menuItem = false }: { menuItem?: boolean } = {}) {
   const [busy, setBusy] = useState(false);
-  if (isDesktopApp()) {
-    const exportOpml = async () => {
-      setBusy(true);
-      try {
-        await api.exportOpml();
-      } catch (error) {
-        window.alert(`Could not export OPML: ${errorMessage(error)}`);
-      } finally {
-        setBusy(false);
-      }
-    };
-    return (
-      <button
-        className="secondary-button"
-        type="button"
-        role={menuItem ? "menuitem" : undefined}
-        disabled={busy}
-        onClick={() => void exportOpml()}
-      >
-        {busy ? (
-          <LoaderCircle className="spin" aria-hidden="true" size={16} />
-        ) : (
-          <Download aria-hidden="true" size={16} />
-        )}
-        {busy ? "Exporting OPML" : "Export OPML"}
-      </button>
-    );
-  }
+  const exportOpml = async () => {
+    setBusy(true);
+    try {
+      await api.exportOpml();
+    } catch (error) {
+      window.alert(`Could not export OPML: ${errorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <a
+    <button
       className="secondary-button"
+      type="button"
       role={menuItem ? "menuitem" : undefined}
-      href={appUrl("/api/opml/export")}
-      download="feedfold-subscriptions.opml"
+      disabled={busy}
+      onClick={() => void exportOpml()}
     >
-      <Download aria-hidden="true" size={16} />
-      Export OPML
-    </a>
+      {busy ? (
+        <LoaderCircle className="spin" aria-hidden="true" size={16} />
+      ) : (
+        <Download aria-hidden="true" size={16} />
+      )}
+      {busy ? "Exporting OPML" : "Export OPML"}
+    </button>
   );
 }

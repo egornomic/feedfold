@@ -115,8 +115,6 @@ export default defineConfig({
       },
       workbox: {
         clientsClaim: true,
-        // Replace the former root-scoped demo worker during the public app cutover.
-        skipWaiting: !demoMode,
         globPatterns: ["**/*.{js,css,html,png,webp}"],
         navigateFallback: appUrl("/index.html"),
         navigateFallbackDenylist: [

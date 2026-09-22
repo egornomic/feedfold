@@ -1,3 +1,4 @@
+import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api as demoApi } from "../../src/demo/api.js";
 import { DEMO_RELEASE_ARTICLE_ID } from "../../src/demo/fixtures.js";
@@ -7,6 +8,34 @@ const DEMO_NOW = new Date("2026-08-12T12:00:00.000Z");
 
 describe("static demo data", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("exports subscriptions as valid OPML with their exact titles and URLs", () => {
+    const store = new DemoStore(DEMO_NOW);
+    store.invoke("updateFeed", {
+      id: 1,
+      input: { title: 'News & "ideas" <today>', feedUrl: "https://example.test/rss?a=1&b=2" },
+    });
+    const dom = new JSDOM(store.invoke("exportOpml", undefined), {
+      contentType: "application/xml",
+    });
+    try {
+      expect(dom.window.document.documentElement.tagName).toBe("opml");
+      const exported = [...dom.window.document.querySelectorAll("outline")].map((outline) => ({
+        title: outline.getAttribute("title"),
+        text: outline.getAttribute("text"),
+        feedUrl: outline.getAttribute("xmlUrl"),
+      }));
+      expect(exported).toEqual(
+        store.bootstrap().feeds.map((feed) => ({
+          title: feed.title,
+          text: feed.title,
+          feedUrl: feed.feedUrl,
+        })),
+      );
+    } finally {
+      dom.window.close();
+    }
+  });
 
   it("serves reader data without making a backend request", async () => {
     const fetch = vi.fn(() => Promise.reject(new Error("The network should not be used.")));

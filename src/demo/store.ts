@@ -1,3 +1,4 @@
+import { generateOpml } from "feedsmith";
 import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../shared/api/inputs.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
 import type {
@@ -457,13 +458,17 @@ export class DemoStore {
   }
 
   exportOpml(): string {
-    const outlines = this.data.feeds
-      .map(
-        (feed) =>
-          `<outline text="${feed.title}" title="${feed.title}" type="rss" xmlUrl="${feed.feedUrl}" />`,
-      )
-      .join("");
-    return `<?xml version="1.0" encoding="UTF-8"?><opml version="2.0"><head><title>feedfold demo</title></head><body>${outlines}</body></opml>`;
+    return generateOpml({
+      head: { title: "feedfold demo" },
+      body: {
+        outlines: this.data.feeds.map((feed) => ({
+          text: feed.title,
+          title: feed.title,
+          type: "rss",
+          xmlUrl: feed.feedUrl,
+        })),
+      },
+    });
   }
 
   invoke<K extends ApiOperation>(operation: K, payload: ApiInput<NoInfer<K>>): ApiOutput<K> {

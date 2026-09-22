@@ -93,12 +93,10 @@ export class AiRepository {
       .run(userId, provider, encryptedApiKey, deviceId, timestamp, timestamp);
   }
 
-  deleteAiCredential(userId: number, provider: AiProvider, deviceId = "desktop"): boolean {
-    return (
-      this.sqlite
-        .prepare("DELETE FROM ai_credentials WHERE user_id = ? AND provider = ? AND device_id = ?")
-        .run(userId, provider, deviceId).changes > 0
-    );
+  deleteAiCredential(userId: number, provider: AiProvider, deviceId = "desktop"): void {
+    this.sqlite
+      .prepare("DELETE FROM ai_credentials WHERE user_id = ? AND provider = ? AND device_id = ?")
+      .run(userId, provider, deviceId);
   }
 
   deleteDeviceAiCredentials(userId: number, deviceId: string): void {
