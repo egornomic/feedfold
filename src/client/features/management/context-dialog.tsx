@@ -41,10 +41,10 @@ const WebFeedSetup = lazy(async () => ({
   default: (await import("../feeds/web-feed-setup")).WebFeedSetup,
 }));
 const FolderForm = lazy(async () => ({
-  default: (await import("./feeds")).FolderForm,
+  default: (await import("../feeds/folder-form")).FolderForm,
 }));
 const RuleForm = lazy(async () => ({
-  default: (await import("./rules")).RuleForm,
+  default: (await import("../rules/rule-form")).RuleForm,
 }));
 
 function firstFocusable(selectors: string[]): HTMLElement | null {

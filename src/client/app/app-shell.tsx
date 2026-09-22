@@ -27,7 +27,6 @@ import type {
 } from "../features/feeds/feed-management";
 import type { AddFeedSourceType } from "../features/feeds/feed-source";
 import { folderPathLabel } from "../features/feeds/folder-hierarchy";
-import type { RuleFormDraft } from "../features/management/rules";
 import { Sidebar } from "../features/navigation/sidebar";
 import { useSidebarMotion } from "../features/navigation/sidebar-motion";
 import { useArticleActions } from "../features/reader/article-actions";
@@ -41,6 +40,7 @@ import {
 } from "../features/reader/reader-state";
 import { StartupError } from "../features/reader/reader-states";
 import { ReaderWorkspace } from "../features/reader/reader-workspace";
+import type { RuleFormDraft } from "../features/rules/rule-form-types";
 import { isDesktopApp } from "../platform/desktop";
 import { useDelayedPending } from "../ui/loading";
 import { useAppRoute } from "./route";
@@ -60,9 +60,7 @@ const DEMO_SOURCE_URL =
     ? "https://github.com/egornomic/feedfold"
     : undefined;
 const FeedsPage = lazy(() => import("../features/management/feeds"));
-const AddFeedPage = lazy(async () => ({
-  default: (await import("../features/management/feeds")).AddFeedPage,
-}));
+const AddFeedPage = lazy(() => import("../features/management/add-feed"));
 const RulesPage = lazy(() => import("../features/management/rules"));
 const SettingsPage = lazy(() => import("../features/management/settings"));
 const ShortcutHelp = lazy(() => import("../features/management/shortcut-help"));
