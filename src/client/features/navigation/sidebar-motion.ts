@@ -1,4 +1,5 @@
 import { type Dispatch, type SetStateAction, useCallback, useLayoutEffect, useRef } from "react";
+import { interactionMotionIsInstant } from "../../ui/motion";
 
 interface SidebarLayoutSnapshot {
   items: Array<{ element: HTMLElement; left: number; top: number }>;
@@ -43,6 +44,7 @@ export function useSidebarMotion(
     if (!snapshot) return;
     sidebarLayoutSnapshot.current = null;
     for (const animation of sidebarLayoutAnimations.current) animation.cancel();
+    if (interactionMotionIsInstant()) return;
 
     const main = document.querySelector<HTMLElement>(".main-column");
     const toggleLabel = desktopSidebarCollapsed ? "Show sidebar" : "Hide sidebar";
