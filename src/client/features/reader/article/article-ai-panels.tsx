@@ -1,9 +1,12 @@
 import { AlertTriangle, Languages, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
-import { useRef } from "react";
+import { lazy, Suspense, useRef } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
 import type { useMotionPresence } from "../../../ui/motion";
-import { AiMarkdown } from "./ai-markdown";
 import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
+
+const AiMarkdown = lazy(() =>
+  import("./ai-markdown").then((module) => ({ default: module.AiMarkdown })),
+);
 
 export function ArticleSummaryPanel({
   article,
@@ -83,7 +86,9 @@ export function ArticleSummaryPanel({
         </div>
       ) : summary ? (
         <div className="article-summary-text">
-          <AiMarkdown text={summary.text} grounding={summary.grounding} />
+          <Suspense fallback={<div role="status">Loading summary…</div>}>
+            <AiMarkdown text={summary.text} grounding={summary.grounding} />
+          </Suspense>
         </div>
       ) : !displayedState.error ? (
         <div className="article-summary-message">
