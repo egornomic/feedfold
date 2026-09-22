@@ -192,7 +192,6 @@ export default function AppShell({
 
   useEffect(() => {
     dataResource.resume();
-    void dataResource.loadBootstrap();
     return () => dataResource.pause();
   }, [dataResource]);
 
