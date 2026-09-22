@@ -7,10 +7,6 @@ export async function folderRoutes(
   app: FastifyInstance,
   { folders, userId }: { folders: FolderService; userId: UserId },
 ): Promise<void> {
-  app.get("/api/folders", async (request) => ({
-    folders: folders.listFolders(userId(request)),
-  }));
-
   app.post("/api/folders", async (request) => {
     const body = inputs.createFolder.parse(request.body);
     return folders.createFolder(userId(request), body);

@@ -65,10 +65,7 @@ export function createBrowserRequest(httpRequest: HttpRequest): ApiRuntime["requ
       }
       if (!device && operation === "bootstrap") {
         (result as BootstrapData).aiSettings.credentialStorageAvailable = false;
-      } else if (
-        !device &&
-        ["aiSettings", "updateAiFeature", "deleteAiProviderKey"].includes(operation)
-      ) {
+      } else if (!device && ["updateAiFeature", "deleteAiProviderKey"].includes(operation)) {
         (result as AiSettings).credentialStorageAvailable = false;
       }
       return result;

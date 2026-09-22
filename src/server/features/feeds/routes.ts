@@ -20,10 +20,6 @@ export async function feedRoutes(
     userId: UserId;
   },
 ): Promise<void> {
-  app.get("/api/feeds", async (request) => ({
-    feeds: feeds.listFeeds(userId(request)),
-  }));
-
   app.get("/api/feeds/:id", async (request, reply) => {
     const { id } = idParams.parse(request.params);
     const feed = feeds.getFeed(userId(request), id);

@@ -133,7 +133,6 @@ interface ApiOperations {
   updateRule: Operation<ResourceId & { input: Input<"updateRule"> }, Rule>;
   deleteRule: Operation<ResourceId, void>;
   updateSettings: Operation<Input<"updateSettings">, AppSettings>;
-  aiSettings: Operation<undefined, AiSettings>;
   updateAiFeature: Operation<
     { feature: Input<"aiFeature">; input: Input<"updateAiFeature"> },
     AiSettings
@@ -214,7 +213,6 @@ export const API_OPERATIONS = [
   "updateRule",
   "deleteRule",
   "updateSettings",
-  "aiSettings",
   "updateAiFeature",
   "saveAiProviderKey",
   "deleteAiProviderKey",

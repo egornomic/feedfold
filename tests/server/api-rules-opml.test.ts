@@ -446,10 +446,10 @@ describe("live API, OPML, and filtering rules", () => {
       (
         await app.inject({
           method: "GET",
-          url: "/api/settings",
+          url: "/api/bootstrap",
           headers: { cookie: partnerCookie },
         })
-      ).json(),
+      ).json<BootstrapData>().settings,
     ).toMatchObject({
       markReadOnScroll: true,
       showYouTubeDescriptions: false,
@@ -676,7 +676,9 @@ describe("live API, OPML, and filtering rules", () => {
         body: JSON.stringify({ markReadOnScroll: false }),
       }),
     ).toMatchObject({ markReadOnScroll: false });
-    expect(await asReader("/api/settings")).toMatchObject({ markReadOnScroll: false });
+    expect((await asReader<BootstrapData>("/api/bootstrap")).settings).toMatchObject({
+      markReadOnScroll: false,
+    });
     const parent = bootstrap.folders.find((folder) => folder.name === "Parent");
     const child = bootstrap.folders.find((folder) => folder.name === "Child");
     expect(child?.parentId).toBe(parent?.id);

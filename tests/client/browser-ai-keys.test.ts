@@ -204,7 +204,7 @@ describe("browser-held AI keys", () => {
       const secondState = await second.page.evaluate(async () => {
         const { api } = window.feedfoldTest;
         await api.login("reader", "reader-password");
-        const before = await api.aiSettings();
+        const before = (await api.bootstrap()).aiSettings;
         await api.saveAiProviderKey("openai", "SECOND_DEVICE_SECRET");
         return before.providers.find((provider) => provider.id === "openai")?.configured;
       });
@@ -231,14 +231,19 @@ describe("browser-held AI keys", () => {
       const afterLogout = await first.page.evaluate(async () => {
         const { api, vault } = window.feedfoldTest;
         const user = await api.login("reader", "reader-password");
-        return { device: (await vault.aiDevice(user.id)).id, settings: await api.aiSettings() };
+        return {
+          device: (await vault.aiDevice(user.id)).id,
+          settings: (await api.bootstrap()).aiSettings,
+        };
       });
       expect(afterLogout.device).not.toBe(identity.device);
       expect(afterLogout.settings.providers.every((provider) => !provider.configured)).toBe(true);
       expect(
-        (await second.page.evaluate(() => window.feedfoldTest.api.aiSettings())).providers.find(
-          (provider) => provider.id === "openai",
-        )?.configured,
+        (
+          await second.page.evaluate(
+            async () => (await window.feedfoldTest.api.bootstrap()).aiSettings,
+          )
+        ).providers.find((provider) => provider.id === "openai")?.configured,
       ).toBe(true);
 
       await first.page.evaluate(() =>
@@ -252,9 +257,11 @@ describe("browser-held AI keys", () => {
       );
       await expect(summarize()).rejects.toThrow("account changed");
       expect(
-        (await otherTab.evaluate(() => window.feedfoldTest.api.aiSettings())).providers.every(
-          (provider) => !provider.configured,
-        ),
+        (
+          await otherTab.evaluate(
+            async () => (await window.feedfoldTest.api.bootstrap()).aiSettings,
+          )
+        ).providers.every((provider) => !provider.configured),
       ).toBe(true);
       await second.page.evaluate(() => window.feedfoldTest.api.deleteAccount());
       expect(database.connection.prepare("SELECT COUNT(*) FROM ai_credentials").pluck().get()).toBe(

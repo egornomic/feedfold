@@ -392,7 +392,7 @@ export class DemoStore {
     return clone(this.data.settings);
   }
 
-  aiSettings(): AiSettings {
+  private aiSettings(): AiSettings {
     return clone(this.data.aiSettings);
   }
 
@@ -532,7 +532,6 @@ export class DemoStore {
     updateRule: ({ id, input }) => this.updateRule(id, input),
     deleteRule: ({ id }) => this.deleteRule(id),
     updateSettings: (input) => this.updateSettings(input),
-    aiSettings: () => this.aiSettings(),
     updateAiFeature: ({ feature, input }) => this.updateAiFeature(feature, input),
     saveAiProviderKey: ({ provider }) => this.setProviderConfigured(provider, true),
     deleteAiProviderKey: ({ provider }) => this.setProviderConfigured(provider, false),

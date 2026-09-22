@@ -337,8 +337,6 @@ export function createApiClient(runtime: ApiRuntime) {
         body: JSON.stringify(input),
       }),
 
-    aiSettings: () => request("aiSettings", undefined, "/api/ai/settings"),
-
     updateAiFeature: (feature: AiFeature, input: { provider: AiProvider; model?: string }) =>
       request("updateAiFeature", { feature, input }, `/api/ai/features/${feature}`, {
         method: "PATCH",

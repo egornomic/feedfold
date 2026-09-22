@@ -76,7 +76,6 @@ describe("hosted account authentication", () => {
     await api.register("storage-unavailable", "reader-password");
     expect((await api.session()).username).toBe("storage-unavailable");
     expect((await api.bootstrap()).aiSettings.credentialStorageAvailable).toBe(false);
-    expect((await api.aiSettings()).credentialStorageAvailable).toBe(false);
     await expect(api.saveAiProviderKey("openai", "must-not-be-stored")).rejects.toThrow(
       "Secure key storage is unavailable",
     );

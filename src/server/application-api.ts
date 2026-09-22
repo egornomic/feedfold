@@ -261,9 +261,6 @@ export class ApplicationApi {
       const body = inputs.updateSettings.parse(payload);
       return this.#database.settings.updateSettings(this.#userId, body);
     },
-    aiSettings: async () => {
-      return this.#ai.getSettings(this.#userId);
-    },
     updateAiFeature: async (payload) => {
       const body = input(
         z

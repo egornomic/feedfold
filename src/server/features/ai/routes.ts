@@ -11,10 +11,6 @@ export async function aiRoutes(
   app: FastifyInstance,
   { ai, userId }: { ai: AiService; userId: UserId },
 ): Promise<void> {
-  app.get("/api/ai/settings", async (request) =>
-    ai.getSettings(userId(request), browserDeviceId(request)),
-  );
-
   app.patch("/api/ai/features/:feature", async (request) => {
     const { feature } = aiFeatureParams.parse(request.params);
     const body = inputs.updateAiFeature.parse(request.body);
