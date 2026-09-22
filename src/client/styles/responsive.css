@@ -1161,6 +1161,7 @@
   }
 }
 
+:root[data-input-modality="keyboard"] :is(.article-ai-summary, .article-content-layer),
 :root[data-input-modality="keyboard"] .shortcut-dialog,
 :root[data-input-modality="keyboard"] .shortcut-dialog::backdrop {
   transition: none;

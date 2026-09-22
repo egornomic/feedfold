@@ -2,7 +2,7 @@ import { ListFilter } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import { useMotionPresence } from "../../../ui/motion";
+import { interactionMotionIsInstant, useMotionPresence } from "../../../ui/motion";
 import type { FeedManagementAction } from "../../feeds/feed-management";
 import {
   captureTextSelection,
@@ -84,6 +84,7 @@ export function ArticleDocument({
     if (
       Math.abs(delta) < 0.5 ||
       duration === 0 ||
+      interactionMotionIsInstant() ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
       return;
