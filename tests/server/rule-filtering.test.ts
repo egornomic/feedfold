@@ -93,6 +93,40 @@ function titles(database: AppDatabase, state: "all" | "unread" = "all"): string[
 }
 
 describe("article filtering rules", () => {
+  it("keeps unread, saved, and total counts consistent with visible subscriptions", () => {
+    const { database, scopedFeedId, outsideFeedId } = seededDatabase();
+    const articles = database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles;
+    const saved = articles.find((item) => item.title === "Alpha only");
+    const hidden = articles.find((item) => item.title === "Rust only");
+    if (!saved || !hidden) throw new Error("The seed articles were not delivered");
+    database.articles.updateArticleState(TEST_USER_ID, saved.id, { isRead: true, isStarred: true });
+    database.articles.updateArticleState(TEST_USER_ID, hidden.id, { isStarred: true });
+    database.rules.createRule(TEST_USER_ID, {
+      name: "Hide one saved article",
+      conditions: [{ field: "title", pattern: "Rust only" }],
+      conditionOperator: "and",
+      action: "hide",
+    });
+    expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
+      unread: 5,
+      starred: 1,
+      all: 6,
+    });
+    database.feeds.updateFeed(TEST_USER_ID, scopedFeedId, { paused: true });
+    database.feeds.deleteFeed(TEST_USER_ID, outsideFeedId);
+    expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
+      unread: 4,
+      starred: 1,
+      all: 5,
+    });
+    database.feeds.deleteFeed(TEST_USER_ID, scopedFeedId);
+    expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
+      unread: 0,
+      starred: 0,
+      all: 0,
+    });
+  });
+
   it("counts only remaining matches after subscriptions are removed", () => {
     const { database, scopedFeedId, outsideFeedId } = seededDatabase();
     const rule = database.rules.createRule(TEST_USER_ID, {
