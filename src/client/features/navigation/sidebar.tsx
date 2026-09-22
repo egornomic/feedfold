@@ -96,7 +96,7 @@ interface SidebarProps {
 }
 
 type SidebarContextMenuState =
-  | { kind: "add"; trigger: HTMLButtonElement; left: number; top: number; keyboard: boolean }
+  | { kind: "add"; trigger: HTMLButtonElement; left: number; top: number }
   | {
       kind: "feed";
       feed: Feed;
@@ -298,7 +298,6 @@ export function Sidebar({
                       trigger,
                       left: bounds.left,
                       top: bounds.bottom + 4,
-                      keyboard: event.detail === 0,
                     });
                 }}
                 onKeyDown={(event) => {
@@ -510,10 +509,7 @@ function SidebarContextMenu({
           ? "Add subscription or folder"
           : `${state.kind === "feed" ? state.feed.title : state.folder.name} actions`
       }
-      style={{
-        ...position,
-        ...(state.kind === "add" && state.keyboard ? { transition: "none" } : {}),
-      }}
+      style={position}
       onContextMenu={(event) => event.preventDefault()}
       onKeyDown={(event) => {
         event.stopPropagation();

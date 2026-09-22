@@ -1161,7 +1161,7 @@
   }
 }
 
-:root[data-input-modality="keyboard"] :is(.sidebar, .nav-scrim),
+:root[data-input-modality="keyboard"] :is(.sidebar, .nav-scrim, .sidebar-context-menu),
 :root[data-input-modality="keyboard"] .sidebar::before,
 :root[data-input-modality="keyboard"]
   .sidebar
