@@ -24,7 +24,7 @@ feedfold is the feed reader I built for myself. Try demo at https://feedfold.com
 
 The Electron app is fully local. It opens no HTTP port, needs no account or hosted backend, and sends application requests through a narrow IPC bridge. SQLite, background refreshes, article extraction, and the bundled headless browser all run inside the app. The hosted version remains available separately.
 
-After the first Feedfold release is published, install the Apple silicon build with Homebrew:
+Install the Apple silicon build with Homebrew:
 
 ```sh
 brew install --cask egornomic/tap/feedfold
