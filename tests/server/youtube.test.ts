@@ -1,8 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Sqlite from "better-sqlite3";
+import { chromium } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
@@ -105,6 +108,63 @@ function setup(limit: number | null = null, basePath = "") {
 }
 
 describe("YouTube subscription sync", () => {
+  it("keeps an existing login when returning from another site after starting YouTube connect", async () => {
+    const { database, service } = setup();
+    database.connection.prepare("DELETE FROM youtube_connections").run();
+    const auth = new AuthService(database.auth, 20, { registrationMode: "open" });
+    const session = await auth.register("oauth-reader", "test-password-long");
+    if (!session) throw new Error("Registration failed");
+    const services = createApplicationServices({ database, credentialCipher: null });
+    const app = await createApp({ ...services, authService: auth, youtubeService: service });
+    const provider = createServer((_request, response) => {
+      response.setHeader("Content-Type", "text/html");
+      response.end("<html><body>OAuth provider</body></html>");
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const origin = await app.listen({ host: "0.0.0.0", port: 0 });
+      const local = origin.replace("0.0.0.0", "127.0.0.1");
+      const external = `http://localhost:${(provider.address() as AddressInfo).port}`;
+      const context = await browser.newContext();
+      await context.addCookies([
+        {
+          name: "feedfold_session",
+          value: session.token,
+          url: local,
+          httpOnly: true,
+          sameSite: "Strict",
+        },
+      ]);
+      const page = await context.newPage();
+      await page.goto(`${local}/health`);
+      const authorization = await page.evaluate(async () => {
+        const response = await fetch("/api/youtube/connect", { method: "POST" });
+        return response.json() as Promise<{ url: string }>;
+      });
+      const state = new URL(authorization.url).searchParams.get("state");
+      await page.goto(`${external}/health`);
+      const responsePromise = page.waitForResponse((response) =>
+        response.url().includes("/api/youtube/callback"),
+      );
+      await page.evaluate((url) => {
+        window.location.href = url;
+      }, `${local}/api/youtube/callback?state=${state}&error=access_denied`);
+      const response = await responsePromise;
+      expect(response.status()).toBe(303);
+      expect(response.headers().location).toBe("/settings/feeds?youtube=cancelled");
+      expect(auth.userForToken(session.token)?.id).toBe(session.user.id);
+    } finally {
+      await browser.close();
+      await new Promise<void>((resolve, reject) =>
+        provider.close((error) => (error ? reject(error) : resolve())),
+      );
+      await app.close();
+      await services.refreshService.stop();
+      await services.extractionQueue.stop();
+    }
+  });
+
   it("adds channels once, adopts matching feeds, preserves organization, and removes unsubscribed feeds", () => {
     const { database, service } = setup();
     const folder = database.folders.createFolder(1, { name: "Learning" });

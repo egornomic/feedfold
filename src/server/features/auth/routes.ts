@@ -37,7 +37,10 @@ function webAuthnContext(request: FastifyRequest, configuredOrigin: string | und
   return { origin: origin.origin, rpId: origin.hostname };
 }
 
-function secureRequest(request: FastifyRequest, configuredOrigin: string | undefined): boolean {
+export function secureRequest(
+  request: FastifyRequest,
+  configuredOrigin: string | undefined,
+): boolean {
   return publicOrigin(request, configuredOrigin).protocol === "https:";
 }
 

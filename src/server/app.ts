@@ -170,7 +170,13 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   });
 
   // biome-ignore-start lint/nursery/noMisusedPromises: Fastify awaits async plugins; Biome incorrectly selects its callback overload.
-  await app.register(youtubeRoutes, { youtube: services.youtubeService, userId, basePath });
+  await app.register(youtubeRoutes, {
+    youtube: services.youtubeService,
+    userId,
+    basePath,
+    authService: services.authService,
+    publicOrigin: services.publicOrigin,
+  });
   if (services.youtubeService) {
     const youtube = services.youtubeService;
     app.addHook("onReady", async () => youtube.start());
