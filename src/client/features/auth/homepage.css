@@ -21,6 +21,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 32px;
+  animation: homepage-enter 300ms var(--ease-out) both;
 }
 
 .homepage-header h1 {
@@ -30,9 +31,11 @@
 
 .homepage-sign-in {
   display: inline-flex;
+  min-width: 92px;
   min-height: 44px;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: 0 18px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -45,6 +48,11 @@
     transform var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) ease,
     border-color var(--duration-fast) ease;
+}
+
+.homepage-sign-in[aria-busy="true"] {
+  cursor: progress;
+  opacity: 1;
 }
 
 .homepage-sign-in:active:not(:focus-visible) {
@@ -75,6 +83,24 @@
   grid-template-columns: 30px minmax(0, 1fr);
   align-items: first baseline;
   column-gap: 9px;
+  animation: homepage-enter 300ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .homepage-points li:nth-child(2) {
+    animation-delay: 50ms;
+  }
+
+  .homepage-points li:nth-child(3) {
+    animation-delay: 100ms;
+  }
+}
+
+@keyframes homepage-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 .homepage-cube {
@@ -97,6 +123,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .homepage-header,
+  .homepage-points li {
+    animation: homepage-fade var(--duration-reduced) ease both;
+  }
+
+  @keyframes homepage-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
   .homepage-sign-in {
     transition: none;
   }
@@ -107,7 +144,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .homepage-sign-in:hover {
+  .homepage-sign-in:hover:not(:disabled) {
     border-color: var(--accent);
     background: var(--accent-surface);
   }
