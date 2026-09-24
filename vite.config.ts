@@ -117,6 +117,7 @@ export default defineConfig({
         clientsClaim: true,
         globPatterns: ["**/*.{js,css,html,png}"],
         globIgnores: [
+          "legal/**",
           "**/{feeds,add-feed,rules,settings,shortcut-help,context-dialog,web-feed-setup,folder-form,rule-form,ai-markdown}-*.{js,css}",
         ],
         runtimeCaching: [
@@ -132,6 +133,7 @@ export default defineConfig({
         ],
         navigateFallback: appUrl("/index.html"),
         navigateFallbackDenylist: [
+          new RegExp(`^${appBasePattern}/(?:privacy|terms)(?:/|$)`),
           new RegExp(`^${apiPathPattern}`),
           ...(!demoMode ? [/^\/demo(?:\/|$)/] : []),
         ],

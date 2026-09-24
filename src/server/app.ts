@@ -35,7 +35,7 @@ export interface AppServices extends ApplicationServices {
 }
 
 function staticHeaders(reply: FastifyReply, path: string): void {
-  if (path.endsWith("sw.js") || path.endsWith("index.html")) {
+  if (path.endsWith("sw.js") || path.endsWith(".html")) {
     reply.header("Cache-Control", "no-cache");
   } else if (/[/\\]assets[/\\][^/\\]+-[\w-]{8}\.[\w]+$/.test(path)) {
     reply.header("Cache-Control", "public, max-age=31536000, immutable");
@@ -203,6 +203,10 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   // biome-ignore-end lint/nursery/noMisusedPromises: End of async plugin registrations.
 
   if (services.staticDir && existsSync(join(services.staticDir, "index.html"))) {
+    for (const page of ["privacy", "terms"]) {
+      app.get(`/${page}`, (_request, reply) => reply.sendFile(`legal/${page}.html`));
+      app.get(`/${page}/`, (_request, reply) => reply.redirect(`/${page}`, 308));
+    }
     const demoDir =
       services.demoDir && existsSync(join(services.demoDir, "index.html"))
         ? services.demoDir
