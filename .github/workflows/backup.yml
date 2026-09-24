@@ -36,7 +36,7 @@ jobs:
           name: feedfold-backup-${{ github.run_id }}
           path: feedfold-backup.tar.gz.age
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
       - name: Remove backup SSH credentials
         if: always()

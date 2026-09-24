@@ -1521,6 +1521,16 @@ const migrations: Migration[] = [
       CREATE INDEX article_rule_matches_rule_id_idx ON article_rule_matches(rule_id);
     `,
   },
+  {
+    sql: `
+      ALTER TABLE users ADD COLUMN invitation_used INTEGER NOT NULL DEFAULT 0
+        CHECK (invitation_used IN (0, 1));
+      UPDATE users SET invitation_used = 1 WHERE public_id IN
+        (SELECT creator_id FROM invitations WHERE redeemed_at IS NOT NULL);
+      DELETE FROM invitations WHERE creator_id NOT IN (SELECT public_id FROM users)
+        OR (recipient_id IS NOT NULL AND recipient_id NOT IN (SELECT public_id FROM users));
+    `,
+  },
 ];
 
 export function migrateDatabase(

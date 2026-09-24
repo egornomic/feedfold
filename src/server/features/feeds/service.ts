@@ -197,6 +197,10 @@ export class FeedService {
     return this.repository.deleteFeed(userId, id);
   }
 
+  deleteOrphanSources(): void {
+    this.repository.deleteOrphanSources();
+  }
+
   getWebFeedConfig(userId: number, id: number): WebFeedConfig | null {
     return this.repository.getWebFeedConfig(userId, id);
   }

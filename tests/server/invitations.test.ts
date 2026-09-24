@@ -331,8 +331,8 @@ describe("invitation registration through HTTP", () => {
     expect((await issuer.list()).invitations[0]?.redeemedAt).toBeNull();
   });
 
-  it("isolates invitation management by account and revokes unused links when their creator deletes their account", async () => {
-    const { server, ownerCookie } = await fixture();
+  it("deletes invitation history and disables unused links when their creator deletes their account", async () => {
+    const { server, database, ownerCookie } = await fixture();
     const api = await server("invite");
     const ownerInvite = await api.create();
     const friend = await api.register("friend", ownerInvite.body.code);
@@ -353,6 +353,44 @@ describe("invitation registration through HTTP", () => {
       (await api.request("DELETE", "/api/auth/account", undefined, friend.cookie)).status,
     ).toBe(204);
     expect((await api.register("orphan-link", friendInvite.body.code)).status).toBe(403);
+    expect(database.connection.prepare("SELECT COUNT(*) FROM invitations").pluck().get()).toBe(0);
+  });
+
+  it("keeps a used invitation allowance after its recipient deletes their account", async () => {
+    const { server } = await fixture();
+    const api = await server("invite");
+    const ownerInvite = await api.create();
+    const friend = await api.register("friend", ownerInvite.body.code);
+    const friendInvite = await api.create(friend.cookie);
+    const recipient = await api.register("recipient", friendInvite.body.code);
+    expect(
+      (await api.request("DELETE", "/api/auth/account", undefined, recipient.cookie)).status,
+    ).toBe(204);
+    expect((await api.list(friend.cookie)).invitations).toHaveLength(0);
+    expect((await api.list(friend.cookie)).allowance).toEqual({ kind: "limited", remaining: 0 });
+    expect((await api.create(friend.cookie)).status).toBe(403);
+  });
+
+  it("expires old unused invitation history while preserving active and redeemed invitations", async () => {
+    const { server, database } = await fixture();
+    const api = await server("invite");
+    const old = await api.create();
+    const replacement = await api.create(undefined, old.body.id);
+    const friend = await api.register("friend", replacement.body.code);
+    const expired = await api.create(friend.cookie);
+    const at = new Date("2026-09-24T12:00:00.000Z");
+    database.connection
+      .prepare("UPDATE invitations SET revoked_at = ? WHERE id = ?")
+      .run("2026-08-01T00:00:00.000Z", old.body.id);
+    database.connection
+      .prepare("UPDATE invitations SET expires_at = ? WHERE id IN (?, ?)")
+      .run("2026-08-01T00:00:00.000Z", expired.body.id, replacement.body.id);
+    const active = await api.create();
+    database.auth.pruneInvitationHistory(at);
+    expect(
+      database.connection.prepare("SELECT id FROM invitations ORDER BY id").pluck().all(),
+    ).toEqual([replacement.body.id, active.body.id].sort());
+    expect((await api.list(friend.cookie)).allowance).toEqual({ kind: "limited", remaining: 1 });
   });
 
   it("allows only one active invitation when requests race and refuses duplicate codes without revoking a replacement", async () => {

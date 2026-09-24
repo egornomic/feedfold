@@ -4,6 +4,8 @@ umask 077
 exec 8>/run/lock/feedfold-backup.lock
 flock 8
 mkdir -p /srv/feedfold/backups
+# The daily job removes copies a day before the seven-day limit.
+find /srv/feedfold/backups -maxdepth 1 -name 'feedfold-*.db.gz' -mmin +8639 -delete
 volume=$(docker volume inspect feedfold_feedfold-data --format '{{.Mountpoint}}')
 backup="/srv/feedfold/backups/feedfold-$(date -u +%Y%m%dT%H%M%S%NZ).db"
 sqlite3 "$volume/feedfold.db" ".backup '$backup'"

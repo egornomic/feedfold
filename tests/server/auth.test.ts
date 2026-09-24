@@ -640,8 +640,8 @@ describe("hosted account authentication", () => {
     ]) {
       expect(database.connection.prepare(`SELECT COUNT(*) FROM ${table}`).pluck().get()).toBe(0);
     }
-    expect(database.connection.prepare("SELECT COUNT(*) FROM feed_sources").pluck().get()).toBe(2);
-    expect(database.connection.prepare("SELECT COUNT(*) FROM articles").pluck().get()).toBe(1);
+    expect(database.connection.prepare("SELECT COUNT(*) FROM feed_sources").pluck().get()).toBe(0);
+    expect(database.connection.prepare("SELECT COUNT(*) FROM articles").pluck().get()).toBe(0);
     expect(
       (
         await app.inject({

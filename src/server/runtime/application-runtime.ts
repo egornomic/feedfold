@@ -105,14 +105,20 @@ export function createApplicationRuntime({
     ...(webFeed === undefined ? {} : { webFeed }),
   });
   const { extractionQueue, refreshService, webFeedService } = services;
+  let retentionTimer: ReturnType<typeof setInterval> | undefined;
 
   return {
     services,
     start(): void {
+      database.auth.pruneInvitationHistory();
+      database.feeds.deleteOrphanSources();
+      retentionTimer = setInterval(() => database.auth.pruneInvitationHistory(), 60 * 60 * 1_000);
+      retentionTimer.unref();
       extractionQueue.start();
       refreshService.start();
     },
     async close(): Promise<void> {
+      clearInterval(retentionTimer);
       await Promise.all([refreshService.stop(), extractionQueue.stop()]);
       await webFeedService.close();
       await closePublicNetwork();
