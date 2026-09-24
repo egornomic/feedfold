@@ -1,4 +1,25 @@
 /* Authentication */
+.login-description {
+  margin: 20px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--type-body);
+  line-height: 1.6;
+}
+
+.auth-legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 20px;
+  margin-top: 24px;
+  font-size: var(--type-supporting);
+}
+
+.auth-legal a {
+  color: var(--text-secondary);
+  text-underline-offset: 0.2em;
+}
+
 .auth-page {
   display: flex;
   width: 100%;

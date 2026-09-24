@@ -18,6 +18,7 @@ feedfold is the feed reader I built for myself. Try demo at https://feedfold.com
 - Installs as a Progressive Web App with a standalone window, home-screen shortcuts, and an offline application shell.
 - Supports OpenAI, Anthropic, and Gemini models for custom workflows such as summaries and article fact-checking.
 - OPML import/export.
+- YouTube account connection with daily subscription sync for the hosted app.
 - Preserves separate sorting settings for each feed or folder in the aggregate view. For example, you can configure X.com posts to always display chronologically from oldest to newest without affecting the sorting method for other feeds.
 
 ## Run the macOS desktop app
@@ -78,6 +79,18 @@ The included Compose deployment runs one Node.js 24.18.0 process, starts sandbox
 
 The health endpoint returns HTTP 200 when the SQLite query succeeds. Application data is stored in the `feedfold-data` volume at `/data/feedfold.db`.
 
+## Configure YouTube credentials
+
+For production, set `FEEDFOLD_YOUTUBE_SECRETS_FILE` in `.env` to the absolute path of a restricted JSON file outside the repository and database backups. Compose mounts this file read-only. Its fields are:
+
+```json
+{"clientId":"YOUR_CLIENT_ID","clientSecret":"YOUR_CLIENT_SECRET","tokenKey":"YOUR_BASE64_KEY"}
+```
+
+For local development with `npm run dev`, leave the file setting empty and set `FEEDFOLD_YOUTUBE_CLIENT_ID`, `FEEDFOLD_YOUTUBE_CLIENT_SECRET`, and `FEEDFOLD_YOUTUBE_TOKEN_KEY` in your gitignored `.env`.
+
+For a new installation, generate the encryption key once with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`. Preserve the existing key when changing configuration: replacing it prevents access to stored Google tokens. Keep a protected copy separately from database backups. A configured secrets file takes precedence over all three local values; missing fields do not fall back to `.env`.
+
 ## Configuration reference
 
 Compose reads these values from the shell or a project-level `.env` file:
@@ -86,7 +99,7 @@ Compose reads these values from the shell or a project-level `.env` file:
 | --- | --- | --- |
 | `FEEDFOLD_BIND_ADDRESS` | `127.0.0.1` | Host address that publishes the container port. Keep loopback when a local reverse proxy provides access. |
 | `FEEDFOLD_PORT` | `3000` | Host port forwarded to feedfold. |
-| `FEEDFOLD_BASE_PATH` | `/` | Browser-facing path where feedfold is mounted. Set this at build time, including the leading and trailing slash, when a reverse proxy publishes feedfold below a path such as `/feedfold/`. |
+| `FEEDFOLD_BASE_PATH` | `/` | Browser-facing path where feedfold is mounted. Set this at build time and server runtime, including the leading and trailing slash, when a reverse proxy publishes feedfold below a path such as `/feedfold/`. The Docker image preserves the value used during its build. |
 | `FEEDFOLD_DEPLOYMENT_MODE` | `private` | Use `private` for unrestricted desktop and self-hosted operation, or `public` for public-service inactivity, refresh, and subscription limits. |
 | `FEEDFOLD_PUBLIC_ORIGIN` | none | Exact external HTTPS origin used for secure cookies, passkeys, and browser-origin validation. |
 | `FEEDFOLD_REGISTRATION_MODE` | `closed` | Public-server registration policy: `closed`, `invite`, or `open`. Private servers only offer initial owner setup. |

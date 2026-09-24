@@ -145,6 +145,10 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
     <main className="auth-page">
       <section className="login-panel" aria-labelledby="auth-heading">
         <BrandIdentity className="login-brand" />
+        <p className="login-description">
+          Feedfold brings feeds, public websites and YouTube channels into a personal reading queue,
+          with folders, filters and optional AI summaries.
+        </p>
         <div className="login-heading">
           <h1 id="auth-heading">{actionLabel}</h1>
           <p>
@@ -293,6 +297,10 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
               : "Checking account availability…"}
           </p>
         )}
+        <nav className="auth-legal" aria-label="Legal">
+          <a href={appUrl("/privacy")}>Privacy Policy</a>
+          <a href={appUrl("/terms")}>Terms of Service</a>
+        </nav>
       </section>
     </main>
   );

@@ -79,7 +79,15 @@ function authenticatedUser(request: FastifyRequest, authService: AuthService) {
 
 export async function authRoutes(
   app: FastifyInstance,
-  { authService, configuredOrigin }: { authService: AuthService; configuredOrigin?: string },
+  {
+    authService,
+    configuredOrigin,
+    beforeDeleteAccount,
+  }: {
+    authService: AuthService;
+    configuredOrigin?: string;
+    beforeDeleteAccount?: (userId: number) => Promise<void>;
+  },
 ): Promise<void> {
   app.get("/api/auth/config", async (request) => ({
     registrationAvailable: authService.registrationAvailable(),
@@ -259,6 +267,7 @@ export async function authRoutes(
   app.delete("/api/auth/account", async (request, reply) => {
     const user = authenticatedUser(request, authService);
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
+    await beforeDeleteAccount?.(user.id);
     if (!authService.deleteAccount(user.id))
       return reply.code(401).send({ error: "Sign in to continue." });
     return reply

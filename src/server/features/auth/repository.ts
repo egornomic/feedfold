@@ -127,6 +127,10 @@ export class AuthRepository {
     this.sqlite
       .prepare("UPDATE invitations SET redeemed_at = ?, recipient_id = ? WHERE code_hash = ?")
       .run(new Date().toISOString(), recipientId, hash);
+    this.sqlite
+      .prepare(`UPDATE users SET invitation_used = 1
+        WHERE public_id = (SELECT creator_id FROM invitations WHERE code_hash = ?)`)
+      .run(hash);
   }
 
   invitationAllowance(userId: number): {
@@ -135,18 +139,15 @@ export class AuthRepository {
   } | null {
     const user = this.sqlite
       .prepare(
-        "SELECT public_id AS publicId, unlimited_invites AS unlimited FROM users WHERE id = ? AND enabled = 1",
+        "SELECT public_id AS publicId, unlimited_invites AS unlimited, invitation_used AS used FROM users WHERE id = ? AND enabled = 1",
       )
-      .get(userId) as { publicId: string; unlimited: number } | undefined;
+      .get(userId) as { publicId: string; unlimited: number; used: number } | undefined;
     if (!user) return null;
-    const used = this.sqlite
-      .prepare("SELECT 1 FROM invitations WHERE creator_id = ? AND redeemed_at IS NOT NULL")
-      .get(user.publicId);
     return {
       publicId: user.publicId,
       allowance: user.unlimited
         ? { kind: "unlimited" }
-        : { kind: "limited", remaining: used ? 0 : 1 },
+        : { kind: "limited", remaining: user.used ? 0 : 1 },
     };
   }
 
@@ -544,15 +545,27 @@ export class AuthRepository {
   deleteAccount(userId: number): boolean {
     return this.sqlite.transaction(() => {
       this.sqlite
-        .prepare(`UPDATE invitations SET revoked_at = ? WHERE creator_id =
-        (SELECT public_id FROM users WHERE id = ?) AND redeemed_at IS NULL AND revoked_at IS NULL`)
-        .run(new Date().toISOString(), userId);
+        .prepare(`DELETE FROM invitations WHERE creator_id =
+        (SELECT public_id FROM users WHERE id = ?) OR recipient_id =
+        (SELECT public_id FROM users WHERE id = ?)`)
+        .run(userId, userId);
       this.sqlite.prepare("DELETE FROM quota_daily_usage WHERE scope = ?").run(`user:${userId}`);
-      return (
+      const deleted =
         this.sqlite.prepare("DELETE FROM users WHERE id = ? AND enabled = 1").run(userId).changes >
-        0
-      );
+        0;
+      if (deleted) this.feeds.deleteOrphanSources();
+      return deleted;
     })();
+  }
+
+  pruneInvitationHistory(at = new Date()): void {
+    // Purge one hour before the 30-day boundary so hourly maintenance stays within it.
+    const cutoff = new Date(at.getTime() - (30 * 24 - 1) * 60 * 60 * 1_000).toISOString();
+    this.sqlite
+      .prepare(`DELETE FROM invitations
+        WHERE (revoked_at IS NOT NULL AND revoked_at <= ?)
+           OR (redeemed_at IS NULL AND expires_at <= ?)`)
+      .run(cutoff, cutoff);
   }
 
   markSessionRecentlyAuthenticated(hash: string, at: string): boolean {

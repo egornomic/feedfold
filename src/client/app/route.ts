@@ -120,10 +120,17 @@ export function useAppRoute(basePath: string): AppRouteController {
 
   useEffect(() => {
     const parsed = parseAppRoute(window.location.pathname, window.location.search, basePath);
+    const url = new URL(appRouteUrl(parsed, basePath), window.location.origin);
+    if (parsed.kind === "settings" && parsed.category === "feeds") {
+      const result = new URLSearchParams(window.location.search).get("youtube");
+      if (result === "connected" || result === "cancelled" || result === "failed") {
+        url.searchParams.set("youtube", result);
+      }
+    }
     window.history.replaceState(
       { ...historyState(), feedfold: true },
       "",
-      appRouteUrl(parsed, basePath),
+      `${url.pathname}${url.search}`,
     );
     const restoreRoute = () => {
       applyRoute(parseAppRoute(window.location.pathname, window.location.search, basePath));

@@ -249,7 +249,7 @@ export class FeedRepository {
       .run(sourceId, sourceId);
   }
 
-  private deleteOrphanSources(): void {
+  deleteOrphanSources(): void {
     this.sqlite
       .prepare(
         `DELETE FROM feed_sources

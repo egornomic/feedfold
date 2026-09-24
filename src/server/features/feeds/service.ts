@@ -184,6 +184,17 @@ export class FeedService {
   ): Feed | null {
     const existing = this.repository.getFeed(userId, id);
     if (!existing) return null;
+    if (
+      input.feedUrl !== undefined &&
+      new URL(input.feedUrl).href !== existing.feedUrl &&
+      this.sqlite
+        .prepare("SELECT 1 FROM youtube_feeds WHERE user_id = ? AND feed_id = ?")
+        .get(userId, id)
+    ) {
+      throw new InvalidRequestError(
+        "A synced YouTube feed must keep its channel URL. Add a separate feed for another source.",
+      );
+    }
     return this.sqlite.transaction(() => {
       const updated = this.repository.updateFeed(userId, id, input);
       if (updated && input.folderId !== undefined && input.folderId !== existing.folderId) {
@@ -195,6 +206,10 @@ export class FeedService {
 
   deleteFeed(userId: number, id: number): boolean {
     return this.repository.deleteFeed(userId, id);
+  }
+
+  deleteOrphanSources(): void {
+    this.repository.deleteOrphanSources();
   }
 
   getWebFeedConfig(userId: number, id: number): WebFeedConfig | null {

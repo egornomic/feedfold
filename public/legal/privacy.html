@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="How the public Feedfold app collects, uses, stores, and deletes your information." />
+    <link rel="canonical" href="https://feedfold.com/privacy" />
+    <link rel="icon" href="./icons/favicon-32.png" />
+    <link rel="stylesheet" href="./legal/style.css" />
+    <title>Privacy Policy · Feedfold</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to policy</a>
+    <header><a class="brand" href="./">feedfold</a><nav aria-label="Legal"><a href="./privacy" aria-current="page">Privacy Policy</a><a href="./terms">Terms of Service</a></nav></header>
+    <main id="main-content" tabindex="-1">
+      <h1>Privacy Policy</h1>
+      <p class="updated">Updated 24 September 2026</p>
+
+      <h2 id="data">What we keep</h2>
+      <ul>
+        <li><strong>Account:</strong> username, password hash or passkey public keys and device details, sessions, and account activity dates. We do not ask for your real name or email, or receive your passkey’s private key or biometrics.</li>
+        <li><strong>Reader:</strong> feed addresses, subscriptions, folders, filters, preferences, reading state, saved articles, and imported subscriptions. Feed content includes text, author details, media links and fetch errors.</li>
+        <li><strong>AI:</strong> provider settings, prompts, summaries, translations and usage counts. Your browser encrypts API keys with AES-256-GCM before saving them on the server. The unlocking key stays in your browser; the server cannot decrypt the stored keys on its own. When you use AI, your browser decrypts the API key and sends it through Feedfold’s server to your provider.</li>
+        <li><strong>Operations:</strong> invitations, usage limits, sign-in checks and security logs. The server receives your IP address and uses derived identifiers to limit abuse. If you contact us, we receive your message and contact details.</li>
+      </ul>
+      <p>We use this data to run your reader, sign you in, fetch updates, handle requested AI features, answer questions and prevent abuse. Feed addresses can contain private tokens; adding one sends it and its content to Feedfold.</p>
+
+      <h2 id="providers">Who receives it</h2>
+      <ul>
+        <li><strong>Hosting:</strong> <a href="https://www.digitalocean.com/legal/privacy-policy">DigitalOcean</a> hosts the server and database in Frankfurt, Germany. <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare</a> handles web traffic, including IP addresses, and receives traffic statistics and browser network-error reports. <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub</a> stores encrypted backups. These providers may process data outside Germany.</li>
+        <li><strong>Content hosts:</strong> Feedfold fetches your chosen sources, including YouTube, Telegram and public Nitter servers for X feeds. Images, media and embeds can connect directly from your browser, sharing your IP address, browser and referrer information, and cookies. External content may include ads or tracking.</li>
+        <li><strong>Optional AI:</strong> your chosen <a href="https://openai.com/policies/privacy-policy/">OpenAI</a>, <a href="https://www.anthropic.com/legal/privacy">Anthropic</a> or <a href="https://policies.google.com/privacy">Gemini</a> provider receives your API key, relevant article text or video link, title/author details, prompt and settings through Feedfold’s server. Video summaries use Gemini. Search-assisted requests may use the provider’s web search. Provider rules govern retention, training and human review; deleting Feedfold data does not delete their copies.</li>
+      </ul>
+      <p>Feedfold has no advertising system, session replay or product analytics SDK. Administrators can access server data to operate the service. Public source content is shared between accounts following the same source; reading state and settings belong to each account.</p>
+
+      <h2 id="storage">Browser storage</h2>
+      <p>A session cookie keeps you signed in for up to 30 days; sign-out or inactivity can end the session sooner. Local storage remembers preferences. IndexedDB holds your browser identifier and the key that unlocks your encrypted AI credentials on the server. Signing out removes that browser’s saved AI credentials and unlocking key.</p>
+      <p>The service worker caches app files, not authenticated API responses. Clear Feedfold’s site data to remove browser preferences, keys and caches. You will need to enter AI keys again. Cloudflare and content hosts may use their own cookies.</p>
+
+      <h2 id="youtube">Google and YouTube</h2>
+      <p>Feedfold uses YouTube API Services for channel subscriptions and embedded playback. Loading a player sends data to YouTube even before Play. See the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</p>
+      <p>Connecting YouTube grants <code>youtube.readonly</code> (“View your YouTube account”) permission. Feedfold uses it to read your subscribed channels and import them as feeds. It does not change your YouTube subscriptions or publish anything.</p>
+      <p>Feedfold stores an encrypted refresh token on the backend, with its encryption key kept separately from the database, to sync daily while your browser is closed. Short-lived access tokens are used in memory and are not saved to the database. A complete, successful sync always removes corresponding feeds when it confirms an unsubscription. Failed or incomplete syncs do not trigger those removals.</p>
+      <p>Google account data is used only for subscription syncing, not advertising, sale, AI training or sharing with AI providers.</p>
+      <p>Disconnecting stops syncing and immediately revokes the Google token. Feedfold deletes the stored tokens and data imported through that connection as soon as possible, within seven calendar days. The same deletion deadline applies when you delete your account or request deletion at <a href="mailto:privacy@feedfold.com">privacy@feedfold.com</a>.</p>
+      <p>You can also revoke access in <a href="https://security.google.com/settings/security/permissions">Google’s account permissions</a>. Feedfold periodically checks authorization and deletes the stored tokens and associated YouTube data as soon as possible, within 30 calendar days of that revocation.</p>
+      <p>Stored YouTube subscription data is refreshed or deleted within 30 calendar days, including when syncing is paused. YouTube connection tokens and synced subscriptions are excluded from database backups, so restoring a backup does not restore that connection or its synced feeds. They take precedence over the general retention rules below. Deleting data in Feedfold does not delete anything on YouTube.</p>
+
+      <h2 id="retention">Retention and deletion</h2>
+      <p>Reader data stays until you remove it or delete your account. Inactivity pauses refreshes after seven days; it does not delete data.</p>
+      <p>Removing a feed deletes your subscription and reading state. Deleting your account removes its credentials, reader data, AI results and related invitation records from the active database. Unused sources and articles are removed; content another account uses remains.</p>
+      <p>Expired or revoked unused invitations are removed within 30 days during normal operation. Redeemed records remain while the accounts involved exist.</p>
+      <p>Backups are configured for a seven-day limit, with at most two copies on the server. Account deletion does not edit existing backups. For data other than YouTube connection data, outages can delay local cleanup and restoring a backup can bring deleted data back. Email <a href="mailto:privacy@feedfold.com">privacy@feedfold.com</a> if that happens.</p>
+      <p>Application logs keep request routes, status, timing and security events, without request bodies, credentials, raw IPs or full URLs. They rotate by size, keeping up to two 5 MB files, with no fixed time limit. Hosting providers have separate log retention rules.</p>
+
+      <h2 id="controls">Your controls</h2>
+      <p>Remove feeds or export subscriptions in Manage feeds. OPML exports subscriptions, not all account data. In Settings you can manage sign-in methods, remove AI keys or delete your account.</p>
+      <p>Email <a href="mailto:privacy@feedfold.com">privacy@feedfold.com</a> for privacy questions, complaints, access, correction or deletion requests. Depending on applicable law, you may also have rights to portability, restriction, objection, withdrawal of consent or a complaint to a data protection authority.</p>
+
+      <h2 id="security">Security</h2>
+      <p>Feedfold uses HTTPS, password hashing, account access checks and rate limits. Saved AI keys and off-server backups are encrypted. Account data is not end-to-end encrypted, and AI requests pass through the server. No system is completely secure.</p>
+      <p>Changes to this policy will appear here with an updated date.</p>
+    </main>
+    <footer><a href="./">Back to Feedfold</a><a href="./terms">Terms of Service</a></footer>
+  </body>
+</html>

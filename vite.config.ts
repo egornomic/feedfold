@@ -1,17 +1,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { normalizeBasePath } from "./src/shared/base-path";
 
 const apiOrigin = process.env.FEEDFOLD_DEV_API_ORIGIN ?? "http://127.0.0.1:43001";
 const devPort = Number(process.env.FEEDFOLD_DEV_PORT ?? 45173);
 const demoMode = process.env.VITE_FEEDFOLD_DEMO === "true";
-const configuredBasePath = process.env.FEEDFOLD_BASE_PATH ?? "/";
-if (!configuredBasePath.startsWith("/")) {
-  throw new Error("FEEDFOLD_BASE_PATH must start with /");
-}
-const appBasePath = configuredBasePath === "/" ? "" : configuredBasePath.replace(/\/+$/, "");
+const appBasePath = normalizeBasePath(process.env.FEEDFOLD_BASE_PATH);
 const appBaseUrl = `${appBasePath}/`;
 const appUrl = (path: string) => `${appBasePath}${path}`;
 const appBasePattern = appBasePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -19,6 +16,24 @@ const apiPathPattern = `${appBasePattern}/(?:api|health)(?:/|$)`;
 const stripBasePath = (path: string) => path.slice(appBasePath.length) || "/";
 const demoApiPath = fileURLToPath(new URL("./src/demo/api.ts", import.meta.url));
 const demoSocialImagePath = fileURLToPath(new URL("./src/demo/assets/og.png", import.meta.url));
+
+function legalPages(server: ViteDevServer | PreviewServer): void {
+  server.middlewares.use((request, response, next) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    for (const page of ["privacy", "terms"]) {
+      if (url.pathname === appUrl(`/${page}/`)) {
+        response.writeHead(308, { Location: `${appUrl(`/${page}`)}${url.search}` });
+        response.end();
+        return;
+      }
+      if (url.pathname === appUrl(`/${page}`)) {
+        request.url = `${appUrl(`/legal/${page}.html`)}${url.search}`;
+        break;
+      }
+    }
+    next();
+  });
+}
 
 function staticDemoPlugin(): Plugin {
   return {
@@ -68,6 +83,11 @@ export default defineConfig({
       : [],
   },
   plugins: [
+    {
+      name: "feedfold-legal-pages",
+      configureServer: legalPages,
+      configurePreviewServer: legalPages,
+    },
     react(),
     VitePWA({
       registerType: "prompt",
@@ -117,6 +137,7 @@ export default defineConfig({
         clientsClaim: true,
         globPatterns: ["**/*.{js,css,html,png}"],
         globIgnores: [
+          "legal/**",
           "**/{feeds,add-feed,rules,settings,shortcut-help,context-dialog,web-feed-setup,folder-form,rule-form,ai-markdown}-*.{js,css}",
         ],
         runtimeCaching: [
@@ -132,6 +153,7 @@ export default defineConfig({
         ],
         navigateFallback: appUrl("/index.html"),
         navigateFallbackDenylist: [
+          new RegExp(`^${appBasePattern}/(?:privacy|terms)(?:/|$)`),
           new RegExp(`^${apiPathPattern}`),
           ...(!demoMode ? [/^\/demo(?:\/|$)/] : []),
         ],
