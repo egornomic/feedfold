@@ -95,6 +95,15 @@ export class YouTubeService {
     return url.href;
   }
 
+  consumeConnectionAttempt(userId: number): number | null {
+    return this.database.auth.consumeRateLimit(
+      digest(`youtube-connect:${userId}`),
+      5,
+      10 * 60_000,
+      Date.now(),
+    );
+  }
+
   consumeState(userId: number, sessionToken: string, state: string): string {
     const row = this.database.connection
       .prepare(`DELETE FROM youtube_oauth_states

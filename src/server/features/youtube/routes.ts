@@ -36,12 +36,19 @@ export async function youtubeRoutes(
     "/api/youtube",
     async (request) => options.youtube?.status(options.userId(request)) ?? unavailableYouTube,
   );
-  app.post("/api/youtube/connect", async (request) => ({
-    url: service().authorize(
-      options.userId(request),
-      sessionToken(request.headers.cookie) as string,
-    ),
-  }));
+  app.post("/api/youtube/connect", async (request, reply) => {
+    const youtube = service();
+    const userId = options.userId(request);
+    const retryAfter = youtube.consumeConnectionAttempt(userId);
+    if (retryAfter !== null) {
+      return reply.header("Retry-After", retryAfter).code(429).send({
+        error: "Too many YouTube connection attempts. Try again in a few minutes.",
+      });
+    }
+    return {
+      url: youtube.authorize(userId, sessionToken(request.headers.cookie) as string),
+    };
+  });
   app.get("/api/youtube/callback", async (request, reply) => {
     const input = callback.safeParse(request.query);
     let result = "failed";

@@ -312,6 +312,48 @@ describe("YouTube HTTP account boundaries", () => {
         headers: { cookie },
       });
       expect(replayed.headers.location).toBe("/settings/feeds?youtube=failed");
+
+      let pendingState: string | null = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const allowed = await app.inject({
+          method: "POST",
+          url: "/api/youtube/connect",
+          headers: { cookie, origin: "http://localhost:45173" },
+        });
+        expect(allowed.statusCode).toBe(200);
+        pendingState = new URL(allowed.json<{ url: string }>().url).searchParams.get("state");
+      }
+      const newSession = await auth.login("first-reader", "test-password-long");
+      if (!newSession) throw new Error("Login failed");
+      const throttled = await app.inject({
+        method: "POST",
+        url: "/api/youtube/connect",
+        headers: {
+          cookie: auth.sessionCookie(newSession.token, false).split(";", 1)[0],
+          origin: "http://localhost:45173",
+        },
+      });
+      expect(throttled.statusCode).toBe(429);
+      expect(Number(throttled.headers["retry-after"])).toBeGreaterThan(0);
+      expect(Number(throttled.headers["retry-after"])).toBeLessThanOrEqual(600);
+      const otherConnect = await app.inject({
+        method: "POST",
+        url: "/api/youtube/connect",
+        headers: { cookie: otherCookie, origin: "http://localhost:45173" },
+      });
+      expect(otherConnect.statusCode).toBe(200);
+      const pendingCallback = await app.inject({
+        url: `/api/youtube/callback?state=${pendingState}&error=access_denied`,
+        headers: { cookie },
+      });
+      expect(pendingCallback.headers.location).toBe("/settings/feeds?youtube=cancelled");
+      database.connection.prepare("UPDATE auth_rate_limits SET reset_at = 0").run();
+      const afterCooldown = await app.inject({
+        method: "POST",
+        url: "/api/youtube/connect",
+        headers: { cookie, origin: "http://localhost:45173" },
+      });
+      expect(afterCooldown.statusCode).toBe(200);
       const disconnected = await app.inject({
         method: "DELETE",
         url: "/api/youtube",
