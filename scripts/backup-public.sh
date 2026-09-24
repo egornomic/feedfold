@@ -9,7 +9,7 @@ find /srv/feedfold/backups -maxdepth 1 -name 'feedfold-*.db.gz' -mmin +8639 -del
 volume=$(docker volume inspect feedfold_feedfold-data --format '{{.Mountpoint}}')
 backup="/srv/feedfold/backups/feedfold-$(date -u +%Y%m%dT%H%M%S%NZ).db"
 sqlite3 "$volume/feedfold.db" ".backup '$backup'"
-sqlite3 "$backup" < /usr/local/share/feedfold/sanitize-youtube-backup.sql
+sqlite3 "$backup" < /srv/feedfold/app/scripts/sanitize-youtube-backup.sql
 if [[ $(sqlite3 "$backup" 'PRAGMA integrity_check;') != ok ]]; then
   echo 'Database backup failed its integrity check.' >&2
   exit 1

@@ -141,6 +141,7 @@ const youtubeService = youtubeConfig
   ? new YouTubeService(database, runtime.services.refreshService, youtubeConfig)
   : undefined;
 const app = await createApp({
+  basePath: process.env.FEEDFOLD_BASE_PATH ?? "/",
   ...(youtubeService ? { youtubeService } : {}),
   ...runtime.services,
   authService,

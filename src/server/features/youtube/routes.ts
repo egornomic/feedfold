@@ -25,6 +25,7 @@ export async function youtubeRoutes(
   options: {
     youtube: YouTubeService | undefined;
     userId: (request: FastifyRequest) => number;
+    basePath: string;
   },
 ): Promise<void> {
   const service = () => {
@@ -68,7 +69,7 @@ export async function youtubeRoutes(
         /* Do not expose Google's callback or tokens in error output. */
       }
     }
-    return reply.redirect(`/settings/feeds?youtube=${result}`, 303);
+    return reply.redirect(`${options.basePath}/settings/feeds?youtube=${result}`, 303);
   });
   app.delete("/api/youtube", async (request, reply) => {
     await service().disconnect(options.userId(request));

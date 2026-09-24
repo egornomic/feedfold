@@ -12,7 +12,10 @@ RUN npm run build:client && npm run build:server && npm run build:demo && npm pr
 
 FROM node:24.18.0-bookworm-slim AS runtime
 
+ARG FEEDFOLD_BASE_PATH=/
+
 ENV NODE_ENV=production \
+    FEEDFOLD_BASE_PATH=$FEEDFOLD_BASE_PATH \
     HOST=0.0.0.0 \
     PORT=3000 \
     DATABASE_PATH=/data/feedfold.db \

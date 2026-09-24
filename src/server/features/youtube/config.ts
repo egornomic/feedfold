@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { normalizeBasePath } from "../../../shared/base-path.js";
 
 export interface YouTubeConfig {
   clientId: string;
@@ -44,6 +45,9 @@ export function youtubeConfiguration(
     clientId,
     clientSecret,
     encryptionKey,
-    redirectUri: new URL("/api/youtube/callback", publicOrigin).href,
+    redirectUri: new URL(
+      `${normalizeBasePath(environment.FEEDFOLD_BASE_PATH)}/api/youtube/callback`,
+      publicOrigin,
+    ).href,
   };
 }

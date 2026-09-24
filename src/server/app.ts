@@ -8,6 +8,7 @@ import Fastify, {
   type FastifyServerOptions,
   LogController,
 } from "fastify";
+import { normalizeBasePath } from "../shared/base-path.js";
 import { readerMutationRoutes } from "../shared/reader-mutations.js";
 import { applicationError } from "./application-error.js";
 import { ApplicationService, type ApplicationServices } from "./application-service.js";
@@ -35,6 +36,7 @@ export interface AppServices extends ApplicationServices {
   demoDir?: string;
   logger?: FastifyServerOptions["logger"];
   publicOrigin?: string;
+  basePath?: string;
 }
 
 function staticHeaders(reply: FastifyReply, path: string): void {
@@ -46,6 +48,7 @@ function staticHeaders(reply: FastifyReply, path: string): void {
 }
 
 export async function createApp(services: AppServices): Promise<FastifyInstance> {
+  const basePath = normalizeBasePath(services.basePath);
   const app = Fastify({
     logger: services.logger ?? false,
     logController: new LogController({ disableRequestLogging: true }),
@@ -167,7 +170,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   });
 
   // biome-ignore-start lint/nursery/noMisusedPromises: Fastify awaits async plugins; Biome incorrectly selects its callback overload.
-  await app.register(youtubeRoutes, { youtube: services.youtubeService, userId });
+  await app.register(youtubeRoutes, { youtube: services.youtubeService, userId, basePath });
   if (services.youtubeService) {
     const youtube = services.youtubeService;
     app.addHook("onReady", async () => youtube.start());
@@ -175,7 +178,14 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   }
   await app.register(authRoutes, {
     beforeDeleteAccount: async (id: number) => {
-      await services.youtubeService?.disconnect(id);
+      try {
+        await services.youtubeService?.disconnect(id);
+      } catch {
+        app.log.warn(
+          { event: "youtube_revocation_failed" },
+          "Google access could not be revoked; local account deletion will continue",
+        );
+      }
     },
     authService: services.authService,
     ...(services.publicOrigin === undefined ? {} : { configuredOrigin: services.publicOrigin }),
@@ -218,7 +228,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   if (services.staticDir && existsSync(join(services.staticDir, "index.html"))) {
     for (const page of ["privacy", "terms"]) {
       app.get(`/${page}`, (_request, reply) => reply.sendFile(`legal/${page}.html`));
-      app.get(`/${page}/`, (_request, reply) => reply.redirect(`/${page}`, 308));
+      app.get(`/${page}/`, (_request, reply) => reply.redirect(`${basePath}/${page}`, 308));
     }
     const demoDir =
       services.demoDir && existsSync(join(services.demoDir, "index.html"))

@@ -42,6 +42,12 @@ describe("YouTube configuration", () => {
       encryptionKey: key,
       redirectUri: "http://localhost:45173/api/youtube/callback",
     });
+    expect(
+      youtubeConfiguration(
+        { ...environment, FEEDFOLD_BASE_PATH: "/feedfold/" },
+        "https://example.test",
+      )?.redirectUri,
+    ).toBe("https://example.test/feedfold/api/youtube/callback");
     const fileEnvironment = { ...environment, FEEDFOLD_YOUTUBE_SECRETS_FILE: file };
     writeFileSync(
       file,
@@ -64,7 +70,7 @@ describe("YouTube configuration", () => {
   });
 });
 
-function setup(limit: number | null = null) {
+function setup(limit: number | null = null, basePath = "") {
   const database = new AppDatabase(":memory:", 20, {
     ...PRIVATE_DEPLOYMENT_POLICY,
     maxFeedsPerAccount: limit,
@@ -80,7 +86,7 @@ function setup(limit: number | null = null) {
     clientId: "test-client",
     clientSecret: "test-secret",
     encryptionKey: key,
-    redirectUri: "http://localhost:45173/api/youtube/callback",
+    redirectUri: `http://localhost:45173${basePath}/api/youtube/callback`,
   });
   const connect = (userId: number) =>
     database.connection
@@ -252,114 +258,29 @@ describe("YouTube backup privacy", () => {
 });
 
 describe("YouTube HTTP account boundaries", () => {
-  it("requires authentication, rejects cross-site mutations, and rejects callbacks from a different login", async () => {
+  it("deletes the local account and imported feeds when Google access cannot be revoked", async () => {
     const { database, service } = setup();
-    database.connection.prepare("UPDATE youtube_connections SET next_sync_at = '2100-01-01'").run();
-    const auth = new AuthService(database.auth, 20, { maxAccounts: 2, registrationMode: "open" });
-    const firstSession = await auth.register("first-reader", "test-password-long");
-    const secondSession = await auth.register("second-reader", "test-password-long");
-    if (!firstSession || !secondSession) throw new Error("Registration failed");
-    database.connection.prepare("UPDATE sessions SET recent_auth_at = '2000-01-01'").run();
+    const auth = new AuthService(database.auth, 20);
+    const session = await auth.register("deleting-reader", "test-password-long");
+    if (!session) throw new Error("Registration failed");
+    service.reconcile(1, [first]);
+    database.connection
+      .prepare("UPDATE youtube_connections SET refresh_token = 'corrupted-token'")
+      .run();
     const services = createApplicationServices({ database, credentialCipher: null });
-    const app = await createApp({
-      ...services,
-      authService: auth,
-      youtubeService: service,
-      publicOrigin: "http://localhost:45173",
-    });
-    const cookie = auth.sessionCookie(firstSession.token, false).split(";", 1)[0];
-    const otherCookie = auth.sessionCookie(secondSession.token, false).split(";", 1)[0];
+    const app = await createApp({ ...services, authService: auth, youtubeService: service });
+    const cookie = auth.sessionCookie(session.token, false).split(";", 1)[0];
     try {
-      expect((await app.inject({ url: "/api/youtube" })).statusCode).toBe(401);
-      expect(
-        (
-          await app.inject({
-            method: "POST",
-            url: "/api/youtube/connect",
-            headers: { cookie, origin: "https://another-site.example" },
-          })
-        ).statusCode,
-      ).toBe(403);
-      expect(
-        (
-          await app.inject({
-            url: "/api/youtube",
-            headers: { cookie, "x-feedfold-account": secondSession.user.id },
-          })
-        ).statusCode,
-      ).toBe(401);
       const response = await app.inject({
-        method: "POST",
-        url: "/api/youtube/connect",
-        headers: { cookie, origin: "http://localhost:45173" },
-      });
-      expect(response.statusCode).toBe(200);
-      const state = new URL(response.json<{ url: string }>().url).searchParams.get("state");
-      const otherCallback = await app.inject({
-        url: `/api/youtube/callback?state=${state}&error=access_denied`,
-        headers: { cookie: otherCookie },
-      });
-      expect(otherCallback.headers.location).toBe("/settings/feeds?youtube=failed");
-      const cancelled = await app.inject({
-        url: `/api/youtube/callback?state=${state}&error=access_denied`,
-        headers: { cookie },
-      });
-      expect(cancelled.headers.location).toBe("/settings/feeds?youtube=cancelled");
-      expect(cancelled.headers["referrer-policy"]).toBe("no-referrer");
-      expect(cancelled.headers["cache-control"]).toBe("no-store");
-      const replayed = await app.inject({
-        url: `/api/youtube/callback?state=${state}&error=access_denied`,
-        headers: { cookie },
-      });
-      expect(replayed.headers.location).toBe("/settings/feeds?youtube=failed");
-
-      let pendingState: string | null = null;
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const allowed = await app.inject({
-          method: "POST",
-          url: "/api/youtube/connect",
-          headers: { cookie, origin: "http://localhost:45173" },
-        });
-        expect(allowed.statusCode).toBe(200);
-        pendingState = new URL(allowed.json<{ url: string }>().url).searchParams.get("state");
-      }
-      const newSession = await auth.login("first-reader", "test-password-long");
-      if (!newSession) throw new Error("Login failed");
-      const throttled = await app.inject({
-        method: "POST",
-        url: "/api/youtube/connect",
-        headers: {
-          cookie: auth.sessionCookie(newSession.token, false).split(";", 1)[0],
-          origin: "http://localhost:45173",
-        },
-      });
-      expect(throttled.statusCode).toBe(429);
-      expect(Number(throttled.headers["retry-after"])).toBeGreaterThan(0);
-      expect(Number(throttled.headers["retry-after"])).toBeLessThanOrEqual(600);
-      const otherConnect = await app.inject({
-        method: "POST",
-        url: "/api/youtube/connect",
-        headers: { cookie: otherCookie, origin: "http://localhost:45173" },
-      });
-      expect(otherConnect.statusCode).toBe(200);
-      const pendingCallback = await app.inject({
-        url: `/api/youtube/callback?state=${pendingState}&error=access_denied`,
-        headers: { cookie },
-      });
-      expect(pendingCallback.headers.location).toBe("/settings/feeds?youtube=cancelled");
-      database.connection.prepare("UPDATE auth_rate_limits SET reset_at = 0").run();
-      const afterCooldown = await app.inject({
-        method: "POST",
-        url: "/api/youtube/connect",
-        headers: { cookie, origin: "http://localhost:45173" },
-      });
-      expect(afterCooldown.statusCode).toBe(200);
-      const disconnected = await app.inject({
         method: "DELETE",
-        url: "/api/youtube",
-        headers: { cookie: otherCookie, origin: "http://localhost:45173" },
+        url: "/api/auth/account",
+        headers: { cookie },
       });
-      expect(disconnected.statusCode).toBe(204);
+      expect(response.statusCode).toBe(204);
+      expect(auth.userForToken(session.token)).toBeNull();
+      expect(service.status(1)).toMatchObject({ connected: false, feedCount: 0 });
+      expect(database.feeds.listFeeds(1)).toHaveLength(0);
+      expect(database.connection.pragma("foreign_key_check")).toEqual([]);
     } finally {
       await app.close();
       await services.refreshService.stop();
@@ -367,4 +288,132 @@ describe("YouTube HTTP account boundaries", () => {
       await services.webFeedService.close();
     }
   });
+
+  it.each(["", "/feedfold"])(
+    "protects account boundaries and handles OAuth returns under %s",
+    async (basePath) => {
+      const { database, service } = setup(null, basePath);
+      database.connection
+        .prepare("UPDATE youtube_connections SET next_sync_at = '2100-01-01'")
+        .run();
+      const auth = new AuthService(database.auth, 20, { maxAccounts: 2, registrationMode: "open" });
+      const firstSession = await auth.register("first-reader", "test-password-long");
+      const secondSession = await auth.register("second-reader", "test-password-long");
+      if (!firstSession || !secondSession) throw new Error("Registration failed");
+      database.connection.prepare("UPDATE sessions SET recent_auth_at = '2000-01-01'").run();
+      const services = createApplicationServices({ database, credentialCipher: null });
+      const app = await createApp({
+        ...services,
+        authService: auth,
+        youtubeService: service,
+        publicOrigin: "http://localhost:45173",
+        basePath: `${basePath}/`,
+      });
+      const cookie = auth.sessionCookie(firstSession.token, false).split(";", 1)[0];
+      const otherCookie = auth.sessionCookie(secondSession.token, false).split(";", 1)[0];
+      try {
+        expect((await app.inject({ url: "/api/youtube" })).statusCode).toBe(401);
+        expect(
+          (
+            await app.inject({
+              method: "POST",
+              url: "/api/youtube/connect",
+              headers: { cookie, origin: "https://another-site.example" },
+            })
+          ).statusCode,
+        ).toBe(403);
+        expect(
+          (
+            await app.inject({
+              url: "/api/youtube",
+              headers: { cookie, "x-feedfold-account": secondSession.user.id },
+            })
+          ).statusCode,
+        ).toBe(401);
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/youtube/connect",
+          headers: { cookie, origin: "http://localhost:45173" },
+        });
+        expect(response.statusCode).toBe(200);
+        const authorization = new URL(response.json<{ url: string }>().url);
+        expect(authorization.searchParams.get("redirect_uri")).toBe(
+          `http://localhost:45173${basePath}/api/youtube/callback`,
+        );
+        const state = authorization.searchParams.get("state");
+        const otherCallback = await app.inject({
+          url: `/api/youtube/callback?state=${state}&error=access_denied`,
+          headers: { cookie: otherCookie },
+        });
+        expect(otherCallback.headers.location).toBe(`${basePath}/settings/feeds?youtube=failed`);
+        const cancelled = await app.inject({
+          url: `/api/youtube/callback?state=${state}&error=access_denied`,
+          headers: { cookie },
+        });
+        expect(cancelled.headers.location).toBe(`${basePath}/settings/feeds?youtube=cancelled`);
+        expect(cancelled.headers["referrer-policy"]).toBe("no-referrer");
+        expect(cancelled.headers["cache-control"]).toBe("no-store");
+        const replayed = await app.inject({
+          url: `/api/youtube/callback?state=${state}&error=access_denied`,
+          headers: { cookie },
+        });
+        expect(replayed.headers.location).toBe(`${basePath}/settings/feeds?youtube=failed`);
+
+        let pendingState: string | null = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const allowed = await app.inject({
+            method: "POST",
+            url: "/api/youtube/connect",
+            headers: { cookie, origin: "http://localhost:45173" },
+          });
+          expect(allowed.statusCode).toBe(200);
+          pendingState = new URL(allowed.json<{ url: string }>().url).searchParams.get("state");
+        }
+        const newSession = await auth.login("first-reader", "test-password-long");
+        if (!newSession) throw new Error("Login failed");
+        const throttled = await app.inject({
+          method: "POST",
+          url: "/api/youtube/connect",
+          headers: {
+            cookie: auth.sessionCookie(newSession.token, false).split(";", 1)[0],
+            origin: "http://localhost:45173",
+          },
+        });
+        expect(throttled.statusCode).toBe(429);
+        expect(Number(throttled.headers["retry-after"])).toBeGreaterThan(0);
+        expect(Number(throttled.headers["retry-after"])).toBeLessThanOrEqual(600);
+        const otherConnect = await app.inject({
+          method: "POST",
+          url: "/api/youtube/connect",
+          headers: { cookie: otherCookie, origin: "http://localhost:45173" },
+        });
+        expect(otherConnect.statusCode).toBe(200);
+        const pendingCallback = await app.inject({
+          url: `/api/youtube/callback?state=${pendingState}&error=access_denied`,
+          headers: { cookie },
+        });
+        expect(pendingCallback.headers.location).toBe(
+          `${basePath}/settings/feeds?youtube=cancelled`,
+        );
+        database.connection.prepare("UPDATE auth_rate_limits SET reset_at = 0").run();
+        const afterCooldown = await app.inject({
+          method: "POST",
+          url: "/api/youtube/connect",
+          headers: { cookie, origin: "http://localhost:45173" },
+        });
+        expect(afterCooldown.statusCode).toBe(200);
+        const disconnected = await app.inject({
+          method: "DELETE",
+          url: "/api/youtube",
+          headers: { cookie: otherCookie, origin: "http://localhost:45173" },
+        });
+        expect(disconnected.statusCode).toBe(204);
+      } finally {
+        await app.close();
+        await services.refreshService.stop();
+        await services.extractionQueue.stop();
+        await services.webFeedService.close();
+      }
+    },
+  );
 });

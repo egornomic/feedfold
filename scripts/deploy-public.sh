@@ -40,8 +40,6 @@ fi
 curl --fail --silent http://127.0.0.1:3000/health
 printf '%s\n' "$revision" > /srv/feedfold/revision
 install -m 700 scripts/deploy-public.sh /usr/local/sbin/feedfold-deploy
-install -d -m 755 /usr/local/share/feedfold
-install -m 644 scripts/sanitize-youtube-backup.sql /usr/local/share/feedfold/sanitize-youtube-backup.sql
 install -m 700 scripts/backup-public.sh /usr/local/sbin/feedfold-backup
 # Keep the running image and the immediately preceding image for rollback.
 for old_image in $(docker images feedfold --format '{{.Tag}}'); do

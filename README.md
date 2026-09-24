@@ -99,7 +99,7 @@ Compose reads these values from the shell or a project-level `.env` file:
 | --- | --- | --- |
 | `FEEDFOLD_BIND_ADDRESS` | `127.0.0.1` | Host address that publishes the container port. Keep loopback when a local reverse proxy provides access. |
 | `FEEDFOLD_PORT` | `3000` | Host port forwarded to feedfold. |
-| `FEEDFOLD_BASE_PATH` | `/` | Browser-facing path where feedfold is mounted. Set this at build time, including the leading and trailing slash, when a reverse proxy publishes feedfold below a path such as `/feedfold/`. |
+| `FEEDFOLD_BASE_PATH` | `/` | Browser-facing path where feedfold is mounted. Set this at build time and server runtime, including the leading and trailing slash, when a reverse proxy publishes feedfold below a path such as `/feedfold/`. The Docker image preserves the value used during its build. |
 | `FEEDFOLD_DEPLOYMENT_MODE` | `private` | Use `private` for unrestricted desktop and self-hosted operation, or `public` for public-service inactivity, refresh, and subscription limits. |
 | `FEEDFOLD_PUBLIC_ORIGIN` | none | Exact external HTTPS origin used for secure cookies, passkeys, and browser-origin validation. |
 | `FEEDFOLD_REGISTRATION_MODE` | `closed` | Public-server registration policy: `closed`, `invite`, or `open`. Private servers only offer initial owner setup. |
