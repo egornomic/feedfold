@@ -4,7 +4,7 @@ import {
   startRegistration,
 } from "@simplewebauthn/browser";
 import { KeyRound, LoaderCircle, LogIn, UserPlus, X } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   INVITE_CODE_INPUT_MAX_LENGTH,
   INVITE_CODE_LENGTH,
@@ -17,6 +17,7 @@ import {
 import type { RegistrationMode, SessionUser } from "../../../shared/types";
 import { api, appUrl, errorMessage } from "../../api/api";
 import { BrandIdentity } from "../../ui/brand";
+import { useAnimatedDialog } from "../../ui/motion";
 
 export function SessionLoading() {
   return (
@@ -40,11 +41,12 @@ export function AuthLegalLinks() {
 export function LoginDialog({
   onAuthenticated,
   onDismiss,
+  onReady,
 }: {
   onAuthenticated: (user: SessionUser) => void;
   onDismiss: () => void;
+  onReady: () => void;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const [inviteCode, setInviteCode] = useState(() =>
     window.location.pathname.replace(/\/$/, "").endsWith("/join")
       ? normalizeInviteCode(window.location.hash.slice(1))
@@ -62,10 +64,9 @@ export function LoginDialog({
   const [error, setError] = useState<string | null>(null);
   const [registrationAvailable, setRegistrationAvailable] = useState(false);
   const [passkeysAvailable, setPasskeysAvailable] = useState(false);
-
-  useEffect(() => {
-    if (!dialogRef.current?.open) dialogRef.current?.showModal();
-  }, []);
+  const { dialogRef, close, closing, handleCancel, handleClose } = useAnimatedDialog(onDismiss, {
+    autoOpen: configLoaded,
+  });
 
   useEffect(() => {
     let active = true;
@@ -89,6 +90,10 @@ export function LoginDialog({
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (configLoaded) onReady();
+  }, [configLoaded, onReady]);
 
   const authenticated = (user: SessionUser) => {
     if (window.location.pathname.replace(/\/$/, "").endsWith("/join")) {
@@ -167,20 +172,17 @@ export function LoginDialog({
       ref={dialogRef}
       className="login-dialog"
       aria-labelledby="auth-heading"
-      onClose={onDismiss}
+      data-state={closing ? "closing" : undefined}
+      onCancel={handleCancel}
+      onClose={handleClose}
       onClick={(event) => {
-        if (event.target === event.currentTarget) event.currentTarget.close();
+        if (event.target === event.currentTarget) close();
       }}
     >
       <section className="login-panel" aria-labelledby="auth-heading">
         <div className="login-topbar">
           <BrandIdentity className="login-brand" />
-          <button
-            className="icon-button"
-            type="button"
-            onClick={() => dialogRef.current?.close()}
-            aria-label="Close sign in"
-          >
+          <button className="icon-button" type="button" onClick={close} aria-label="Close sign in">
             <X aria-hidden="true" size={18} />
           </button>
         </div>

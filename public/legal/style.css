@@ -15,6 +15,7 @@
   --rule: rgb(228 232 225 / 0.19);
   --pressed: rgb(161 186 159 / 0.1);
   --reading-width: 43rem;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   font-family:
     "IBM Plex Sans Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -49,6 +50,7 @@ footer {
 header {
   justify-content: space-between;
   padding-top: max(3rem, env(safe-area-inset-top));
+  animation: legal-fade 200ms var(--ease-out) both;
 }
 nav {
   display: flex;
@@ -72,6 +74,8 @@ h1 {
   line-height: 1.1;
   letter-spacing: -0.03em;
   margin: 0 0 1rem;
+  animation: legal-fade 200ms var(--ease-out) both;
+  animation-delay: 50ms;
 }
 h2 {
   font-size: 1.375rem;
@@ -94,6 +98,15 @@ a {
   color: var(--link);
   text-underline-offset: 0.2em;
 }
+header nav a,
+footer a {
+  transition: color 140ms ease;
+}
+@keyframes legal-fade {
+  from {
+    opacity: 0;
+  }
+}
 @media (hover: hover) and (pointer: fine) {
   a:hover {
     text-decoration-thickness: 2px;
@@ -101,6 +114,9 @@ a {
   header nav a:hover {
     color: var(--link);
     text-decoration: underline;
+  }
+  footer a:hover {
+    color: var(--ink);
   }
 }
 a:focus-visible {
@@ -195,6 +211,12 @@ footer {
     --rule: var(--ink);
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  header,
+  h1 {
+    animation: none;
+  }
+}
 @media print {
   :root {
     color-scheme: light;
@@ -212,6 +234,9 @@ footer {
   main {
     max-width: none;
     padding: 0;
+  }
+  h1 {
+    animation: none;
   }
   h2 {
     break-after: avoid;

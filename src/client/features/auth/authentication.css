@@ -46,10 +46,51 @@
   background: var(--paper-surface);
   background-blend-mode: var(--paper-blend);
   color: var(--text);
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity var(--duration-surface) var(--ease-out),
+    transform var(--duration-surface) var(--ease-out),
+    display var(--duration-surface) allow-discrete,
+    overlay var(--duration-surface) allow-discrete;
+}
+
+.login-dialog[open] {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.login-dialog[data-state="closing"] {
+  opacity: 0;
+  transform: scale(0.96);
 }
 
 .login-dialog::backdrop {
   background: oklch(0 0 0 / 0.7);
+  opacity: 0;
+  transition:
+    opacity var(--duration-surface) var(--ease-out),
+    display var(--duration-surface) allow-discrete,
+    overlay var(--duration-surface) allow-discrete;
+}
+
+.login-dialog[open]::backdrop {
+  opacity: 1;
+}
+
+.login-dialog[data-state="closing"]::backdrop {
+  opacity: 0;
+}
+
+@starting-style {
+  .login-dialog[open] {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  .login-dialog[open]::backdrop {
+    opacity: 0;
+  }
 }
 
 .login-panel {
@@ -189,4 +230,28 @@
   color: var(--muted);
   font-size: var(--type-supporting);
   text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-dialog,
+  .login-dialog::backdrop {
+    transition-duration: var(--duration-reduced);
+  }
+
+  .login-dialog,
+  .login-dialog[open],
+  .login-dialog[data-state="closing"] {
+    transform: none;
+  }
+
+  @starting-style {
+    .login-dialog[open] {
+      transform: none;
+    }
+  }
+}
+
+:root[data-input-modality="keyboard"] .login-dialog,
+:root[data-input-modality="keyboard"] .login-dialog::backdrop {
+  transition: none;
 }

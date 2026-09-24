@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import type { SessionUser } from "../../../shared/types";
 import { appUrl } from "../../api/api";
@@ -15,6 +16,7 @@ export function Homepage({ onAuthenticated }: { onAuthenticated: (user: SessionU
   const [loginOpen, setLoginOpen] = useState(
     () => window.location.pathname.replace(/\/$/, "") !== appUrl("/").replace(/\/$/, ""),
   );
+  const [loginPending, setLoginPending] = useState(loginOpen);
 
   return (
     <>
@@ -28,8 +30,14 @@ export function Homepage({ onAuthenticated }: { onAuthenticated: (user: SessionU
               className="homepage-sign-in"
               type="button"
               aria-haspopup="dialog"
-              onClick={() => setLoginOpen(true)}
+              aria-busy={loginPending}
+              disabled={loginPending}
+              onClick={() => {
+                setLoginPending(true);
+                setLoginOpen(true);
+              }}
             >
+              {loginPending ? <LoaderCircle className="spin" size={14} aria-hidden="true" /> : null}
               i'm in
             </button>
           </header>
@@ -49,7 +57,14 @@ export function Homepage({ onAuthenticated }: { onAuthenticated: (user: SessionU
         </footer>
       </div>
       {loginOpen ? (
-        <LoginDialog onAuthenticated={onAuthenticated} onDismiss={() => setLoginOpen(false)} />
+        <LoginDialog
+          onAuthenticated={onAuthenticated}
+          onDismiss={() => {
+            setLoginOpen(false);
+            setLoginPending(false);
+          }}
+          onReady={() => setLoginPending(false)}
+        />
       ) : null}
     </>
   );
