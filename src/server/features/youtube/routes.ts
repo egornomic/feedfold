@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { YouTubeStatus } from "../../../shared/youtube.js";
 import { ApplicationApiError } from "../../errors.js";
-import { sessionToken } from "../auth/service.js";
+import { secureRequest } from "../auth/routes.js";
+import { type AuthService, sessionToken } from "../auth/service.js";
 import type { YouTubeService } from "./service.js";
 
 const callback = z.object({
@@ -26,6 +27,8 @@ export async function youtubeRoutes(
     youtube: YouTubeService | undefined;
     userId: (request: FastifyRequest) => number;
     basePath: string;
+    authService: AuthService;
+    publicOrigin: string | undefined;
   },
 ): Promise<void> {
   const service = () => {
@@ -46,9 +49,13 @@ export async function youtubeRoutes(
         error: "Too many YouTube connection attempts. Try again in a few minutes.",
       });
     }
-    return {
-      url: youtube.authorize(userId, sessionToken(request.headers.cookie) as string),
-    };
+    const token = sessionToken(request.headers.cookie) as string;
+    const url = youtube.authorize(userId, token);
+    reply.header(
+      "Set-Cookie",
+      options.authService.sessionCookie(token, secureRequest(request, options.publicOrigin)),
+    );
+    return { url };
   });
   app.get("/api/youtube/callback", async (request, reply) => {
     const input = callback.safeParse(request.query);
