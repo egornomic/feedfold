@@ -3,8 +3,8 @@ import {
   startAuthentication,
   startRegistration,
 } from "@simplewebauthn/browser";
-import { KeyRound, LoaderCircle, LogIn, UserPlus } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { KeyRound, LoaderCircle, LogIn, UserPlus, X } from "lucide-react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
   INVITE_CODE_INPUT_MAX_LENGTH,
   INVITE_CODE_LENGTH,
@@ -28,7 +28,23 @@ export function SessionLoading() {
   );
 }
 
-export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
+export function AuthLegalLinks() {
+  return (
+    <nav className="auth-legal" aria-label="Legal">
+      <a href={appUrl("/privacy")}>privacy</a>
+      <a href={appUrl("/terms")}>terms</a>
+    </nav>
+  );
+}
+
+export function LoginDialog({
+  onAuthenticated,
+  onDismiss,
+}: {
+  onAuthenticated: (user: SessionUser) => void;
+  onDismiss: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [inviteCode, setInviteCode] = useState(() =>
     window.location.pathname.replace(/\/$/, "").endsWith("/join")
       ? normalizeInviteCode(window.location.hash.slice(1))
@@ -46,6 +62,10 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
   const [error, setError] = useState<string | null>(null);
   const [registrationAvailable, setRegistrationAvailable] = useState(false);
   const [passkeysAvailable, setPasskeysAvailable] = useState(false);
+
+  useEffect(() => {
+    if (!dialogRef.current?.open) dialogRef.current?.showModal();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -142,15 +162,30 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
   const ActionIcon = registering ? UserPlus : LogIn;
 
   return (
-    <main className="auth-page">
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Native dialog already handles Escape dismissal.
+    <dialog
+      ref={dialogRef}
+      className="login-dialog"
+      aria-labelledby="auth-heading"
+      onClose={onDismiss}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) event.currentTarget.close();
+      }}
+    >
       <section className="login-panel" aria-labelledby="auth-heading">
-        <BrandIdentity className="login-brand" />
-        <p className="login-description">
-          Feedfold brings feeds, public websites and YouTube channels into a personal reading queue,
-          with folders, filters and optional AI summaries.
-        </p>
+        <div className="login-topbar">
+          <BrandIdentity className="login-brand" />
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => dialogRef.current?.close()}
+            aria-label="Close sign in"
+          >
+            <X aria-hidden="true" size={18} />
+          </button>
+        </div>
         <div className="login-heading">
-          <h1 id="auth-heading">{actionLabel}</h1>
+          <h2 id="auth-heading">{actionLabel}</h2>
           <p>
             {registering
               ? registrationMode === "invite"
@@ -297,11 +332,8 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated: (user: Session
               : "Checking account availability…"}
           </p>
         )}
-        <nav className="auth-legal" aria-label="Legal">
-          <a href={appUrl("/privacy")}>Privacy Policy</a>
-          <a href={appUrl("/terms")}>Terms of Service</a>
-        </nav>
+        <AuthLegalLinks />
       </section>
-    </main>
+    </dialog>
   );
 }
