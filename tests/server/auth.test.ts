@@ -343,7 +343,7 @@ describe("hosted account authentication", () => {
     });
     expect(registration.statusCode).toBe(201);
     expect(registration.headers["set-cookie"]).toContain("HttpOnly");
-    expect(registration.headers["set-cookie"]).toContain("SameSite=Strict");
+    expect(registration.headers["set-cookie"]).toContain("SameSite=Lax");
     expect(registration.headers["set-cookie"]).toContain("Secure");
     expect(registration.headers["strict-transport-security"]).toBe(
       "max-age=31536000; includeSubDomains",

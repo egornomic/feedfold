@@ -23,11 +23,14 @@ import { refreshRoutes } from "./features/refresh/routes.js";
 import { browserDeviceId } from "./features/routes.js";
 import { ruleRoutes } from "./features/rules/routes.js";
 import { settingsRoutes } from "./features/settings/routes.js";
+import { youtubeRoutes } from "./features/youtube/routes.js";
+import type { YouTubeService } from "./features/youtube/service.js";
 import { registerOperationalLogging } from "./logging.js";
 import { responsePolicies } from "./response-policy.js";
 
 export interface AppServices extends ApplicationServices {
   authService: AuthService;
+  youtubeService?: YouTubeService;
   staticDir?: string;
   demoDir?: string;
   logger?: FastifyServerOptions["logger"];
@@ -91,6 +94,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
 
   app.addHook("onSend", async (request, reply) => {
     reply.headers(responsePolicies[request.routeOptions.config.responsePolicy ?? "application"]);
+    if (request.url.startsWith("/api/youtube")) reply.header("Referrer-Policy", "no-referrer");
     reply.header(
       "Permissions-Policy",
       "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self)",
@@ -163,7 +167,16 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   });
 
   // biome-ignore-start lint/nursery/noMisusedPromises: Fastify awaits async plugins; Biome incorrectly selects its callback overload.
+  await app.register(youtubeRoutes, { youtube: services.youtubeService, userId });
+  if (services.youtubeService) {
+    const youtube = services.youtubeService;
+    app.addHook("onReady", async () => youtube.start());
+    app.addHook("onClose", async () => youtube.stop());
+  }
   await app.register(authRoutes, {
+    beforeDeleteAccount: async (id: number) => {
+      await services.youtubeService?.disconnect(id);
+    },
     authService: services.authService,
     ...(services.publicOrigin === undefined ? {} : { configuredOrigin: services.publicOrigin }),
   });

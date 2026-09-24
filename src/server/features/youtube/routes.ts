@@ -1,0 +1,70 @@
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { z } from "zod";
+import type { YouTubeStatus } from "../../../shared/youtube.js";
+import { ApplicationApiError } from "../../errors.js";
+import { sessionToken } from "../auth/service.js";
+import type { YouTubeService } from "./service.js";
+
+const callback = z.object({
+  state: z.string().min(1).max(200),
+  code: z.string().max(4096).optional(),
+  error: z.string().max(200).optional(),
+});
+export const unavailableYouTube: YouTubeStatus = {
+  available: false,
+  connected: false,
+  channelTitle: null,
+  lastSyncAt: null,
+  nextSyncAt: null,
+  feedCount: 0,
+  error: null,
+};
+
+export async function youtubeRoutes(
+  app: FastifyInstance,
+  options: {
+    youtube: YouTubeService | undefined;
+    userId: (request: FastifyRequest) => number;
+  },
+): Promise<void> {
+  const service = () => {
+    if (!options.youtube)
+      throw new ApplicationApiError(503, "YouTube connections are unavailable.");
+    return options.youtube;
+  };
+  app.get(
+    "/api/youtube",
+    async (request) => options.youtube?.status(options.userId(request)) ?? unavailableYouTube,
+  );
+  app.post("/api/youtube/connect", async (request) => ({
+    url: service().authorize(
+      options.userId(request),
+      sessionToken(request.headers.cookie) as string,
+    ),
+  }));
+  app.get("/api/youtube/callback", async (request, reply) => {
+    const input = callback.safeParse(request.query);
+    let result = "failed";
+    if (input.success) {
+      try {
+        const verifier = service().consumeState(
+          options.userId(request),
+          sessionToken(request.headers.cookie) as string,
+          input.data.state,
+        );
+        if (input.data.error) result = "cancelled";
+        else if (input.data.code) {
+          await service().connect(options.userId(request), input.data.code, verifier);
+          result = "connected";
+        }
+      } catch {
+        /* Do not expose Google's callback or tokens in error output. */
+      }
+    }
+    return reply.redirect(`/settings/feeds?youtube=${result}`, 303);
+  });
+  app.delete("/api/youtube", async (request, reply) => {
+    await service().disconnect(options.userId(request));
+    return reply.code(204).send();
+  });
+}

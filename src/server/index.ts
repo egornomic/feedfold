@@ -8,6 +8,8 @@ import {
   registrationMode,
 } from "./deployment-policy.js";
 import { AuthService } from "./features/auth/service.js";
+import { youtubeConfiguration } from "./features/youtube/config.js";
+import { YouTubeService } from "./features/youtube/service.js";
 import { productionListenMessage, productionLogger } from "./logging.js";
 import { createApplicationRuntime } from "./runtime/application-runtime.js";
 import { positiveInteger, runtimeConfiguration } from "./runtime/configuration.js";
@@ -134,7 +136,12 @@ const authService = new AuthService(database.auth, configuration.pollIntervalMin
     },
   },
 });
+const youtubeConfig = youtubeConfiguration(process.env, publicOrigin);
+const youtubeService = youtubeConfig
+  ? new YouTubeService(database, runtime.services.refreshService, youtubeConfig)
+  : undefined;
 const app = await createApp({
+  ...(youtubeService ? { youtubeService } : {}),
   ...runtime.services,
   authService,
   staticDir,

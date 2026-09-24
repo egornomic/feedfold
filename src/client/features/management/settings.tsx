@@ -65,6 +65,7 @@ import {
   PageHeader,
 } from "./shared";
 import { ShortcutReference } from "./shortcut-help";
+import { YouTubeSettings } from "./youtube";
 import "./dialogs.css";
 import "./settings.css";
 
@@ -1819,6 +1820,10 @@ function SettingsPage({
               />
             </div>
           </section>
+
+          {!desktopApp && import.meta.env.VITE_FEEDFOLD_DEMO !== "true" ? (
+            <YouTubeSettings userId={userId} />
+          ) : null}
 
           <section className="settings-section" aria-labelledby="portable-heading">
             <div className="settings-heading">

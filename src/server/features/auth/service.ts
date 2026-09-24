@@ -759,10 +759,10 @@ export class AuthService {
   }
 
   sessionCookie(token: string, secure: boolean): string {
-    return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_SECONDS}; Priority=High${secure ? "; Secure" : ""}`;
+    return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_SECONDS}; Priority=High${secure ? "; Secure" : ""}`;
   }
 
   clearSessionCookie(secure: boolean): string {
-    return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Priority=High${secure ? "; Secure" : ""}`;
+    return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Priority=High${secure ? "; Secure" : ""}`;
   }
 }

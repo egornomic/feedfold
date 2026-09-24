@@ -513,6 +513,11 @@
   justify-self: end;
 }
 
+.setting-row > :only-child {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+}
+
 .setting-row > :first-child {
   min-width: 0;
 }

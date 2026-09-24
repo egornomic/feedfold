@@ -1531,6 +1531,34 @@ const migrations: Migration[] = [
         OR (recipient_id IS NOT NULL AND recipient_id NOT IN (SELECT public_id FROM users));
     `,
   },
+  {
+    sql: `
+      CREATE TABLE youtube_connections (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        channel_id TEXT NOT NULL,
+        channel_title TEXT NOT NULL,
+        connected_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        refresh_token TEXT NOT NULL,
+        last_sync_at TEXT,
+        next_sync_at TEXT NOT NULL,
+        last_attempt_at TEXT,
+        error TEXT
+      );
+      CREATE TABLE youtube_feeds (
+        user_id INTEGER NOT NULL REFERENCES youtube_connections(user_id) ON DELETE CASCADE,
+        channel_id TEXT NOT NULL,
+        feed_id INTEGER NOT NULL UNIQUE REFERENCES feeds(id) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, channel_id)
+      );
+      CREATE TABLE youtube_oauth_states (
+        state_hash TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        session_hash TEXT NOT NULL REFERENCES sessions(token_hash) ON DELETE CASCADE,
+        verifier TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function migrateDatabase(

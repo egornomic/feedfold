@@ -27,6 +27,7 @@ services:
       ARTICLE_FETCH_TIMEOUT_MS: "${ARTICLE_FETCH_TIMEOUT_MS:-20000}"
       AI_REQUEST_TIMEOUT_MS: "${AI_REQUEST_TIMEOUT_MS:-60000}"
       FEEDFOLD_DEPLOYMENT_MODE: "${FEEDFOLD_DEPLOYMENT_MODE:-private}"
+      FEEDFOLD_YOUTUBE_SECRETS_FILE: "${FEEDFOLD_YOUTUBE_SECRETS_FILE:+/run/secrets/youtube}"
       FEEDFOLD_PUBLIC_ORIGIN: "${FEEDFOLD_PUBLIC_ORIGIN:-}"
       FEEDFOLD_REGISTRATION_MODE: "${FEEDFOLD_REGISTRATION_MODE:-closed}"
       FEEDFOLD_MAX_ACCOUNTS: "${FEEDFOLD_MAX_ACCOUNTS:-}"
@@ -55,6 +56,8 @@ services:
       FEEDFOLD_QUOTA_GLOBAL_STORED_BYTES: "${FEEDFOLD_QUOTA_GLOBAL_STORED_BYTES:-21474836480}"
     ports:
       - "${FEEDFOLD_BIND_ADDRESS:-127.0.0.1}:${FEEDFOLD_PORT:-3000}:3000"
+    secrets:
+      - youtube
     volumes:
       - feedfold-data:/data
     tmpfs:
@@ -76,6 +79,10 @@ services:
         max-size: "5m"
         max-file: "2"
     stop_grace_period: 30s
+
+secrets:
+  youtube:
+    file: "${FEEDFOLD_YOUTUBE_SECRETS_FILE:-/dev/null}"
 
 volumes:
   feedfold-data:
