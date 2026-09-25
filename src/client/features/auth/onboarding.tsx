@@ -10,13 +10,13 @@ import {
   Upload,
 } from "lucide-react";
 import { type ChangeEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Feed, ImportResult, Rule, SessionUser } from "../../../shared/types";
-import { xFeedUrl } from "../../../shared/x";
-import type { YouTubeStatus } from "../../../shared/youtube";
-import { api, appUrl, errorMessage } from "../../api/api";
-import { httpRequest } from "../../api/http-request";
-import { BrandIdentity } from "../../ui/brand";
-import { feedSourceUrl } from "../feeds/feed-source";
+import type { Feed, ImportResult, Rule, SessionUser } from "../../../shared/types.js";
+import { xFeedUrl } from "../../../shared/x.js";
+import type { YouTubeStatus } from "../../../shared/youtube.js";
+import { api, appUrl, errorMessage } from "../../api/api.js";
+import { httpRequest } from "../../api/http-request.js";
+import { BrandIdentity } from "../../ui/brand.js";
+import { feedSourceUrl } from "../feeds/feed-source.js";
 import {
   HIDE_SHORTS_RULE,
   nextOnboardingStep,
@@ -24,7 +24,7 @@ import {
   onboardingStep,
   previousOnboardingStep,
   saveOnboardingStep,
-} from "./onboarding-state";
+} from "./onboarding-state.js";
 import "./onboarding.css";
 
 const suggestions = {

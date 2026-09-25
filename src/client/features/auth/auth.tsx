@@ -13,13 +13,13 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
   USERNAME_PATTERN_SOURCE,
-} from "../../../shared/auth";
-import type { RegistrationMode, SessionUser } from "../../../shared/types";
-import { api, appUrl, errorMessage } from "../../api/api";
-import { BrandIdentity } from "../../ui/brand";
-import { useAnimatedDialog } from "../../ui/motion";
-import { Onboarding } from "./onboarding";
-import { finishOnboarding, saveOnboardingStep } from "./onboarding-state";
+} from "../../../shared/auth.js";
+import type { RegistrationMode, SessionUser } from "../../../shared/types.js";
+import { AUTH_REQUIRED_EVENT, api, appUrl, errorMessage } from "../../api/api.js";
+import { BrandIdentity } from "../../ui/brand.js";
+import { useAnimatedDialog } from "../../ui/motion.js";
+import { Onboarding } from "./onboarding.js";
+import { finishOnboarding, saveOnboardingStep } from "./onboarding-state.js";
 
 export function SessionLoading() {
   return (
@@ -81,6 +81,17 @@ export function LoginDialog({
       autoOpen: configLoaded,
     },
   );
+
+  useEffect(() => {
+    const requireAuthentication = () => {
+      setSetupUser(null);
+      setMode("login");
+      setPassword("");
+      setError("Your session has ended. Sign in to continue.");
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
+  }, []);
 
   useEffect(() => {
     let active = true;
