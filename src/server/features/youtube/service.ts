@@ -24,6 +24,7 @@ interface Connection {
   next_sync_at: string;
   last_attempt_at: string | null;
   error: string | null;
+  shorts_rule_id: number | null;
 }
 
 export class YouTubeService {
@@ -206,14 +207,18 @@ export class YouTubeService {
             rule.conditions[0]?.field === "media" &&
             rule.conditions[0]?.pattern === "short",
         );
-      if (!existing)
-        this.database.rules.createRule(userId, {
+      if (!existing) {
+        const rule = this.database.rules.createRule(userId, {
           name: "Hide YouTube Shorts",
           folderId: folder.id,
           conditions: [{ field: "media", pattern: "short" }],
           conditionOperator: "and",
           action: "hide",
         });
+        this.database.connection
+          .prepare("UPDATE youtube_connections SET shorts_rule_id = ? WHERE user_id = ?")
+          .run(rule.id, userId);
+      }
     })();
   }
 
@@ -304,6 +309,8 @@ export class YouTubeService {
         .prepare("SELECT feed_id FROM youtube_feeds WHERE user_id = ?")
         .all(userId) as Array<{ feed_id: number }>;
       for (const feed of feeds) this.database.feeds.deleteFeed(userId, feed.feed_id);
+      const ruleId = this.connection(userId)?.shorts_rule_id;
+      if (ruleId !== null && ruleId !== undefined) this.database.rules.deleteRule(userId, ruleId);
       this.database.connection
         .prepare("DELETE FROM youtube_connections WHERE user_id = ?")
         .run(userId);

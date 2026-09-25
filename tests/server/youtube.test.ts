@@ -110,7 +110,7 @@ function setup(limit: number | null = null, basePath = "") {
 }
 
 describe("YouTube subscription sync", () => {
-  it("hides Shorts only in the YouTube folder and reuses the rule on reconnect", () => {
+  it("hides Shorts only in the YouTube folder without creating duplicate rules", () => {
     const { database, service } = setup();
     service.reconcile(1, [first]);
     const feed = database.feeds.listFeeds(1)[0];
@@ -340,6 +340,59 @@ describe("YouTube subscription sync", () => {
 });
 
 describe("YouTube data retention", () => {
+  it("removes the generated Shorts rule when a connection ends so reconnect can include Shorts", () => {
+    const { database, service, connect } = setup();
+    service.reconcile(1, [first]);
+    service.createShortsRule(1);
+    const generated = database.rules.listRules(1)[0];
+    if (!generated) throw new Error("Missing Shorts rule");
+    database.rules.updateRule(1, generated.id, { name: "My video filter", enabled: false });
+    const personal = database.rules.createRule(1, {
+      name: "My own filter",
+      conditions: [{ field: "title", pattern: "advertisement" }],
+      conditionOperator: "and",
+      action: "hide",
+    });
+    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
+    service.expireStaleConnections();
+    expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
+    connect(1);
+    service.reconcile(1, [first]);
+    expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
+    service.createShortsRule(1);
+    expect(database.rules.listRules(1)).toHaveLength(2);
+  });
+
+  it("preserves a pre-existing Shorts rule that the user created", () => {
+    const { database, service } = setup();
+    service.reconcile(1, [first]);
+    const folder = database.folders.listFolders(1)[0];
+    if (!folder) throw new Error("Missing YouTube folder");
+    const personal = database.rules.createRule(1, {
+      name: "My Shorts filter",
+      folderId: folder.id,
+      conditions: [{ field: "media", pattern: "short" }],
+      conditionOperator: "and",
+      action: "hide",
+    });
+    service.createShortsRule(1);
+    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
+    service.expireStaleConnections();
+    expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
+  });
+
+  it("can end a connection after the user manually deletes its Shorts rule", () => {
+    const { database, service } = setup();
+    service.createShortsRule(1);
+    const rule = database.rules.listRules(1)[0];
+    if (!rule) throw new Error("Missing Shorts rule");
+    database.rules.deleteRule(1, rule.id);
+    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
+    service.expireStaleConnections();
+    expect(service.status(1).connected).toBe(false);
+    expect(database.rules.listRules(1)).toHaveLength(0);
+  });
+
   it("expires stale imports even for disabled accounts while retaining fresh imports", () => {
     const { database, service } = setup();
     service.reconcile(1, [first]);
