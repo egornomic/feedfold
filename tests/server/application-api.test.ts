@@ -160,20 +160,20 @@ describe("local application API", () => {
     expect(observedNames).toEqual([["Reading"], ["News"], []]);
   });
 
-  it("starts with the releases feed and preserves its removal after reopening", async () => {
+  it("starts with no subscriptions and stays empty after reopening", async () => {
     const directory = await mkdtemp(join(tmpdir(), "feedfold-default-feed-"));
     cleanups.push(() => rm(directory, { recursive: true, force: true }));
     const path = join(directory, "feedfold.db");
     const application = new ApplicationApi(applicationServices({ databasePath: path }));
+    expect(await application.invoke({ operation: "authConfig" })).toMatchObject({
+      registrationAvailable: false,
+      passkeysAvailable: false,
+    });
+    expect(await application.invoke({ operation: "login" })).toMatchObject({
+      user: { id: "local", hasPassword: false },
+    });
     const bootstrap = (await application.invoke({ operation: "bootstrap" })) as BootstrapData;
-    expect(bootstrap.feeds).toMatchObject([
-      {
-        title: "feedfold releases",
-        feedUrl: "https://github.com/egornomic/feedfold/releases.atom",
-        paused: false,
-      },
-    ]);
-    await application.invoke({ operation: "deleteFeed", payload: { id: bootstrap.feeds[0]?.id } });
+    expect(bootstrap.feeds).toEqual([]);
     const restarted = new ApplicationApi(applicationServices({ databasePath: path }));
     expect(((await restarted.invoke({ operation: "bootstrap" })) as BootstrapData).feeds).toEqual(
       [],
@@ -252,7 +252,7 @@ describe("local application API", () => {
 
     const bootstrap = (await application.invoke({ operation: "bootstrap" })) as BootstrapData;
     expect(bootstrap.folders).toContainEqual(folder);
-    expect(bootstrap.feeds).toHaveLength(2);
+    expect(bootstrap.feeds).toHaveLength(1);
     expect(bootstrap.counts.all).toBe(1);
 
     const opml = await application.invoke({ operation: "exportOpml" });
@@ -390,10 +390,10 @@ describe("local application API", () => {
       await expect(client.updateWebFeedSelection(999_999, candidate.config)).rejects.toMatchObject({
         status: 404,
       });
-      const published = (await client.bootstrap()).feeds.find(
-        (feed) => feed.sourceKind === "published",
-      );
-      assert.isDefined(published);
+      const published = services.database.feeds.createFeed(1, {
+        title: "Published feed",
+        feedUrl: "https://example.test/feed.xml",
+      });
       await expect(client.analyzeWebFeed(published.id)).rejects.toMatchObject({ status: 400 });
       await expect(
         client.updateWebFeedSelection(published.id, candidate.config),
@@ -412,8 +412,7 @@ describe("local application API", () => {
           [`<?xml version="1.0"?><opml version="2.0"><body>${outlines}</body></opml>`],
           "feeds.opml",
         );
-      const outline =
-        '<outline text="Releases" xmlUrl="https://github.com/egornomic/feedfold/releases.atom"/>';
+      const outline = `<outline text="Published feed" xmlUrl="${published.feedUrl}"/>`;
       expect(await client.importOpml(opml(outline))).toMatchObject({
         imported: 0,
         duplicates: 1,

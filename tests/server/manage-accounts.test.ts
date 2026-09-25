@@ -55,6 +55,10 @@ describe("server account management", () => {
       const first = await setup.register("first", "reader-password");
       const second = await setup.register("second", "reader-password");
       if (!first || !second) throw new Error("Account setup failed");
+      database.feeds.createFeed(first.user.id, {
+        title: "Reader feed",
+        feedUrl: "https://example.test/feed.xml",
+      });
       database.connection.prepare("UPDATE feed_sources SET refreshing = 1").run();
       expect(run("list")).toContain(first.user.publicId);
       run("set-owner", second.user.publicId);

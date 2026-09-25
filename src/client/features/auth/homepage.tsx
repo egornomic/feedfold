@@ -12,9 +12,17 @@ const points = [
   "read a feed you can finish",
 ];
 
-export function Homepage({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
+export function Homepage({
+  onAuthenticated,
+  onboardingUser,
+}: {
+  onAuthenticated: (user: SessionUser) => void;
+  onboardingUser?: SessionUser | undefined;
+}) {
   const [loginOpen, setLoginOpen] = useState(
-    () => window.location.pathname.replace(/\/$/, "") !== appUrl("/").replace(/\/$/, ""),
+    () =>
+      !!onboardingUser ||
+      window.location.pathname.replace(/\/$/, "") !== appUrl("/").replace(/\/$/, ""),
   );
   const [loginPending, setLoginPending] = useState(loginOpen);
 
@@ -59,6 +67,7 @@ export function Homepage({ onAuthenticated }: { onAuthenticated: (user: SessionU
       {loginOpen ? (
         <LoginDialog
           onAuthenticated={onAuthenticated}
+          initialOnboardingUser={onboardingUser}
           onDismiss={() => {
             setLoginOpen(false);
             setLoginPending(false);

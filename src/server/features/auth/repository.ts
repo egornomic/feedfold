@@ -318,7 +318,6 @@ export class AuthRepository {
       id = Number(result.lastInsertRowid);
       this.createDefaultSettings(id, pollIntervalMinutes);
     }
-    this.feeds.createDefaultFeed(id);
     return {
       id,
       publicId,

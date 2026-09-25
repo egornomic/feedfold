@@ -1157,10 +1157,11 @@
     .dropdown-select-trigger > svg,
     .dropdown-combobox > svg,
     .dropdown-select-menu,
-    .dropdown-select-option
+    .dropdown-select-option,
+    .management-actions-popover
   ),
-:root[data-input-modality="keyboard"] .shortcut-dialog,
-:root[data-input-modality="keyboard"] .shortcut-dialog::backdrop {
+:root[data-input-modality="keyboard"] :is(.shortcut-dialog, .management-dialog),
+:root[data-input-modality="keyboard"] :is(.shortcut-dialog, .management-dialog)::backdrop {
   transition: none;
 }
 

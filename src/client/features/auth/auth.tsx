@@ -13,11 +13,13 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
   USERNAME_PATTERN_SOURCE,
-} from "../../../shared/auth";
-import type { RegistrationMode, SessionUser } from "../../../shared/types";
-import { api, appUrl, errorMessage } from "../../api/api";
-import { BrandIdentity } from "../../ui/brand";
-import { useAnimatedDialog } from "../../ui/motion";
+} from "../../../shared/auth.js";
+import type { RegistrationMode, SessionUser } from "../../../shared/types.js";
+import { AUTH_REQUIRED_EVENT, api, appUrl, errorMessage } from "../../api/api.js";
+import { BrandIdentity } from "../../ui/brand.js";
+import { useAnimatedDialog } from "../../ui/motion.js";
+import { Onboarding } from "./onboarding.js";
+import { finishOnboarding, saveOnboardingStep } from "./onboarding-state.js";
 
 export function SessionLoading() {
   return (
@@ -42,11 +44,14 @@ export function LoginDialog({
   onAuthenticated,
   onDismiss,
   onReady,
+  initialOnboardingUser,
 }: {
   onAuthenticated: (user: SessionUser) => void;
   onDismiss: () => void;
   onReady: () => void;
+  initialOnboardingUser?: SessionUser | undefined;
 }) {
+  const [setupUser, setSetupUser] = useState(initialOnboardingUser ?? null);
   const [inviteCode, setInviteCode] = useState(() =>
     window.location.pathname.replace(/\/$/, "").endsWith("/join")
       ? normalizeInviteCode(window.location.hash.slice(1))
@@ -56,7 +61,7 @@ export function LoginDialog({
     window.location.pathname.replace(/\/$/, "").endsWith("/join") ? "register" : "login",
   );
   const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("closed");
-  const [configLoaded, setConfigLoaded] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(!!initialOnboardingUser);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -64,9 +69,29 @@ export function LoginDialog({
   const [error, setError] = useState<string | null>(null);
   const [registrationAvailable, setRegistrationAvailable] = useState(false);
   const [passkeysAvailable, setPasskeysAvailable] = useState(false);
-  const { dialogRef, close, closing, handleCancel, handleClose } = useAnimatedDialog(onDismiss, {
-    autoOpen: configLoaded,
-  });
+  const { dialogRef, close, closing, handleCancel, handleClose } = useAnimatedDialog(
+    () => {
+      if (setupUser) {
+        finishOnboarding(setupUser.id);
+        window.history.replaceState(null, "", appUrl("/"));
+        onAuthenticated(setupUser);
+      } else onDismiss();
+    },
+    {
+      autoOpen: configLoaded,
+    },
+  );
+
+  useEffect(() => {
+    const requireAuthentication = () => {
+      setSetupUser(null);
+      setMode("login");
+      setPassword("");
+      setError("Your session has ended. Sign in to continue.");
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -95,11 +120,15 @@ export function LoginDialog({
     if (configLoaded) onReady();
   }, [configLoaded, onReady]);
 
-  const authenticated = (user: SessionUser) => {
+  const authenticated = (user: SessionUser, created = false) => {
     if (window.location.pathname.replace(/\/$/, "").endsWith("/join")) {
       window.history.replaceState(null, "", appUrl("/"));
     }
-    onAuthenticated(user);
+    if (created) {
+      saveOnboardingStep(user.id, "feeds");
+      setPassword("");
+      setSetupUser(user);
+    } else onAuthenticated(user);
   };
 
   const submit = async (event: FormEvent) => {
@@ -111,6 +140,7 @@ export function LoginDialog({
         mode === "login"
           ? await api.login(username, password)
           : await api.register(username, password, inviteCode),
+        mode === "register",
       );
     } catch (caught) {
       setError(errorMessage(caught));
@@ -149,7 +179,7 @@ export function LoginDialog({
     try {
       const { registrationId, options } = await api.passkeySignupOptions(username, inviteCode);
       const response = await startRegistration({ optionsJSON: options });
-      authenticated(await api.completePasskeySignup(registrationId, response));
+      authenticated(await api.completePasskeySignup(registrationId, response), true);
     } catch (caught) {
       setError(
         caught instanceof DOMException && caught.name === "NotAllowedError"
@@ -170,171 +200,192 @@ export function LoginDialog({
     // biome-ignore lint/a11y/useKeyWithClickEvents: Native dialog already handles Escape dismissal.
     <dialog
       ref={dialogRef}
-      className="login-dialog"
+      className={`login-dialog${setupUser ? " onboarding-dialog" : ""}`}
       aria-labelledby="auth-heading"
       data-state={closing ? "closing" : undefined}
-      onCancel={handleCancel}
+      onCancel={(event) => {
+        if (setupUser) event.preventDefault();
+        else handleCancel(event);
+      }}
       onClose={handleClose}
       onClick={(event) => {
-        if (event.target === event.currentTarget) close();
+        if (!setupUser && event.target === event.currentTarget) close();
       }}
     >
       <section className="login-panel" aria-labelledby="auth-heading">
-        <div className="login-topbar">
-          <BrandIdentity className="login-brand" />
-          <button className="icon-button" type="button" onClick={close} aria-label="Close sign in">
-            <X aria-hidden="true" size={18} />
-          </button>
-        </div>
-        <div className="login-heading">
-          <h2 id="auth-heading">{actionLabel}</h2>
-          <p>
-            {registering
-              ? registrationMode === "invite"
-                ? "Create your account with an invite."
-                : "Create the account that will own this reading queue."
-              : "Sign in to open your reading queue."}
-          </p>
-        </div>
-        <form className="login-form" onSubmit={submit}>
-          {registering && registrationMode === "invite" ? (
-            <label className="login-field" htmlFor="auth-invite">
-              <span>Invite code</span>
-              <input
-                id="auth-invite"
-                name="inviteCode"
-                type="text"
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                required
-                maxLength={INVITE_CODE_INPUT_MAX_LENGTH}
-                pattern={INVITE_CODE_PATTERN_SOURCE}
-                placeholder="K7M9XR"
-                value={inviteCode}
-                onChange={(event) => setInviteCode(normalizeInviteCode(event.target.value))}
-              />
-            </label>
-          ) : null}
-          {!registering && passkeysAvailable ? (
+        {!setupUser ? (
+          <div className="login-topbar">
+            <BrandIdentity className="login-brand" />
             <button
-              className="primary-button login-button"
+              className="icon-button"
               type="button"
-              disabled={submitting || usingPasskey}
-              onClick={() => void signInWithPasskey()}
+              onClick={close}
+              aria-label="Close sign in"
             >
-              {usingPasskey ? (
-                <LoaderCircle className="spin" aria-hidden="true" size={16} />
-              ) : (
-                <KeyRound aria-hidden="true" size={16} />
-              )}
-              {usingPasskey ? "Waiting for passkey" : "Sign in with a passkey"}
-            </button>
-          ) : null}
-          {!registering && passkeysAvailable ? (
-            <div className="auth-divider">
-              <span>or</span>
-            </div>
-          ) : null}
-          <label className="login-field" htmlFor="auth-username">
-            <span>Username</span>
-            <input
-              id="auth-username"
-              name="username"
-              type="text"
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-              minLength={registering ? USERNAME_MIN_LENGTH : undefined}
-              maxLength={registering ? USERNAME_MAX_LENGTH : 80}
-              pattern={registering ? USERNAME_PATTERN_SOURCE : undefined}
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-            />
-          </label>
-          {registering && passkeysAvailable ? (
-            <button
-              className="primary-button login-button"
-              type="button"
-              disabled={
-                !configLoaded ||
-                !registrationAvailable ||
-                submitting ||
-                usingPasskey ||
-                username.trim().length < USERNAME_MIN_LENGTH ||
-                (registrationMode === "invite" && inviteCode.length !== INVITE_CODE_LENGTH)
-              }
-              onClick={() => void createAccountWithPasskey()}
-            >
-              {usingPasskey ? (
-                <LoaderCircle className="spin" aria-hidden="true" size={16} />
-              ) : (
-                <KeyRound aria-hidden="true" size={16} />
-              )}
-              {usingPasskey ? "Creating passkey" : "Create account with a passkey"}
-            </button>
-          ) : null}
-          {registering && passkeysAvailable ? (
-            <div className="auth-divider">
-              <span>or</span>
-            </div>
-          ) : null}
-          <label className="login-field" htmlFor="auth-password">
-            <span>Password</span>
-            <input
-              id="auth-password"
-              name="password"
-              type="password"
-              autoComplete={registering ? "new-password" : "current-password"}
-              required
-              minLength={registering ? 15 : undefined}
-              maxLength={128}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-          {error ? (
-            <div className="login-error" role="alert">
-              {error}
-            </div>
-          ) : null}
-          <button
-            className={
-              passkeysAvailable ? "secondary-button login-button" : "primary-button login-button"
-            }
-            type="submit"
-            disabled={
-              !configLoaded || submitting || usingPasskey || (registering && !registrationAvailable)
-            }
-          >
-            {submitting ? (
-              <LoaderCircle className="spin" aria-hidden="true" size={16} />
-            ) : (
-              <ActionIcon aria-hidden="true" size={16} />
-            )}
-            {submitting ? progressLabel : actionLabel}
-          </button>
-        </form>
-        {registering || registrationAvailable ? (
-          <div className="auth-switch">
-            <span>{registering ? "Already have an account?" : "Need an account?"}</span>
-            <button type="button" onClick={switchMode} disabled={submitting || usingPasskey}>
-              {registering
-                ? "Sign in"
-                : registrationMode === "invite"
-                  ? "Create account with invite"
-                  : "Create account"}
+              <X aria-hidden="true" size={18} />
             </button>
           </div>
+        ) : null}
+        {setupUser ? (
+          <Onboarding user={setupUser} onFinish={close} />
         ) : (
-          <p className="registration-closed">
-            {configLoaded
-              ? "Account creation is closed on this server."
-              : "Checking account availability…"}
-          </p>
+          <>
+            <div className="login-heading">
+              <h2 id="auth-heading">{actionLabel}</h2>
+              <p>
+                {registering
+                  ? registrationMode === "invite"
+                    ? "Create your account with an invite."
+                    : "Create the account that will own this reading queue."
+                  : "Sign in to open your reading queue."}
+              </p>
+            </div>
+            <form className="login-form" onSubmit={submit}>
+              {registering && registrationMode === "invite" ? (
+                <label className="login-field" htmlFor="auth-invite">
+                  <span>Invite code</span>
+                  <input
+                    id="auth-invite"
+                    name="inviteCode"
+                    type="text"
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    required
+                    maxLength={INVITE_CODE_INPUT_MAX_LENGTH}
+                    pattern={INVITE_CODE_PATTERN_SOURCE}
+                    placeholder="K7M9XR"
+                    value={inviteCode}
+                    onChange={(event) => setInviteCode(normalizeInviteCode(event.target.value))}
+                  />
+                </label>
+              ) : null}
+              {!registering && passkeysAvailable ? (
+                <button
+                  className="primary-button login-button"
+                  type="button"
+                  disabled={submitting || usingPasskey}
+                  onClick={() => void signInWithPasskey()}
+                >
+                  {usingPasskey ? (
+                    <LoaderCircle className="spin" aria-hidden="true" size={16} />
+                  ) : (
+                    <KeyRound aria-hidden="true" size={16} />
+                  )}
+                  {usingPasskey ? "Waiting for passkey" : "Sign in with a passkey"}
+                </button>
+              ) : null}
+              {!registering && passkeysAvailable ? (
+                <div className="auth-divider">
+                  <span>or</span>
+                </div>
+              ) : null}
+              <label className="login-field" htmlFor="auth-username">
+                <span>Username</span>
+                <input
+                  id="auth-username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                  minLength={registering ? USERNAME_MIN_LENGTH : undefined}
+                  maxLength={registering ? USERNAME_MAX_LENGTH : 80}
+                  pattern={registering ? USERNAME_PATTERN_SOURCE : undefined}
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+              </label>
+              {registering && passkeysAvailable ? (
+                <button
+                  className="primary-button login-button"
+                  type="button"
+                  disabled={
+                    !configLoaded ||
+                    !registrationAvailable ||
+                    submitting ||
+                    usingPasskey ||
+                    username.trim().length < USERNAME_MIN_LENGTH ||
+                    (registrationMode === "invite" && inviteCode.length !== INVITE_CODE_LENGTH)
+                  }
+                  onClick={() => void createAccountWithPasskey()}
+                >
+                  {usingPasskey ? (
+                    <LoaderCircle className="spin" aria-hidden="true" size={16} />
+                  ) : (
+                    <KeyRound aria-hidden="true" size={16} />
+                  )}
+                  {usingPasskey ? "Creating passkey" : "Create account with a passkey"}
+                </button>
+              ) : null}
+              {registering && passkeysAvailable ? (
+                <div className="auth-divider">
+                  <span>or</span>
+                </div>
+              ) : null}
+              <label className="login-field" htmlFor="auth-password">
+                <span>Password</span>
+                <input
+                  id="auth-password"
+                  name="password"
+                  type="password"
+                  autoComplete={registering ? "new-password" : "current-password"}
+                  required
+                  minLength={registering ? 15 : undefined}
+                  maxLength={128}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+              {error ? (
+                <div className="login-error" role="alert">
+                  {error}
+                </div>
+              ) : null}
+              <button
+                className={
+                  passkeysAvailable
+                    ? "secondary-button login-button"
+                    : "primary-button login-button"
+                }
+                type="submit"
+                disabled={
+                  !configLoaded ||
+                  submitting ||
+                  usingPasskey ||
+                  (registering && !registrationAvailable)
+                }
+              >
+                {submitting ? (
+                  <LoaderCircle className="spin" aria-hidden="true" size={16} />
+                ) : (
+                  <ActionIcon aria-hidden="true" size={16} />
+                )}
+                {submitting ? progressLabel : actionLabel}
+              </button>
+            </form>
+            {registering || registrationAvailable ? (
+              <div className="auth-switch">
+                <span>{registering ? "Already have an account?" : "Need an account?"}</span>
+                <button type="button" onClick={switchMode} disabled={submitting || usingPasskey}>
+                  {registering
+                    ? "Sign in"
+                    : registrationMode === "invite"
+                      ? "Create account with invite"
+                      : "Create account"}
+                </button>
+              </div>
+            ) : (
+              <p className="registration-closed">
+                {configLoaded
+                  ? "Account creation is closed on this server."
+                  : "Checking account availability…"}
+              </p>
+            )}
+            <AuthLegalLinks />
+          </>
         )}
-        <AuthLegalLinks />
       </section>
     </dialog>
   );
