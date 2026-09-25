@@ -1,4 +1,4 @@
-import { ArrowLeft, SquarePlay } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { BootstrapData, Feed } from "../../../shared/types";
 import { isYouTubeChannelFeed, type YouTubeStatus } from "../../../shared/youtube";
@@ -66,7 +66,7 @@ export default function AddFeedPage({
             </header>
             <div className="add-feed-fallback youtube-sync-suggestion">
               <span className="add-feed-source-mark" aria-hidden="true">
-                <SquarePlay size={20} />
+                <RefreshCw size={20} />
               </span>
               <div>
                 <strong id="youtube-sync-suggestion-heading">
