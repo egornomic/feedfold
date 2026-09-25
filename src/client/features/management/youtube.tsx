@@ -1,8 +1,9 @@
-import { LoaderCircle } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { YouTubeStatus } from "../../../shared/youtube";
 import { appUrl, errorMessage } from "../../api/api-contract";
 import { httpRequest } from "../../api/http-request";
+import { useAnimatedDialog } from "../../ui/motion";
 
 export function YouTubeSettings({ userId }: { userId: string }) {
   const [status, setStatus] = useState<YouTubeStatus | null>(null);
@@ -10,6 +11,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const connectDialog = useAnimatedDialog(() => setError(null), { autoOpen: false });
   const headers = { "X-Feedfold-Account": userId };
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
     };
   }, [userId]);
 
-  const act = async (action: "connect" | "disconnect" | "status") => {
+  const act = async (action: "connect" | "disconnect" | "status", filterShorts = false) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -48,6 +50,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
         const { url } = await httpRequest<{ url: string }>("/api/youtube/connect", {
           method: "POST",
           headers,
+          body: JSON.stringify({ filterShorts }),
         });
         window.location.assign(url);
         return;
@@ -120,10 +123,12 @@ export function YouTubeSettings({ userId }: { userId: string }) {
               className="primary-button"
               type="button"
               disabled={busy}
-              onClick={() => void act("connect")}
+              onClick={() => {
+                setError(null);
+                connectDialog.open();
+              }}
             >
-              {busy ? <LoaderCircle className="spin" size={15} aria-hidden="true" /> : null} Connect
-              YouTube
+              Connect YouTube
             </button>
           )}
         </div>
@@ -182,6 +187,64 @@ export function YouTubeSettings({ userId }: { userId: string }) {
           <p>{notice}</p>
         </div>
       ) : null}
+      <dialog
+        ref={connectDialog.dialogRef}
+        className="management-dialog youtube-connect-dialog"
+        aria-labelledby="youtube-connect-title"
+        aria-describedby="youtube-connect-description"
+        data-state={connectDialog.closing ? "closing" : "open"}
+        inert={connectDialog.closing}
+        onClose={connectDialog.handleClose}
+        onCancel={(event) => {
+          if (busy) event.preventDefault();
+          else connectDialog.handleCancel(event);
+        }}
+      >
+        <header className="management-dialog-heading">
+          <h2 id="youtube-connect-title">Hide Shorts from your feed?</h2>
+          <button
+            className="icon-button"
+            type="button"
+            disabled={busy}
+            onClick={connectDialog.close}
+            aria-label="Cancel YouTube connection"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+        <div className="management-dialog-body">
+          <p id="youtube-connect-description">
+            Hide Shorts adds a rule to your YouTube folder. You can change it later in Rules.
+          </p>
+          {error ? (
+            <div className="management-dialog-error" role="alert">
+              {error}
+            </div>
+          ) : null}
+          {busy ? <p role="status">Connecting…</p> : null}
+        </div>
+        <footer className="management-dialog-footer">
+          <span />
+          <div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={busy}
+              onClick={() => void act("connect", false)}
+            >
+              Include Shorts
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={busy}
+              onClick={() => void act("connect", true)}
+            >
+              Hide Shorts
+            </button>
+          </div>
+        </footer>
+      </dialog>
     </section>
   );
 }

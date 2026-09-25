@@ -8,6 +8,7 @@ import Sqlite from "better-sqlite3";
 import { chromium } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
+import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { PRIVATE_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
@@ -17,6 +18,7 @@ import { digest, YouTubeTokenCipher } from "../../src/server/features/youtube/cr
 import { YouTubeService } from "../../src/server/features/youtube/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -108,6 +110,61 @@ function setup(limit: number | null = null, basePath = "") {
 }
 
 describe("YouTube subscription sync", () => {
+  it("hides Shorts only in the YouTube folder without creating duplicate rules", () => {
+    const { database, service } = setup();
+    service.reconcile(1, [first]);
+    const feed = database.feeds.listFeeds(1)[0];
+    if (!feed) throw new Error("Missing synced feed");
+    const outside = database.feeds.createFeed(1, { feedUrl: "https://example.com/feed" });
+    for (const feedId of [feed.id, outside.id]) {
+      completeFeedRefresh(database.feeds, feedId, {
+        httpStatus: 200,
+        etag: null,
+        lastModified: null,
+        parsed: {
+          title: "Videos",
+          siteUrl: null,
+          articles: ["shorts/short123", "watch?v=video123"].map((path) => ({
+            externalId: `${path}${feedId}`,
+            title: `${path}${feedId}`,
+            url: `https://www.youtube.com/${path}${feedId}`,
+            author: null,
+            publishedAt: null,
+            summary: "",
+            imageUrl: null,
+            feedContentHtml: null,
+            media: youtubeMediaFromUrl(`https://www.youtube.com/${path}${feedId}`),
+          })),
+        },
+      });
+    }
+    expect(database.articles.listArticlePage(1, { state: "all" }).articles).toHaveLength(4);
+    service.createShortsRule(1);
+    service.createShortsRule(1);
+    const rules = database.rules.listRules(1);
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatchObject({ folderId: feed.folderId, action: "hide", matchedCount: 1 });
+    const visible = database.articles.listArticlePage(1, { state: "all" }).articles;
+    expect(visible).toHaveLength(3);
+    expect(visible.filter((article) => article.media?.type === "short")).toHaveLength(1);
+    expect(visible.filter((article) => article.media?.type === "video")).toHaveLength(2);
+  });
+
+  it.each([false, true])(
+    "carries the Shorts preference %s through authorization without creating a rule early",
+    async (filterShorts) => {
+      const { database, service } = setup();
+      const auth = new AuthService(database.auth, 20);
+      const session = await auth.register("shorts-reader", "test-password-long");
+      if (!session) throw new Error("Registration failed");
+      const authorization = new URL(service.authorize(1, session.token, filterShorts));
+      const state = authorization.searchParams.get("state") as string;
+      expect(service.consumeState(1, session.token, state).filterShorts).toBe(filterShorts);
+      expect(database.rules.listRules(1)).toHaveLength(0);
+      expect(database.folders.listFolders(1)).toHaveLength(0);
+    },
+  );
+
   it("keeps an existing login when returning from another site after starting YouTube connect", async () => {
     const { database, service } = setup();
     database.connection.prepare("DELETE FROM youtube_connections").run();
@@ -270,7 +327,8 @@ describe("YouTube subscription sync", () => {
     );
     expect(() => service.consumeState(user.id + 1, session.token, state)).toThrow("expired");
     expect(() => service.consumeState(user.id, "another-session", state)).toThrow("expired");
-    const verifier = service.consumeState(user.id, session.token, state);
+    const { verifier, filterShorts } = service.consumeState(user.id, session.token, state);
+    expect(filterShorts).toBe(false);
     expect(digest(verifier)).toBe(authorization.searchParams.get("code_challenge"));
     expect(() => service.consumeState(user.id, session.token, state)).toThrow("expired");
     const expired = new URL(service.authorize(user.id, session.token));
@@ -282,6 +340,59 @@ describe("YouTube subscription sync", () => {
 });
 
 describe("YouTube data retention", () => {
+  it("removes the generated Shorts rule when a connection ends so reconnect can include Shorts", () => {
+    const { database, service, connect } = setup();
+    service.reconcile(1, [first]);
+    service.createShortsRule(1);
+    const generated = database.rules.listRules(1)[0];
+    if (!generated) throw new Error("Missing Shorts rule");
+    database.rules.updateRule(1, generated.id, { name: "My video filter", enabled: false });
+    const personal = database.rules.createRule(1, {
+      name: "My own filter",
+      conditions: [{ field: "title", pattern: "advertisement" }],
+      conditionOperator: "and",
+      action: "hide",
+    });
+    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
+    service.expireStaleConnections();
+    expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
+    connect(1);
+    service.reconcile(1, [first]);
+    expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
+    service.createShortsRule(1);
+    expect(database.rules.listRules(1)).toHaveLength(2);
+  });
+
+  it("preserves a pre-existing Shorts rule that the user created", () => {
+    const { database, service } = setup();
+    service.reconcile(1, [first]);
+    const folder = database.folders.listFolders(1)[0];
+    if (!folder) throw new Error("Missing YouTube folder");
+    const personal = database.rules.createRule(1, {
+      name: "My Shorts filter",
+      folderId: folder.id,
+      conditions: [{ field: "media", pattern: "short" }],
+      conditionOperator: "and",
+      action: "hide",
+    });
+    service.createShortsRule(1);
+    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
+    service.expireStaleConnections();
+    expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
+  });
+
+  it("can end a connection after the user manually deletes its Shorts rule", () => {
+    const { database, service } = setup();
+    service.createShortsRule(1);
+    const rule = database.rules.listRules(1)[0];
+    if (!rule) throw new Error("Missing Shorts rule");
+    database.rules.deleteRule(1, rule.id);
+    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
+    service.expireStaleConnections();
+    expect(service.status(1).connected).toBe(false);
+    expect(database.rules.listRules(1)).toHaveLength(0);
+  });
+
   it("expires stale imports even for disabled accounts while retaining fresh imports", () => {
     const { database, service } = setup();
     service.reconcile(1, [first]);

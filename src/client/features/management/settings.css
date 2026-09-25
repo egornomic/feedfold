@@ -767,6 +767,22 @@
   justify-content: flex-end;
   gap: 7px;
 }
+.youtube-connect-dialog {
+  width: min(480px, calc(100vw - 28px));
+}
+.youtube-connect-dialog .management-dialog-heading {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.youtube-connect-dialog .management-dialog-heading h2 {
+  white-space: normal;
+}
+.youtube-connect-dialog .management-dialog-body p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.youtube-connect-dialog .management-dialog-body p + p {
+  margin-top: 12px;
+}
 .saving-label {
   display: inline-flex;
   align-items: center;

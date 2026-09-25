@@ -43,6 +43,9 @@ export async function youtubeRoutes(
   app.post("/api/youtube/connect", async (request, reply) => {
     const youtube = service();
     const userId = options.userId(request);
+    const { filterShorts } = z
+      .object({ filterShorts: z.boolean().default(false) })
+      .parse(request.body ?? {});
     const retryAfter = youtube.consumeConnectionAttempt(userId);
     if (retryAfter !== null) {
       return reply.header("Retry-After", retryAfter).code(429).send({
@@ -50,7 +53,7 @@ export async function youtubeRoutes(
       });
     }
     const token = sessionToken(request.headers.cookie) as string;
-    const url = youtube.authorize(userId, token);
+    const url = youtube.authorize(userId, token, filterShorts);
     reply.header(
       "Set-Cookie",
       options.authService.sessionCookie(token, secureRequest(request, options.publicOrigin)),
@@ -62,14 +65,14 @@ export async function youtubeRoutes(
     let result = "failed";
     if (input.success) {
       try {
-        const verifier = service().consumeState(
+        const { verifier, filterShorts } = service().consumeState(
           options.userId(request),
           sessionToken(request.headers.cookie) as string,
           input.data.state,
         );
         if (input.data.error) result = "cancelled";
         else if (input.data.code) {
-          await service().connect(options.userId(request), input.data.code, verifier);
+          await service().connect(options.userId(request), input.data.code, verifier, filterShorts);
           result = "connected";
         }
       } catch {
