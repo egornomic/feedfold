@@ -488,12 +488,14 @@ export default function AppShell({
           />
         ) : route.route.kind === "add-feed" ? (
           <AddFeedPage
+            userId={user.id}
             bootstrap={bootstrap}
             initialSourceUrl={route.route.sourceUrl}
             initialSourceType={route.route.sourceType}
             mutations={dataResource}
             onMenu={() => setNavOpen(true)}
             onBack={() => route.navigate({ kind: "feeds" }, "replace")}
+            onYouTubeSettings={() => route.navigate({ kind: "settings", category: "feeds" })}
             showToast={showToast}
           />
         ) : route.view === "feeds" ? (
