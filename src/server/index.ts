@@ -1,41 +1,13 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
-import {
-  deploymentPolicy,
-  type ResourceQuotas,
-  registrationAccountCap,
-  registrationMode,
-} from "./deployment-policy.js";
 import { AuthService } from "./features/auth/service.js";
 import { youtubeConfiguration } from "./features/youtube/config.js";
 import { YouTubeService } from "./features/youtube/service.js";
 import { productionListenMessage, productionLogger } from "./logging.js";
 import { createApplicationRuntime } from "./runtime/application-runtime.js";
 import { positiveInteger, runtimeConfiguration } from "./runtime/configuration.js";
-
-function quotaOverrides(environment: NodeJS.ProcessEnv): Partial<ResourceQuotas> {
-  const overrides: Partial<ResourceQuotas> = {};
-  const read = (key: keyof ResourceQuotas, name: string): void => {
-    const value = environment[name];
-    if (value !== undefined) overrides[key] = positiveInteger(value, 1, name);
-  };
-  read("feedDiscoveriesPerDay", "FEEDFOLD_QUOTA_FEED_DISCOVERIES_PER_DAY");
-  read("webAnalysesPerDay", "FEEDFOLD_QUOTA_WEB_ANALYSES_PER_DAY");
-  read("chromiumConcurrent", "FEEDFOLD_QUOTA_CHROMIUM_CONCURRENT");
-  read("articleExtractionsPerDay", "FEEDFOLD_QUOTA_ARTICLE_EXTRACTIONS_PER_DAY");
-  read("articleExtractionsConcurrent", "FEEDFOLD_QUOTA_ARTICLE_EXTRACTIONS_CONCURRENT");
-  read("mediaProxyRequestsPerDay", "FEEDFOLD_QUOTA_MEDIA_PROXY_REQUESTS_PER_DAY");
-  read("opmlUploadBytes", "FEEDFOLD_QUOTA_OPML_UPLOAD_BYTES");
-  read("opmlFeedsPerImport", "FEEDFOLD_QUOTA_OPML_FEEDS_PER_IMPORT");
-  read("articlesPerAccount", "FEEDFOLD_QUOTA_ARTICLES_PER_ACCOUNT");
-  read("storedBytesPerAccount", "FEEDFOLD_QUOTA_STORED_BYTES_PER_ACCOUNT");
-  read("outboundRequestsConcurrent", "FEEDFOLD_QUOTA_OUTBOUND_REQUESTS_CONCURRENT");
-  read("outboundRequestsPerDay", "FEEDFOLD_QUOTA_OUTBOUND_REQUESTS_PER_DAY");
-  read("registeredAccounts", "FEEDFOLD_QUOTA_REGISTERED_ACCOUNTS");
-  read("globalStoredBytes", "FEEDFOLD_QUOTA_GLOBAL_STORED_BYTES");
-  return overrides;
-}
+import { registrationAccountCap, registrationMode, serverPolicy } from "./service-policy.js";
 
 function configuredPublicOrigin(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -69,7 +41,7 @@ const configuration = runtimeConfiguration(process.env);
 const staticDir = fileURLToPath(new URL("../client", import.meta.url));
 const demoDir = fileURLToPath(new URL("../demo", import.meta.url));
 const publicOrigin = configuredPublicOrigin(process.env.FEEDFOLD_PUBLIC_ORIGIN);
-const policy = deploymentPolicy(process.env.FEEDFOLD_DEPLOYMENT_MODE, quotaOverrides(process.env));
+const policy = serverPolicy(process.env);
 const registrationCooldownMinutes = positiveInteger(
   process.env.FEEDFOLD_REGISTRATION_COOLDOWN_MINUTES,
   60,
@@ -89,13 +61,13 @@ const stepUpCooldownMinutes = positiveInteger(
 const runtime = createApplicationRuntime({
   databasePath,
   configuration,
-  deploymentPolicy: policy,
+  servicePolicy: policy,
   credentialCipher: null,
 });
 const { database } = runtime.services;
 const authService = new AuthService(database.auth, configuration.pollIntervalMinutes, {
-  maxAccounts: registrationAccountCap(policy, process.env.FEEDFOLD_MAX_ACCOUNTS),
-  registrationMode: registrationMode(policy, process.env.FEEDFOLD_REGISTRATION_MODE),
+  maxAccounts: registrationAccountCap(process.env.FEEDFOLD_MAX_ACCOUNTS),
+  registrationMode: registrationMode(process.env.FEEDFOLD_REGISTRATION_MODE),
   recentAuthenticationSeconds: positiveInteger(
     process.env.FEEDFOLD_RECENT_AUTH_SECONDS,
     300,

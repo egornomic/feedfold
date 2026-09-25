@@ -22,6 +22,7 @@ import { applicationError } from "../server/application-error.js";
 import { ApplicationApiError } from "../server/errors.js";
 import { createApplicationRuntime } from "../server/runtime/application-runtime.js";
 import { runtimeConfiguration } from "../server/runtime/configuration.js";
+import { DESKTOP_POLICY } from "../server/service-policy.js";
 import { API_OPERATIONS, type UntrustedApiRequest } from "../shared/api/operations.js";
 import { DESKTOP_DATA_CHANGED_CHANNEL, type DesktopResponse } from "../shared/desktop.js";
 import { DesktopCredentialCipher } from "./credential-cipher.js";
@@ -101,6 +102,7 @@ function desktopBrowserExecutable(): string {
 function createDesktopRuntime() {
   const shared = createApplicationRuntime({
     databasePath: resolve(join(app.getPath("userData"), "feedfold.db")),
+    servicePolicy: DESKTOP_POLICY,
     configuration: runtimeConfiguration(process.env),
     credentialCipher:
       !smokeTest && safeStorage.isEncryptionAvailable() ? new DesktopCredentialCipher() : null,

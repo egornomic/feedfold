@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type Sqlite from "better-sqlite3";
-import type { DeploymentPolicy } from "./deployment-policy.js";
+import type { ServicePolicy } from "./service-policy.js";
 
 type DailyResource =
   | "article_extraction"
@@ -43,7 +43,7 @@ function byteLimitLabel(bytes: number): string {
 export class QuotaService {
   constructor(
     private readonly sqlite: Sqlite.Database,
-    private readonly policy: DeploymentPolicy,
+    private readonly policy: ServicePolicy,
     private readonly now: () => Date = () => new Date(),
   ) {
     const byteLimit = policy.quotas.globalStoredBytes;

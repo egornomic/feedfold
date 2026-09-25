@@ -1,8 +1,8 @@
 import type Sqlite from "better-sqlite3";
 import type { Feed, WebFeedConfig } from "../../../shared/types.js";
-import type { DeploymentPolicy } from "../../deployment-policy.js";
 import { InvalidRequestError, OperationForbiddenError } from "../../errors.js";
 import type { QuotaService } from "../../quota.js";
+import type { ServicePolicy } from "../../service-policy.js";
 import type { ArticleRepository } from "../articles/repository.js";
 import type { FolderRepository } from "../folders/repository.js";
 import type { RuleRepository } from "../rules/repository.js";
@@ -19,7 +19,7 @@ export class FeedService {
     private readonly folders: FolderRepository,
     private readonly articles: ArticleRepository,
     private readonly rules: RuleRepository,
-    private readonly deploymentPolicy: DeploymentPolicy,
+    private readonly servicePolicy: ServicePolicy,
     private readonly quotas: QuotaService,
   ) {
     this.ingestion = new FeedIngestionService(sqlite, repository, articles, rules, this.quotas);
@@ -34,11 +34,11 @@ export class FeedService {
   }
 
   assertCanCreateFeed(userId: number, sourceKind: Feed["sourceKind"] = "published"): void {
-    const limit = this.deploymentPolicy.maxFeedsPerAccount;
+    const limit = this.servicePolicy.maxFeedsPerAccount;
     if (limit !== null && this.repository.countFeeds(userId) >= limit) {
       throw new InvalidRequestError(`This account can subscribe to up to ${limit} feeds.`);
     }
-    const webLimit = this.deploymentPolicy.maxWebFeedsPerAccount;
+    const webLimit = this.servicePolicy.maxWebFeedsPerAccount;
     if (
       sourceKind === "web" &&
       webLimit !== null &&
@@ -49,11 +49,11 @@ export class FeedService {
   }
 
   refreshQueueLimit(): number | null {
-    return this.deploymentPolicy.maxPendingRefreshes;
+    return this.servicePolicy.maxPendingRefreshes;
   }
 
   getManualRefreshFeedIds(userId: number, requestedIds?: number[]): number[] {
-    if (!this.deploymentPolicy.manualRefresh) {
+    if (!this.servicePolicy.manualRefresh) {
       throw new OperationForbiddenError("Manual refresh is unavailable.");
     }
     if (requestedIds) {

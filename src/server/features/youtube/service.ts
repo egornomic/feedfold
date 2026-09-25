@@ -237,7 +237,7 @@ export class YouTubeService {
         this.database.feeds.listFeeds(userId).map((feed) => [feed.feedUrl, feed]),
       );
       const missing = channels.filter((channel) => !existing.has(feedUrl(channel.id)));
-      const limit = this.database.deploymentPolicy.maxFeedsPerAccount;
+      const limit = this.database.servicePolicy.maxFeedsPerAccount;
       if (limit !== null && existing.size + missing.length > limit) {
         throw new ApplicationApiError(
           409,

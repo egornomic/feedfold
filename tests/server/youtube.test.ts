@@ -10,7 +10,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { PRIVATE_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { youtubeConfiguration } from "../../src/server/features/youtube/config.js";
@@ -18,6 +17,7 @@ import { digest, YouTubeTokenCipher } from "../../src/server/features/youtube/cr
 import { YouTubeService } from "../../src/server/features/youtube/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import { DESKTOP_POLICY } from "../../src/server/service-policy.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => void> = [];
@@ -77,7 +77,7 @@ describe("YouTube configuration", () => {
 
 function setup(limit: number | null = null, basePath = "") {
   const database = new AppDatabase(":memory:", 20, {
-    ...PRIVATE_DEPLOYMENT_POLICY,
+    ...DESKTOP_POLICY,
     maxFeedsPerAccount: limit,
   });
   cleanups.push(() => database.close());

@@ -1,5 +1,5 @@
 import type { BootstrapData } from "../../../shared/types.js";
-import type { DeploymentPolicy } from "../../deployment-policy.js";
+import type { ServicePolicy } from "../../service-policy.js";
 import type { ArticleRepository } from "../articles/repository.js";
 import type { FeedService } from "../feeds/service.js";
 import type { FolderService } from "../folders/service.js";
@@ -11,7 +11,7 @@ export class BootstrapService {
     private readonly feeds: FeedService,
     private readonly folders: FolderService,
     private readonly settings: SettingsService,
-    private readonly deploymentPolicy: DeploymentPolicy,
+    private readonly servicePolicy: ServicePolicy,
   ) {}
 
   getBootstrap(userId: number): Omit<BootstrapData, "aiSettings"> {
@@ -25,7 +25,7 @@ export class BootstrapService {
         all: feeds.reduce((count, feed) => count + feed.totalCount, 0),
         starred: this.articles.getStarredCount(userId),
       },
-      capabilities: { manualRefresh: this.deploymentPolicy.manualRefresh },
+      capabilities: { manualRefresh: this.servicePolicy.manualRefresh },
     };
   }
 }

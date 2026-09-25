@@ -5,13 +5,13 @@ import { chromium } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import { PUBLIC_DEPLOYMENT_POLICY, registrationMode } from "../../src/server/deployment-policy.js";
 import { setInvitationOwner } from "../../src/server/features/auth/repository.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import { DEFAULT_SERVER_POLICY, registrationMode } from "../../src/server/service-policy.js";
 import type { InvitationOverview, RegistrationMode } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -24,7 +24,7 @@ async function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "feedfold-invitations-"));
   cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
   const path = join(directory, "feedfold.db");
-  const database = new AppDatabase(path, 20, PUBLIC_DEPLOYMENT_POLICY);
+  const database = new AppDatabase(path, 20, DEFAULT_SERVER_POLICY);
   cleanups.push(() => database.close());
   const setup = new AuthService(database.auth, 20, { registrationMode: "open" });
   const owner = await setup.register("owner", password);
@@ -168,8 +168,8 @@ describe("invitation registration through HTTP", () => {
 
   it("defaults public registration to closed and changes admission without changing accounts or invite history", async () => {
     const { server, database, ownerCookie } = await fixture();
-    expect(registrationMode(PUBLIC_DEPLOYMENT_POLICY)).toBe("closed");
-    expect(() => registrationMode(PUBLIC_DEPLOYMENT_POLICY, "anything")).toThrow();
+    expect(registrationMode()).toBe("closed");
+    expect(() => registrationMode("anything")).toThrow();
     const closed = await server();
     expect((await closed.register("blocked")).status).toBe(403);
     expect((await closed.request("GET", "/api/auth/config")).body).toMatchObject({
@@ -292,7 +292,7 @@ describe("invitation registration through HTTP", () => {
       ).status,
     ).toBe(403);
     expect((await api.list()).invitations[0]?.redeemedAt).toBeNull();
-    const secondDatabase = new AppDatabase(path, 20, PUBLIC_DEPLOYMENT_POLICY);
+    const secondDatabase = new AppDatabase(path, 20, DEFAULT_SERVER_POLICY);
     try {
       const second = new AuthService(secondDatabase.auth, 20, {
         registrationMode: "invite",

@@ -55,7 +55,7 @@ Desktop data is stored at `~/Library/Application Support/feedfold/feedfold.db`. 
 
 The included Compose deployment runs one Node.js 24.18.0 process, starts sandboxed headless Chromium when a web feed loads, and stores SQLite data in a named volume.
 
-1. Build and start feedfold:
+1. Create a project-level `.env` file with `FEEDFOLD_REGISTRATION_MODE=open` and `FEEDFOLD_MAX_ACCOUNTS=1` for a single-account server. Then build and start feedfold:
 
    ```sh
    docker compose up -d --build
@@ -100,10 +100,14 @@ Compose reads these values from the shell or a project-level `.env` file:
 | `FEEDFOLD_BIND_ADDRESS` | `127.0.0.1` | Host address that publishes the container port. Keep loopback when a local reverse proxy provides access. |
 | `FEEDFOLD_PORT` | `3000` | Host port forwarded to feedfold. |
 | `FEEDFOLD_BASE_PATH` | `/` | Browser-facing path where feedfold is mounted. Set this at build time and server runtime, including the leading and trailing slash, when a reverse proxy publishes feedfold below a path such as `/feedfold/`. The Docker image preserves the value used during its build. |
-| `FEEDFOLD_DEPLOYMENT_MODE` | `private` | Use `private` for unrestricted desktop and self-hosted operation, or `public` for public-service inactivity, refresh, and subscription limits. |
 | `FEEDFOLD_PUBLIC_ORIGIN` | none | Exact external HTTPS origin used for secure cookies, passkeys, and browser-origin validation. |
-| `FEEDFOLD_REGISTRATION_MODE` | `closed` | Public-server registration policy: `closed`, `invite`, or `open`. Private servers only offer initial owner setup. |
-| `FEEDFOLD_MAX_ACCOUNTS` | none | Public-mode account cap, including the owner. `0`, a missing value, or an invalid value disables registration under every policy. |
+| `FEEDFOLD_REGISTRATION_MODE` | `closed` | Registration policy: `closed`, `invite`, or `open`. A positive account cap is also required; invite registration requires an invitation. |
+| `FEEDFOLD_MAX_ACCOUNTS` | `0` | Account cap, including the owner. `0`, a missing value, or an invalid value disables registration under every policy. |
+| `FEEDFOLD_MANUAL_REFRESH` | `false` | Allow user-triggered refreshes: `true` or `false`. |
+| `FEEDFOLD_ACCOUNT_ACTIVITY_WINDOW_DAYS` | `7` | Stop scheduled refreshes for accounts inactive for this many days. |
+| `FEEDFOLD_MAX_FEEDS_PER_ACCOUNT` | `300` | Total subscriptions per account, including web feeds. |
+| `FEEDFOLD_MAX_WEB_FEEDS_PER_ACCOUNT` | `10` | Web subscriptions per account. |
+| `FEEDFOLD_MAX_PENDING_REFRESHES` | `2000` | Maximum queued feed refreshes across the server. |
 | `FEEDFOLD_RECENT_AUTH_SECONDS` | `300` | Time after authentication during which credential changes do not require another check. |
 | `FEEDFOLD_REGISTRATION_IP_LIMIT` | `10` | Registration attempts allowed per source during the registration cooldown. |
 | `FEEDFOLD_REGISTRATION_GLOBAL_LIMIT` | `100` | Registration attempts allowed across the deployment during the registration cooldown. |
@@ -119,7 +123,11 @@ Compose reads these values from the shell or a project-level `.env` file:
 | `ARTICLE_FETCH_TIMEOUT_MS` | `20000` | Full-article request timeout, in milliseconds. |
 | `AI_REQUEST_TIMEOUT_MS` | `60000` | AI provider request timeout, in milliseconds. |
 
-Public mode also accepts these server-side quota overrides. Private mode leaves them unlimited.
+All server settings are independent. Limits and resource quotas accept a positive integer or `unlimited` to disable that individual limit. `FEEDFOLD_MAX_ACCOUNTS` instead accepts a nonnegative integer; `0` disables registration. Both the registration account cap and registered-account resource quota apply.
+
+The desktop app remains local, account-free, and unrestricted. Server registration, limit, and quota settings do not affect it.
+
+Resource quotas:
 
 | Variable | Default | Scope |
 | --- | ---: | --- |

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
-import { deploymentPolicy } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import { serverPolicy } from "../../src/server/service-policy.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -245,7 +245,7 @@ describe("shared feed sources", () => {
     const database = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { articlesPerAccount: 1 }),
+      serverPolicy({ FEEDFOLD_QUOTA_ARTICLES_PER_ACCOUNT: "1" }),
     );
     const auth = new AuthService(database.auth, 20, { maxAccounts: 100, registrationMode: "open" });
     cleanups.push(() => database.close());

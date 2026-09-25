@@ -1,6 +1,5 @@
 import Sqlite from "better-sqlite3";
 import { normalizeFeedPollInterval } from "../shared/types.js";
-import { type DeploymentPolicy, PRIVATE_DEPLOYMENT_POLICY } from "./deployment-policy.js";
 import { AiRepository } from "./features/ai/repository.js";
 import { ArticleRepository } from "./features/articles/repository.js";
 import { AuthRepository } from "./features/auth/repository.js";
@@ -18,6 +17,7 @@ import { SettingsService } from "./features/settings/service.js";
 import { WEB_FEED_POLL_INTERVAL_MINUTES } from "./features/shared.js";
 import { migrateDatabase } from "./migrations.js";
 import { QuotaService } from "./quota.js";
+import { DESKTOP_POLICY, type ServicePolicy } from "./service-policy.js";
 
 export class AppDatabase {
   readonly connection: Sqlite.Database;
@@ -32,15 +32,11 @@ export class AppDatabase {
   readonly opml: OpmlService;
   readonly rules: RuleRepository;
   readonly settings: SettingsService;
-  readonly deploymentPolicy: DeploymentPolicy;
+  readonly servicePolicy: ServicePolicy;
   readonly quotas: QuotaService;
 
-  constructor(
-    path: string,
-    defaultPollIntervalMinutes = 20,
-    deploymentPolicy = PRIVATE_DEPLOYMENT_POLICY,
-  ) {
-    this.deploymentPolicy = deploymentPolicy;
+  constructor(path: string, defaultPollIntervalMinutes = 20, servicePolicy = DESKTOP_POLICY) {
+    this.servicePolicy = servicePolicy;
     this.connection = new Sqlite(path);
     this.connection.pragma("busy_timeout = 5000");
     this.connection.pragma("foreign_keys = ON");
@@ -50,7 +46,7 @@ export class AppDatabase {
         .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'")
         .get() === undefined;
     migrateDatabase(this.connection, WEB_FEED_POLL_INTERVAL_MINUTES);
-    this.quotas = new QuotaService(this.connection, deploymentPolicy);
+    this.quotas = new QuotaService(this.connection, servicePolicy);
     if (this.wasNewDatabase && defaultPollIntervalMinutes !== 20) {
       this.connection
         .prepare("UPDATE settings SET poll_interval_minutes = ? WHERE user_id = 1")
@@ -73,7 +69,7 @@ export class AppDatabase {
     const feedRepository = new FeedRepository(
       this.connection,
       folderRepository,
-      deploymentPolicy.accountActivityWindowDays,
+      servicePolicy.accountActivityWindowDays,
     );
     const extractionRepository = new ExtractionRepository(this.connection);
     this.folders = new FolderService(this.connection, folderRepository, this.rules);
@@ -83,7 +79,7 @@ export class AppDatabase {
       folderRepository,
       this.articles,
       this.rules,
-      deploymentPolicy,
+      servicePolicy,
       this.quotas,
     );
     this.auth = new AuthRepository(this.connection, this.quotas, this.feeds);
@@ -98,7 +94,7 @@ export class AppDatabase {
       this.feeds,
       this.folders,
       this.settings,
-      deploymentPolicy,
+      servicePolicy,
     );
     this.opml = new OpmlService(this.feeds, this.folders, this.quotas);
   }
