@@ -64,7 +64,7 @@ export default function AddFeedPage({
               </h2>
               <p>You’re now following {savedFeed.title}.</p>
             </header>
-            <div className="add-feed-fallback">
+            <div className="add-feed-fallback youtube-sync-suggestion">
               <span className="add-feed-source-mark" aria-hidden="true">
                 <SquarePlay size={20} />
               </span>
@@ -74,12 +74,12 @@ export default function AddFeedPage({
                 </strong>
                 <p>Connect YouTube to add your subscribed channels and keep them in sync daily.</p>
               </div>
-              <div className="add-feed-fallback-actions">
-                <button className="secondary-button" type="button" onClick={onBack}>
-                  Not now
-                </button>
+              <div className="youtube-sync-suggestion-actions">
                 <button className="primary-button" type="button" onClick={onYouTubeSettings}>
                   Set up YouTube sync
+                </button>
+                <button className="quiet-button" type="button" onClick={onBack}>
+                  Not now
                 </button>
               </div>
             </div>

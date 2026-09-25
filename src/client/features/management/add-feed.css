@@ -1,4 +1,26 @@
+.youtube-sync-suggestion {
+  column-gap: 16px;
+  padding: 20px;
+}
+
+.youtube-sync-suggestion-actions {
+  display: flex;
+  grid-column: 2;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 @media (max-width: 620px) {
+  .youtube-sync-suggestion-actions {
+    grid-column: 1 / -1;
+  }
+
+  .youtube-sync-suggestion-actions > button {
+    flex: 1 1 auto;
+  }
+
   .add-feed-page .page-header {
     min-height: 64px;
     flex-wrap: nowrap;
