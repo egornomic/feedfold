@@ -17,11 +17,22 @@ if (!existsSync(path)) {
     const userId = session.user.id;
     const demo = createDemoData();
     database.connection.transaction(() => {
-      const folders = new Map(
-        demo.folders.map((folder) => [
-          folder.id,
-          database.folders.createFolder(userId, { name: folder.name }).id,
-        ]),
+      const folders = new Map<number, number>();
+      function seedFolders(parentId: number | null): void {
+        for (const folder of demo.folders.filter((folder) => folder.parentId === parentId)) {
+          const created = database.folders.createFolder(userId, {
+            name: folder.name,
+            parentId: parentId === null ? null : folders.get(parentId),
+            position: folder.position,
+            sortDirection: folder.sortDirection,
+          });
+          folders.set(folder.id, created.id);
+          seedFolders(folder.id);
+        }
+      }
+      seedFolders(null);
+      const findArticle = database.connection.prepare(
+        "SELECT id FROM articles WHERE source_id = ? AND external_id = ?",
       );
       for (const source of demo.feeds.filter((feed) => feed.sourceKind === "published")) {
         const feed = database.feeds.createFeed(userId, {
@@ -30,18 +41,25 @@ if (!existsSync(path)) {
           siteUrl: source.siteUrl,
           folderId: source.folderId === null ? null : folders.get(source.folderId),
         });
-        database.feeds.completeSourceRefresh(database.feeds.sourceIdForFeed(feed.id), {
+        const sourceId = database.feeds.sourceIdForFeed(feed.id);
+        const articles = demo.articles.filter((article) => article.feedId === source.id);
+        database.feeds.completeSourceRefresh(sourceId, {
           httpStatus: 200,
           etag: null,
           lastModified: null,
           parsed: {
             title: source.title,
             siteUrl: source.siteUrl,
-            articles: demo.articles
-              .filter((article) => article.feedId === source.id)
-              .map((article) => ({ ...article, externalId: String(article.id) })),
+            articles: articles.map((article) => ({ ...article, externalId: String(article.id) })),
           },
         });
+        for (const article of articles) {
+          const stored = findArticle.get(sourceId, String(article.id)) as { id: number };
+          database.articles.updateArticleState(userId, stored.id, {
+            isRead: article.isRead,
+            isStarred: article.isStarred,
+          });
+        }
         database.feeds.updateFeed(userId, feed.id, { paused: true });
       }
     })();
