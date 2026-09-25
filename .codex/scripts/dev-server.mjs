@@ -13,32 +13,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import Database from "better-sqlite3";
 
 const devCommand = ["npm", "run", "dev"];
 const startupTimeoutMs = 60_000;
 
 const worktreePath = realpathSync(process.env.CODEX_WORKTREE_PATH ?? process.cwd());
-const commonGitResult = spawnSync(
-  "git",
-  ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-  { cwd: worktreePath, encoding: "utf8" },
-);
-if (commonGitResult.status !== 0) {
-  throw new Error(`Could not resolve the Git common directory: ${commonGitResult.stderr}`);
-}
-const commonGitPath = realpathSync(commonGitResult.stdout.trim());
-const sharedEnvPath = join(dirname(commonGitPath), ".env");
-const mainDatabasePath = join(commonGitPath, "codex", "feedfold.db");
 const runtimePath = join(worktreePath, ".codex", "runtime");
 const worktreeDatabasePath = join(runtimePath, "feedfold.db");
 const statePath = join(runtimePath, "dev-server.json");
 const logPath = join(runtimePath, "dev-server.log");
 const operation = process.argv[2] ?? "start";
-const shouldOpen = process.argv.includes("--open");
-const shouldCopy = process.argv.includes("--copy");
 
 function readState() {
   if (!existsSync(statePath)) return null;
@@ -244,36 +230,6 @@ function availablePort() {
   });
 }
 
-function openBrowser(url) {
-  const commands = {
-    darwin: ["open", url],
-    linux: ["xdg-open", url],
-    win32: ["cmd", "/c", "start", "", url],
-  };
-  const command = commands[process.platform];
-  if (!command) throw new Error(`Cannot open a browser on ${process.platform}`);
-  const result = spawnSync(command[0], command.slice(1), { stdio: "ignore" });
-  if (result.status !== 0) throw new Error(`Could not open ${url} in a browser`);
-}
-
-function copyUrl(url) {
-  if (process.platform !== "darwin") {
-    throw new Error(`Cannot copy a URL to the clipboard on ${process.platform}`);
-  }
-  const result = spawnSync("pbcopy", { input: url, encoding: "utf8" });
-  if (result.status !== 0) throw new Error("Could not copy the dev-server URL");
-}
-
-async function copyMainDatabase() {
-  if (existsSync(worktreeDatabasePath)) return;
-  const database = new Database(mainDatabasePath, { readonly: true, fileMustExist: true });
-  try {
-    await database.backup(worktreeDatabasePath);
-  } finally {
-    database.close();
-  }
-}
-
 async function start() {
   const existingState = readState();
   if (existingState?.worktreePath === worktreePath && isAlive(existingState.pid)) {
@@ -282,8 +238,6 @@ async function start() {
     const endpoints = await checkEndpoints(existingState);
     if (endpoints.api && endpoints.frontend) {
       if (existingState.status === "starting") writeState({ ...existingState, status: "ready" });
-      if (shouldOpen) openBrowser(existingState.readyUrl);
-      if (shouldCopy) copyUrl(existingState.readyUrl);
       console.log(`Dev server is already running at ${existingState.readyUrl}`);
       return;
     }
@@ -292,13 +246,24 @@ async function start() {
   }
   if (existingState) removeState();
 
-  if (existsSync(sharedEnvPath)) process.loadEnvFile(sharedEnvPath);
+  const envPath = join(worktreePath, ".env");
+  if (existsSync(envPath)) process.loadEnvFile(envPath);
   const [apiPort, webPort] = await Promise.all([availablePort(), availablePort()]);
   const apiOrigin = `http://127.0.0.1:${apiPort}`;
   const readyUrl = `http://localhost:${webPort}/`;
   const healthUrl = `${apiOrigin}/health`;
   mkdirSync(runtimePath, { recursive: true });
-  await copyMainDatabase();
+  if (!existsSync(worktreeDatabasePath)) {
+    const seed = spawnSync(
+      process.execPath,
+      ["--import", "tsx", ".codex/scripts/seed-database.ts"],
+      {
+        cwd: worktreePath,
+        stdio: "inherit",
+      },
+    );
+    if (seed.status !== 0) throw new Error("Could not seed the development database");
+  }
   const logDescriptor = openSync(logPath, "w");
   const child = spawn(devCommand[0], devCommand.slice(1), {
     cwd: worktreePath,
@@ -306,9 +271,11 @@ async function start() {
     env: {
       ...process.env,
       FEEDFOLD_DEV_API_ORIGIN: apiOrigin,
+      FEEDFOLD_PUBLIC_ORIGIN: new URL(readyUrl).origin,
       FEEDFOLD_DEV_PORT: String(webPort),
       DATABASE_PATH: worktreeDatabasePath,
       PORT: String(apiPort),
+      HOST: "127.0.0.1",
     },
     stdio: ["ignore", logDescriptor, logDescriptor],
     windowsHide: true,
@@ -345,8 +312,6 @@ async function start() {
     }
     throw error;
   }
-  if (shouldOpen) openBrowser(readyUrl);
-  if (shouldCopy) copyUrl(readyUrl);
   console.log(`Dev server is ready at ${readyUrl}`);
 }
 
