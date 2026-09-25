@@ -223,11 +223,11 @@ describe("live API, OPML, and filtering rules", () => {
     });
     expect(readerBootstrap.json()).toMatchObject({
       counts: { all: 1 },
-      feeds: [{ title: "feedfold releases" }, { id: readerFeed.id, title: "Reader copy" }],
+      feeds: [{ id: readerFeed.id, title: "Reader copy" }],
     });
     expect(partnerBootstrap.json()).toMatchObject({
       counts: { all: 1 },
-      feeds: [{ title: "feedfold releases" }, { id: partnerFeed.id, title: "Partner copy" }],
+      feeds: [{ id: partnerFeed.id, title: "Partner copy" }],
       folders: [],
     });
 
@@ -542,7 +542,7 @@ describe("live API, OPML, and filtering rules", () => {
           headers: { cookie: readerCookie },
         })
       ).json(),
-    ).toMatchObject({ counts: { all: 0 }, feeds: [{ title: "feedfold releases" }] });
+    ).toMatchObject({ counts: { all: 0 }, feeds: [] });
     expect(
       (
         await app.inject({
@@ -552,7 +552,7 @@ describe("live API, OPML, and filtering rules", () => {
         })
       ).json(),
     ).toMatchObject({
-      feeds: [{ title: "feedfold releases" }, { id: partnerFeed.id, title: "Partner copy" }],
+      feeds: [{ id: partnerFeed.id, title: "Partner copy" }],
     });
 
     expect(

@@ -116,26 +116,17 @@ describe("hosted account authentication", () => {
         url: "/api/bootstrap",
         headers: { cookie: cookieFrom(response.headers["set-cookie"]) },
       });
-      expect(bootstrap.json().feeds).toMatchObject([
-        {
-          title: "feedfold releases",
-          feedUrl: "https://github.com/egornomic/feedfold/releases.atom",
-          paused: false,
-        },
-      ]);
+      expect(bootstrap.json().feeds).toEqual([]);
     }
   });
 
-  it("keeps the default feed removed when an account signs in again", async () => {
+  it("keeps a new account empty when it signs in again", async () => {
     const { app } = await authApp();
     const payload = { username: "reader", password: "reader-password" };
     const registered = await app.inject({ method: "POST", url: "/api/auth/register", payload });
     const headers = { cookie: cookieFrom(registered.headers["set-cookie"]) };
     const bootstrap = await app.inject({ method: "GET", url: "/api/bootstrap", headers });
-    const [feed] = bootstrap.json().feeds;
-    expect(
-      (await app.inject({ method: "DELETE", url: `/api/feeds/${feed.id}`, headers })).statusCode,
-    ).toBe(204);
+    expect(bootstrap.json().feeds).toEqual([]);
     const login = await app.inject({ method: "POST", url: "/api/auth/login", payload });
     const afterLogin = await app.inject({
       method: "GET",

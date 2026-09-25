@@ -234,12 +234,7 @@ describe("passkey authentication", () => {
         },
       });
       const account = database.auth.findEnabledUser("passkey-reader");
-      expect(database.feeds.listFeeds(account?.id ?? 0)).toMatchObject([
-        {
-          title: "feedfold releases",
-          feedUrl: "https://github.com/egornomic/feedfold/releases.atom",
-        },
-      ]);
+      expect(database.feeds.listFeeds(account?.id ?? 0)).toEqual([]);
       await cdp.send("WebAuthn.addVirtualAuthenticator", {
         options: {
           protocol: "ctap2",

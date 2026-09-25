@@ -3,12 +3,14 @@ import type { SessionUser } from "../../shared/types";
 import { ApiError, AUTH_REQUIRED_EVENT, api, appUrl, errorMessage } from "../api/api";
 import { SessionLoading } from "../features/auth/auth";
 import { Homepage } from "../features/auth/homepage";
+import { onboardingStep } from "../features/auth/onboarding-state";
 import { StartupError } from "../features/reader/reader-states";
 import AppShell from "./app-shell";
 
 export function App() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [setupUser, setSetupUser] = useState<SessionUser | undefined>();
   const [sessionError, setSessionError] = useState<string | null>(null);
   const sessionRequestId = useRef(0);
 
@@ -23,7 +25,10 @@ export function App() {
     setSessionError(null);
     try {
       const sessionUser = await api.session();
-      if (sessionRequestId.current === requestId) setUser(sessionUser);
+      if (sessionRequestId.current === requestId) {
+        if (onboardingStep(sessionUser.id)) setSetupUser(sessionUser);
+        else setUser(sessionUser);
+      }
     } catch (error) {
       if (sessionRequestId.current !== requestId) return;
       setUser(null);
@@ -51,6 +56,7 @@ export function App() {
   useEffect(() => {
     const requireAuthentication = () => {
       setUser(null);
+      setSetupUser(undefined);
       setCheckingSession(false);
     };
     window.addEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
@@ -74,6 +80,15 @@ export function App() {
   if (sessionError) {
     return <StartupError message={sessionError} retry={() => void loadSession()} />;
   }
-  if (!user) return <Homepage onAuthenticated={setUser} />;
+  if (!user)
+    return (
+      <Homepage
+        onboardingUser={setupUser}
+        onAuthenticated={(authenticated) => {
+          setSetupUser(undefined);
+          setUser(authenticated);
+        }}
+      />
+    );
   return <AppShell key={user.id} user={user} onLogout={logout} onAccountDeleted={signedOut} />;
 }

@@ -41,9 +41,6 @@ export class ApplicationApi {
   constructor(services: ApplicationApiServices) {
     this.#database = services.database;
     this.#refreshService = services.refreshService;
-    if (this.#database.wasNewDatabase) {
-      this.#database.feeds.createDefaultFeed(this.#userId);
-    }
     this.#application = new ApplicationService(services);
     this.#webFeedService = services.webFeedService;
     this.#ai = services.aiService;
