@@ -1559,6 +1559,9 @@ const migrations: Migration[] = [
       );
     `,
   },
+  {
+    sql: `ALTER TABLE youtube_oauth_states ADD COLUMN filter_shorts INTEGER NOT NULL DEFAULT 0;`,
+  },
 ];
 
 export function migrateDatabase(

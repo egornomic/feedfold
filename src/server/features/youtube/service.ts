@@ -65,20 +65,23 @@ export class YouTubeService {
     };
   }
 
-  authorize(userId: number, sessionToken: string): string {
+  authorize(userId: number, sessionToken: string, filterShorts = false): string {
     const state = randomBytes(32).toString("base64url");
     const verifier = randomBytes(32).toString("base64url");
     this.database.connection
       .prepare("DELETE FROM youtube_oauth_states WHERE expires_at <= ? OR user_id = ?")
       .run(timestamp(), userId);
     this.database.connection
-      .prepare("INSERT INTO youtube_oauth_states VALUES (?, ?, ?, ?, ?)")
+      .prepare(
+        "INSERT INTO youtube_oauth_states (state_hash, user_id, session_hash, verifier, expires_at, filter_shorts) VALUES (?, ?, ?, ?, ?, ?)",
+      )
       .run(
         digest(state),
         userId,
         digest(sessionToken),
         this.cipher.encrypt(userId, verifier),
         timestamp(10 * 60_000),
+        Number(filterShorts),
       );
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     url.search = new URLSearchParams({
@@ -104,19 +107,26 @@ export class YouTubeService {
     );
   }
 
-  consumeState(userId: number, sessionToken: string, state: string): string {
+  consumeState(
+    userId: number,
+    sessionToken: string,
+    state: string,
+  ): { verifier: string; filterShorts: boolean } {
     const row = this.database.connection
       .prepare(`DELETE FROM youtube_oauth_states
-      WHERE state_hash = ? AND user_id = ? AND session_hash = ? AND expires_at > ? RETURNING verifier`)
+      WHERE state_hash = ? AND user_id = ? AND session_hash = ? AND expires_at > ? RETURNING verifier, filter_shorts`)
       .get(digest(state), userId, digest(sessionToken), timestamp()) as
-      | { verifier: string }
+      | { verifier: string; filter_shorts: number }
       | undefined;
     if (!row)
       throw new ApplicationApiError(
         400,
         "This YouTube connection request expired. Connect again from Settings.",
       );
-    return this.cipher.decrypt(userId, row.verifier);
+    return {
+      verifier: this.cipher.decrypt(userId, row.verifier),
+      filterShorts: row.filter_shorts === 1,
+    };
   }
 
   private async exclusive<T>(userId: number, action: () => Promise<T>): Promise<T> {
@@ -136,7 +146,12 @@ export class YouTubeService {
     }
   }
 
-  async connect(userId: number, code: string, verifier: string): Promise<void> {
+  async connect(
+    userId: number,
+    code: string,
+    verifier: string,
+    filterShorts: boolean,
+  ): Promise<void> {
     await this.exclusive(userId, async () => {
       const tokens = await this.google.exchange(code, verifier);
       if (!tokens.refresh_token || !tokens.scope?.split(" ").includes(YOUTUBE_SCOPE)) {
@@ -168,8 +183,38 @@ export class YouTubeService {
           this.cipher.encrypt(userId, tokens.refresh_token),
           timestamp(),
         );
+      if (filterShorts) this.createShortsRule(userId);
       await this.performSync(userId, tokens.access_token);
     });
+  }
+
+  createShortsRule(userId: number): void {
+    this.database.connection.transaction(() => {
+      const folder =
+        this.database.folders
+          .listFolders(userId)
+          .find((candidate) => candidate.name === "YouTube" && candidate.parentId === null) ??
+        this.database.folders.createFolder(userId, { name: "YouTube" });
+      const existing = this.database.rules
+        .listRules(userId)
+        .find(
+          (rule) =>
+            rule.folderId === folder.id &&
+            rule.action === "hide" &&
+            rule.enabled &&
+            rule.conditions.length === 1 &&
+            rule.conditions[0]?.field === "media" &&
+            rule.conditions[0]?.pattern === "short",
+        );
+      if (!existing)
+        this.database.rules.createRule(userId, {
+          name: "Hide YouTube Shorts",
+          folderId: folder.id,
+          conditions: [{ field: "media", pattern: "short" }],
+          conditionOperator: "and",
+          action: "hide",
+        });
+    })();
   }
 
   // Called only with the complete, validated subscription snapshot. All feed changes commit together.
