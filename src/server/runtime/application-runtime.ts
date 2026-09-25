@@ -1,7 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { AppDatabase } from "../database.js";
-import { type DeploymentPolicy, PRIVATE_DEPLOYMENT_POLICY } from "../deployment-policy.js";
 import type { CredentialCipherLike } from "../features/ai/credential-cipher.js";
 import { AiService } from "../features/ai/service.js";
 import { ExtractionQueue } from "../features/extraction/queue.js";
@@ -9,6 +8,7 @@ import { WebFeedService, type WebFeedServiceOptions } from "../features/feeds/we
 import { FeedRefreshService } from "../features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../feed-source-loader.js";
 import { closePublicNetwork } from "../public-network.js";
+import { DEFAULT_SERVER_POLICY, type ServicePolicy } from "../service-policy.js";
 import { TelegramMediaService } from "../telegram-media.js";
 import { XMediaService } from "../x-media.js";
 import { type RuntimeConfiguration, runtimeConfiguration } from "./configuration.js";
@@ -80,7 +80,7 @@ export interface ApplicationRuntimeOptions {
   databasePath: string;
   configuration: RuntimeConfiguration;
   credentialCipher: CredentialCipherLike | null;
-  deploymentPolicy?: DeploymentPolicy;
+  servicePolicy?: ServicePolicy;
   webFeed?: Omit<WebFeedServiceOptions, "quotas" | "timeoutMs">;
 }
 
@@ -89,15 +89,11 @@ export function createApplicationRuntime({
   databasePath,
   configuration,
   credentialCipher,
-  deploymentPolicy = PRIVATE_DEPLOYMENT_POLICY,
+  servicePolicy = DEFAULT_SERVER_POLICY,
   webFeed,
 }: ApplicationRuntimeOptions) {
   mkdirSync(dirname(databasePath), { recursive: true });
-  const database = new AppDatabase(
-    databasePath,
-    configuration.pollIntervalMinutes,
-    deploymentPolicy,
-  );
+  const database = new AppDatabase(databasePath, configuration.pollIntervalMinutes, servicePolicy);
   const services = createApplicationServices({
     database,
     configuration,

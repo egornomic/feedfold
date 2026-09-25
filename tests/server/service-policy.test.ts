@@ -4,18 +4,19 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
-import {
-  deploymentPolicy,
-  PRIVATE_DEPLOYMENT_POLICY,
-  PUBLIC_DEPLOYMENT_POLICY,
-  registrationAccountCap,
-} from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import { ExtractionQueue } from "../../src/server/features/extraction/queue.js";
 import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
+import {
+  DEFAULT_SERVER_POLICY,
+  DESKTOP_POLICY,
+  registrationAccountCap,
+  registrationMode,
+  serverPolicy,
+} from "../../src/server/service-policy.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -24,27 +25,141 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-describe("deployment policy", () => {
-  it("defaults to private and rejects unknown deployment modes", () => {
-    expect(deploymentPolicy(undefined)).toBe(PRIVATE_DEPLOYMENT_POLICY);
-    expect(deploymentPolicy("private")).toBe(PRIVATE_DEPLOYMENT_POLICY);
-    expect(deploymentPolicy("public")).toBe(PUBLIC_DEPLOYMENT_POLICY);
-    expect(() => deploymentPolicy("hosted")).toThrow(
-      "FEEDFOLD_DEPLOYMENT_MODE must be private or public",
+describe("service policy", () => {
+  it("defaults to bounded server settings and closed registration", () => {
+    expect(serverPolicy({})).toEqual(DEFAULT_SERVER_POLICY);
+    expect(registrationMode()).toBe("closed");
+    expect(registrationAccountCap(undefined)).toBe(0);
+    expect(registrationAccountCap("invalid")).toBe(0);
+    expect(registrationAccountCap("0")).toBe(0);
+    expect(registrationAccountCap("20")).toBe(20);
+  });
+
+  it.each(["closed", "invite", "open"])(
+    "keeps the account cap independent of %s registration",
+    async (mode) => {
+      const database = new AppDatabase(":memory:", 20, serverPolicy({}));
+      try {
+        const auth = new AuthService(database.auth, 20, {
+          registrationMode: registrationMode(mode),
+          maxAccounts: registrationAccountCap("1"),
+        });
+        expect(auth.registrationAvailable()).toBe(mode !== "closed");
+      } finally {
+        database.close();
+      }
+    },
+  );
+
+  it("configures every server limit independently", () => {
+    const policy = serverPolicy({
+      FEEDFOLD_MANUAL_REFRESH: "true",
+      FEEDFOLD_ACCOUNT_ACTIVITY_WINDOW_DAYS: "30",
+      FEEDFOLD_MAX_FEEDS_PER_ACCOUNT: "12",
+      FEEDFOLD_MAX_WEB_FEEDS_PER_ACCOUNT: "2",
+      FEEDFOLD_MAX_PENDING_REFRESHES: "50",
+    });
+    expect(policy).toEqual({
+      ...DEFAULT_SERVER_POLICY,
+      manualRefresh: true,
+      accountActivityWindowDays: 30,
+      maxFeedsPerAccount: 12,
+      maxWebFeedsPerAccount: 2,
+      maxPendingRefreshes: 50,
+    });
+    expect(serverPolicy({ FEEDFOLD_MAX_FEEDS_PER_ACCOUNT: "unlimited" })).toEqual({
+      ...DEFAULT_SERVER_POLICY,
+      maxFeedsPerAccount: null,
+    });
+  });
+
+  it.each(["0", "-1", "1.5", "", "no", "Infinity"])("rejects invalid limit %j", (value) => {
+    expect(() => serverPolicy({ FEEDFOLD_MAX_FEEDS_PER_ACCOUNT: value })).toThrow(
+      "positive integer or unlimited",
+    );
+    expect(() => serverPolicy({ FEEDFOLD_QUOTA_CHROMIUM_CONCURRENT: value })).toThrow(
+      "positive integer or unlimited",
     );
   });
 
-  it("uses the account cap independently of registration policy", () => {
-    expect(registrationAccountCap(PRIVATE_DEPLOYMENT_POLICY, undefined)).toBe(1);
-    expect(registrationAccountCap(PRIVATE_DEPLOYMENT_POLICY, "20")).toBe(1);
-    expect(registrationAccountCap(PUBLIC_DEPLOYMENT_POLICY, undefined)).toBe(0);
-    expect(registrationAccountCap(PUBLIC_DEPLOYMENT_POLICY, "invalid")).toBe(0);
-    expect(registrationAccountCap(PUBLIC_DEPLOYMENT_POLICY, "0")).toBe(0);
-    expect(registrationAccountCap(PUBLIC_DEPLOYMENT_POLICY, "20")).toBe(20);
+  it.each(
+    Object.keys(DEFAULT_SERVER_POLICY.quotas) as Array<keyof typeof DEFAULT_SERVER_POLICY.quotas>,
+  )("configures or removes the %s quota independently", (key) => {
+    const name = `FEEDFOLD_QUOTA_${key.replace(/[A-Z]/g, (letter) => `_${letter}`).toUpperCase()}`;
+    for (const [value, expected] of [
+      ["17", 17],
+      ["unlimited", null],
+    ] as const) {
+      expect(serverPolicy({ [name]: value })).toEqual({
+        ...DEFAULT_SERVER_POLICY,
+        quotas: { ...DEFAULT_SERVER_POLICY.quotas, [key]: expected },
+      });
+    }
   });
 
-  it("keeps inactive private subscriptions scheduled", () => {
-    const database = new AppDatabase(":memory:");
+  it.each(["7", "30", "unlimited"])(
+    "schedules old subscriptions using a %s day activity window",
+    (days) => {
+      const database = new AppDatabase(
+        ":memory:",
+        20,
+        serverPolicy({ FEEDFOLD_ACCOUNT_ACTIVITY_WINDOW_DAYS: days }),
+      );
+      try {
+        const feed = database.feeds.createFeed(1, { feedUrl: "https://example.test/activity.xml" });
+        database.connection
+          .prepare("UPDATE users SET last_active_at = '2026-08-20T00:00:00.000Z' WHERE id = 1")
+          .run();
+        database.connection
+          .prepare("UPDATE feed_sources SET next_poll_at = '2026-08-01T00:00:00.000Z'")
+          .run();
+        expect(database.feeds.getDueFeedIds("2026-09-01T00:00:00.000Z")).toEqual(
+          days === "7" ? [] : [feed.id],
+        );
+      } finally {
+        database.close();
+      }
+    },
+  );
+
+  it.each(["2", "unlimited"])("enforces a configured feed limit of %s", (limit) => {
+    const database = new AppDatabase(
+      ":memory:",
+      20,
+      serverPolicy({ FEEDFOLD_MAX_FEEDS_PER_ACCOUNT: limit }),
+    );
+    try {
+      for (let i = 0; i < 2; i++)
+        database.feeds.createFeed(1, { feedUrl: `https://example.test/${i}.xml` });
+      const subscribe = () =>
+        database.feeds.createFeed(1, { feedUrl: "https://example.test/third.xml" });
+      if (limit === "2") expect(subscribe).toThrow("up to 2 feeds");
+      else expect(subscribe().id).toBeGreaterThan(0);
+    } finally {
+      database.close();
+    }
+  });
+
+  it("removes a daily quota without disabling other server limits", () => {
+    const database = new AppDatabase(
+      ":memory:",
+      20,
+      serverPolicy({ FEEDFOLD_QUOTA_FEED_DISCOVERIES_PER_DAY: "unlimited" }),
+    );
+    try {
+      for (let i = 0; i < 101; i++) database.quotas.consume("feed_discovery", 1);
+      expect(database.bootstrap.getBootstrap(1).capabilities.manualRefresh).toBe(false);
+    } finally {
+      database.close();
+    }
+  });
+
+  it("rejects ambiguous manual refresh settings", () => {
+    expect(() => serverPolicy({ FEEDFOLD_MANUAL_REFRESH: "yes" })).toThrow("true or false");
+  });
+
+  it("keeps inactive desktop subscriptions scheduled", () => {
+    const database = new AppDatabase(":memory:", 20, DESKTOP_POLICY);
     try {
       const feed = database.feeds.createFeed(1, {
         feedUrl: "https://publisher.example.test/private.xml",
@@ -66,8 +181,8 @@ describe("deployment policy", () => {
     }
   });
 
-  it("disables the public manual refresh API and capability", async () => {
-    const database = new AppDatabase(":memory:", 20, PUBLIC_DEPLOYMENT_POLICY);
+  it("disables the default server manual refresh API and capability", async () => {
+    const database = new AppDatabase(":memory:", 20, DEFAULT_SERVER_POLICY);
     const auth = new AuthService(database.auth, 20, { maxAccounts: 100, registrationMode: "open" });
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
     let requests = 0;
@@ -143,7 +258,10 @@ describe("deployment policy", () => {
     const database = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { feedDiscoveriesPerDay: 1, webAnalysesPerDay: 1 }),
+      serverPolicy({
+        FEEDFOLD_QUOTA_FEED_DISCOVERIES_PER_DAY: "1",
+        FEEDFOLD_QUOTA_WEB_ANALYSES_PER_DAY: "1",
+      }),
     );
     const auth = new AuthService(database.auth, 20, { registrationMode: "open" });
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
@@ -204,8 +322,12 @@ describe("deployment policy", () => {
     });
   });
 
-  it("never queues a paused feed from a private user-facing refresh API", async () => {
-    const database = new AppDatabase(":memory:");
+  it("never queues a paused feed from a configured user-facing refresh API", async () => {
+    const database = new AppDatabase(
+      ":memory:",
+      20,
+      serverPolicy({ FEEDFOLD_MANUAL_REFRESH: "true" }),
+    );
     const auth = new AuthService(database.auth);
     const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
     let requests = 0;
@@ -271,25 +393,25 @@ describe("deployment policy", () => {
     expect(requests).toBe(0);
   });
 
-  it("limits public accounts to 300 feeds while private accounts remain unrestricted", () => {
-    const publicDatabase = new AppDatabase(":memory:", 20, PUBLIC_DEPLOYMENT_POLICY);
-    const privateDatabase = new AppDatabase(":memory:");
+  it("limits server accounts to 300 feeds while desktop stays unrestricted", () => {
+    const serverDatabase = new AppDatabase(":memory:", 20, DEFAULT_SERVER_POLICY);
+    const desktopDatabase = new AppDatabase(":memory:");
     try {
       for (let index = 0; index < 300; index += 1) {
-        publicDatabase.feeds.createFeed(1, {
+        serverDatabase.feeds.createFeed(1, {
           feedUrl: `https://publisher.example.test/public-${index}.xml`,
         });
-        privateDatabase.feeds.createFeed(1, {
+        desktopDatabase.feeds.createFeed(1, {
           feedUrl: `https://publisher.example.test/private-${index}.xml`,
         });
       }
       expect(() =>
-        publicDatabase.feeds.createFeed(1, {
+        serverDatabase.feeds.createFeed(1, {
           feedUrl: "https://publisher.example.test/public-over-limit.xml",
         }),
       ).toThrow("This account can subscribe to up to 300 feeds.");
       expect(() =>
-        publicDatabase.feeds.createWebFeed(1, {
+        serverDatabase.feeds.createWebFeed(1, {
           title: "Web over limit",
           pageUrl: "https://publisher.example.test/releases",
           folderId: null,
@@ -325,22 +447,25 @@ describe("deployment policy", () => {
       ).toThrow("This account can subscribe to up to 300 feeds.");
 
       expect(
-        privateDatabase.feeds.createFeed(1, {
+        desktopDatabase.feeds.createFeed(1, {
           feedUrl: "https://publisher.example.test/private-300.xml",
         }).id,
       ).toBeGreaterThan(0);
     } finally {
-      publicDatabase.close();
-      privateDatabase.close();
+      serverDatabase.close();
+      desktopDatabase.close();
     }
   });
 
-  it("bounds the public refresh queue", async () => {
-    const database = new AppDatabase(":memory:", 20, {
-      ...PUBLIC_DEPLOYMENT_POLICY,
-      maxFeedsPerAccount: null,
-      maxPendingRefreshes: 2,
-    });
+  it("bounds the configured refresh queue", async () => {
+    const database = new AppDatabase(
+      ":memory:",
+      20,
+      serverPolicy({
+        FEEDFOLD_MAX_FEEDS_PER_ACCOUNT: "unlimited",
+        FEEDFOLD_MAX_PENDING_REFRESHES: "2",
+      }),
+    );
     let requests = 0;
     const refresh = new FeedRefreshService(
       database.feeds,
@@ -381,10 +506,10 @@ describe("deployment policy", () => {
   it("shares durable daily and concurrency quotas across server instances", async () => {
     const directory = mkdtempSync(join(tmpdir(), "feedfold-quotas-"));
     const path = join(directory, "feedfold.db");
-    const policy = deploymentPolicy("public", {
-      feedDiscoveriesPerDay: 1,
-      chromiumConcurrent: 1,
-      outboundRequestsPerDay: 1,
+    const policy = serverPolicy({
+      FEEDFOLD_QUOTA_FEED_DISCOVERIES_PER_DAY: "1",
+      FEEDFOLD_QUOTA_CHROMIUM_CONCURRENT: "1",
+      FEEDFOLD_QUOTA_OUTBOUND_REQUESTS_PER_DAY: "1",
     });
     const first = new AppDatabase(path, 20, policy);
     const second = new AppDatabase(path, 20, policy);
@@ -419,9 +544,9 @@ describe("deployment policy", () => {
 
   it("waits for outbound capacity across server instances and cancels without spending quota", async () => {
     const directory = mkdtempSync(join(tmpdir(), "feedfold-outbound-"));
-    const policy = deploymentPolicy("public", {
-      outboundRequestsConcurrent: 1,
-      outboundRequestsPerDay: 2,
+    const policy = serverPolicy({
+      FEEDFOLD_QUOTA_OUTBOUND_REQUESTS_CONCURRENT: "1",
+      FEEDFOLD_QUOTA_OUTBOUND_REQUESTS_PER_DAY: "2",
     });
     const first = new AppDatabase(join(directory, "feedfold.db"), 20, policy);
     const second = new AppDatabase(join(directory, "feedfold.db"), 20, policy);
@@ -456,7 +581,10 @@ describe("deployment policy", () => {
     const database = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { opmlUploadBytes: 1_000, opmlFeedsPerImport: 1 }),
+      serverPolicy({
+        FEEDFOLD_QUOTA_OPML_UPLOAD_BYTES: "1000",
+        FEEDFOLD_QUOTA_OPML_FEEDS_PER_IMPORT: "1",
+      }),
     );
     try {
       const twoFeeds = `<?xml version="1.0"?><opml version="2.0"><body>
@@ -484,7 +612,7 @@ describe("deployment policy", () => {
     const database = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { articlesPerAccount: 1 }),
+      serverPolicy({ FEEDFOLD_QUOTA_ARTICLES_PER_ACCOUNT: "1" }),
     );
     try {
       const feed = database.feeds.createFeed(1, {
@@ -537,7 +665,7 @@ describe("deployment policy", () => {
     const storageDatabase = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { storedBytesPerAccount: 20 }),
+      serverPolicy({ FEEDFOLD_QUOTA_STORED_BYTES_PER_ACCOUNT: "20" }),
     );
     try {
       const feed = storageDatabase.feeds.createFeed(1, {
@@ -579,7 +707,7 @@ describe("deployment policy", () => {
     const accountDatabase = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { registeredAccounts: 1 }),
+      serverPolicy({ FEEDFOLD_QUOTA_REGISTERED_ACCOUNTS: "1" }),
     );
     try {
       const auth = new AuthService(accountDatabase.auth, 20, {
@@ -597,7 +725,7 @@ describe("deployment policy", () => {
     const fullDatabase = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { globalStoredBytes: 1 }),
+      serverPolicy({ FEEDFOLD_QUOTA_GLOBAL_STORED_BYTES: "1" }),
     );
     try {
       expect(() => fullDatabase.quotas.assertGlobalStorage()).toThrow(

@@ -9,13 +9,13 @@ import { ApiError } from "../../src/client/api/api-contract.js";
 import { createApp } from "../../src/server/app.js";
 import { ApplicationApi, type ApplicationApiServices } from "../../src/server/application-api.js";
 import { applicationError } from "../../src/server/application-error.js";
-import { PRIVATE_DEPLOYMENT_POLICY } from "../../src/server/deployment-policy.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
 import {
   type ApplicationRuntimeOptions,
   createApplicationRuntime,
 } from "../../src/server/runtime/application-runtime.js";
 import { runtimeConfiguration } from "../../src/server/runtime/configuration.js";
+import { DESKTOP_POLICY } from "../../src/server/service-policy.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../../src/shared/api/operations.js";
 import type { ArticlePage, BootstrapData, Folder, Rule } from "../../src/shared/types.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
@@ -30,6 +30,7 @@ function applicationServices(
   options: Partial<ApplicationRuntimeOptions> = {},
 ): ApplicationApiServices {
   const runtime = createApplicationRuntime({
+    servicePolicy: DESKTOP_POLICY,
     databasePath: ":memory:",
     configuration: runtimeConfiguration({
       FEED_FETCH_TIMEOUT_MS: "1000",
@@ -362,9 +363,9 @@ describe("local application API", () => {
       );
       const sourceUrl = `http://127.0.0.1:${(source.address() as AddressInfo).port}/`;
       const services = applicationServices({
-        deploymentPolicy: {
-          ...PRIVATE_DEPLOYMENT_POLICY,
-          quotas: { ...PRIVATE_DEPLOYMENT_POLICY.quotas, opmlFeedsPerImport: 1 },
+        servicePolicy: {
+          ...DESKTOP_POLICY,
+          quotas: { ...DESKTOP_POLICY.quotas, opmlFeedsPerImport: 1 },
         },
         webFeed: { allowPrivateNetworks: true, settleQuietMs: 100, settleTimeoutMs: 2_000 },
       });

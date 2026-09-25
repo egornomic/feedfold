@@ -3,9 +3,9 @@ import type { AddressInfo } from "node:net";
 import { type Browser, chromium } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
-import { deploymentPolicy } from "../../src/server/deployment-policy.js";
 import { type WebFeedError, WebFeedService } from "../../src/server/features/feeds/web/service.js";
 import { isBlockedNetworkAddress, PublicNetworkError } from "../../src/server/public-network.js";
+import { serverPolicy } from "../../src/server/service-policy.js";
 import type { WebFeedConfig } from "../../src/shared/types.js";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -102,7 +102,7 @@ describe("web-feed browser loading and network security", () => {
     const database = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { outboundRequestsConcurrent: 2 }),
+      serverPolicy({ FEEDFOLD_QUOTA_OUTBOUND_REQUESTS_CONCURRENT: "2" }),
     );
     cleanups.push(async () => database.close());
     let active = 0;
@@ -143,7 +143,7 @@ describe("web-feed browser loading and network security", () => {
     const database = new AppDatabase(
       ":memory:",
       20,
-      deploymentPolicy("public", { outboundRequestsConcurrent: 1 }),
+      serverPolicy({ FEEDFOLD_QUOTA_OUTBOUND_REQUESTS_CONCURRENT: "1" }),
     );
     cleanups.push(async () => database.close());
     let scriptRequests = 0;
