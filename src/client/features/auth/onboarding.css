@@ -29,7 +29,11 @@
 .onboarding-content {
   flex: 1;
   min-height: 0;
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  padding-inline: 4px;
+  margin-inline: -4px;
 }
 
 .onboarding-progress,

@@ -126,6 +126,7 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
   const [addresses, setAddresses] = useState({ feeds: "", "youtube-manual": "", x: "" });
   const defaultShortsRule = useRef<Promise<Rule> | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const headers = { "X-Feedfold-Account": user.id };
 
@@ -170,6 +171,7 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
 
   useLayoutEffect(() => {
     void step;
+    if (contentRef.current) contentRef.current.scrollTop = 0;
     headingRef.current?.focus({ preventScroll: true });
   }, [step]);
 
@@ -310,7 +312,7 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
           {position + 1} of 3
         </span>
       </div>
-      <div className="onboarding-content">
+      <div className="onboarding-content" ref={contentRef}>
         <div className="onboarding-stage" data-direction={direction} key={step}>
           <header className="login-heading">
             <h2 id="auth-heading" ref={headingRef} tabIndex={-1}>
