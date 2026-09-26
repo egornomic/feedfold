@@ -1,6 +1,7 @@
 import { generateOpml } from "feedsmith";
 import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../shared/api/inputs.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
+import { articleSearchText, normalizeSearchText } from "../shared/article-search.js";
 import type {
   AiArticleSourceKind,
   AiFeature,
@@ -546,7 +547,7 @@ export class DemoStore {
 
   private filteredArticles(query: ArticleQuery): Article[] {
     const folderIds = query.folderId === undefined ? null : this.folderBranchIds(query.folderId);
-    const search = query.search?.trim().toLocaleLowerCase() ?? "";
+    const search = normalizeSearchText(query.search ?? "").toLocaleLowerCase();
     return this.data.articles.filter((article) => {
       if (query.state === "unread" && article.isRead) return false;
       if (query.state === "read" && !article.isRead) return false;
@@ -561,8 +562,8 @@ export class DemoStore {
         article.author,
         article.summary,
         article.feedTitle,
-        article.feedContentHtml,
-        article.contentHtml,
+        articleSearchText(article.feedContentHtml),
+        articleSearchText(article.contentHtml),
       ]
         .filter((value): value is string => value !== null)
         .some((value) => value.toLocaleLowerCase().includes(search));
