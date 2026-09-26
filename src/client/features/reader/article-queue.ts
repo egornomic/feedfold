@@ -15,6 +15,7 @@ import type { AppRouteController } from "../../app/route";
 import { appRoutePath, type ReaderRoute } from "../../app/routes";
 import { useDelayedPending } from "../../ui/loading";
 import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
+import type { ReadingPosition } from "./interaction/reading-position";
 import {
   appendUnseenArticles,
   articleQueryForReaderRoute,
@@ -23,6 +24,8 @@ import {
 } from "./reader-state";
 
 export interface ArticleQueueController {
+  readingPositions: Map<string, ReadingPosition>;
+  loadMoreError: boolean;
   readingMode: ReadingMode;
   articles: Article[];
   setArticles: Dispatch<SetStateAction<Article[]>>;
@@ -69,6 +72,7 @@ export function useArticleQueue({
   showToast,
 }: ArticleQueueOptions): ArticleQueueController {
   const client = useQueryClient();
+  const readingPositions = useRef(new Map<string, ReadingPosition>());
   const changingCounters = useIsMutating({ mutationKey: counterMutationKey }) > 0;
   const [articles, updateArticles] = useState<Article[]>([]);
   const articlesRef = useRef(articles);
@@ -185,7 +189,7 @@ export function useArticleQueue({
     const returnTarget =
       target && appRoutePath(target.route) === appRoutePath(route.readerRoute) ? target : null;
     const current = articlesRef.current;
-    const reading = route.routedArticleId !== null || (sameQueue && readingMode === "expanded");
+    const reading = route.routedArticleId !== null || sameQueue;
     let next =
       reading && (sameQueue || anchor === null)
         ? appendUnseenArticles(articlesWithUpdatedState(current, candidates), candidates).articles
@@ -250,27 +254,36 @@ export function useArticleQueue({
     showToast,
   ]);
 
-  const loadOlderArticles = useCallback(async () => {
+  const pendingPage = useRef<{ key: string; promise: Promise<Article[]> } | null>(null);
+  const loadOlderArticles = useCallback((): Promise<Article[]> => {
+    if (pendingPage.current?.key === requestKey) return pendingPage.current.promise;
     const cursor = pages.data?.pages.at(-1)?.nextCursor;
-    if (!cursor || pages.isFetching || changingCounters) return [];
-    const before = articlesRef.current;
-    try {
-      const { appended } = await firstUnseenArticlePage(before, cursor, async () => {
-        if (latestRequestKey.current !== requestKey) return;
-        const result = await pages.fetchNextPage({ cancelRefetch: false, throwOnError: true });
-        return {
-          candidates: result.data?.pages.flatMap((page) => page.articles) ?? [],
-          nextCursor: result.data?.pages.at(-1)?.nextCursor ?? null,
-        };
-      });
-      if (latestRequestKey.current !== requestKey) return [];
-      setArticles((current) => appendUnseenArticles(current, appended).articles);
-      return appended;
-    } catch (error) {
-      showToast(`Could not load more articles: ${errorMessage(error)}`);
-      return [];
-    }
-  }, [pages, changingCounters, requestKey, setArticles, showToast]);
+    if (!cursor || pages.isFetching) return Promise.resolve([]);
+    const promise = (async () => {
+      const before = articlesRef.current;
+      try {
+        const { appended } = await firstUnseenArticlePage(before, cursor, async () => {
+          if (latestRequestKey.current !== requestKey) return;
+          const result = await pages.fetchNextPage({ cancelRefetch: false, throwOnError: true });
+          return {
+            candidates: result.data?.pages.flatMap((page) => page.articles) ?? [],
+            nextCursor: result.data?.pages.at(-1)?.nextCursor ?? null,
+          };
+        });
+        if (latestRequestKey.current !== requestKey) return [];
+        setArticles((current) => appendUnseenArticles(current, appended).articles);
+        return appended;
+      } catch (error) {
+        showToast(`Could not load more articles: ${errorMessage(error)}`);
+        return [];
+      }
+    })();
+    pendingPage.current = { key: requestKey, promise };
+    void promise.finally(() => {
+      if (pendingPage.current?.promise === promise) pendingPage.current = null;
+    });
+    return promise;
+  }, [pages, requestKey, setArticles, showToast]);
 
   const loadArticles = useCallback(async () => {
     await client.invalidateQueries({ queryKey: readerKeys.lists });
@@ -312,6 +325,8 @@ export function useArticleQueue({
         : null;
 
   return {
+    readingPositions: readingPositions.current,
+    loadMoreError: pages.isFetchNextPageError,
     readingMode: displayedReadingMode,
     articles,
     setArticles,

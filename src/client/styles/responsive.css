@@ -573,6 +573,12 @@
     gap: 0;
     padding: 6px 10px 100px;
   }
+  .article-list [data-viewport-type] {
+    padding: 0 10px;
+  }
+  .article-list .virtual-article-header {
+    height: 6px;
+  }
   .article-list-item {
     min-height: 0;
     border-radius: 0;

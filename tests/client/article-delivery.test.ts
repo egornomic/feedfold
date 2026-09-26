@@ -1,6 +1,7 @@
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { VirtuosoMockContext } from "react-virtuoso";
 import { describe, expect, it } from "vitest";
 import { ApplicationApi } from "../../src/server/application-api.js";
 import { AppDatabase } from "../../src/server/database.js";
@@ -59,7 +60,7 @@ function openArticleButton(container: HTMLElement, title: string): HTMLButtonEle
 
 function articleSavedButton(container: HTMLElement, title: string): HTMLButtonElement {
   const button = openArticleButton(container, title)
-    .closest("li")
+    .closest(".article-list-item")
     ?.querySelector<HTMLButtonElement>(".list-star-button");
   if (!button) throw new Error(`The article list did not render the Saved action for ${title}`);
   return button;
@@ -265,7 +266,15 @@ describe("live article delivery", () => {
     try {
       const appModulePath: string = "../../src/client/app/app.js";
       const { App } = await import(appModulePath);
-      await act(async () => root.render(createElement(App)));
+      await act(async () =>
+        root.render(
+          createElement(
+            VirtuosoMockContext.Provider,
+            { value: { viewportHeight: 900, itemHeight: 146 } },
+            createElement(App),
+          ),
+        ),
+      );
       await waitFor(
         "the initial unread articles",
         () => container.querySelectorAll(".article-open-button").length === 2,

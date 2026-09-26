@@ -11,7 +11,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ArticleState, MarkReadAgeDays, ReadingMode } from "../../../shared/types";
 import { MARK_READ_AGE_DAYS } from "../../../shared/types";
 import { useInterfaceState } from "../../app/session-state";
@@ -77,6 +77,18 @@ export function ReaderToolbar({
   useLayoutEffect(() => {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
+
+  useEffect(() => {
+    const find = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f" && !readingArticle) {
+        event.preventDefault();
+        setSearchOpen(true);
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", find);
+    return () => window.removeEventListener("keydown", find);
+  }, [readingArticle]);
 
   function closeSearch() {
     setSearchOpen(false);
@@ -159,7 +171,7 @@ export function ReaderToolbar({
               id="article-search"
               type="search"
               value={searchInput}
-              placeholder="Search articles"
+              placeholder="Search titles and article text"
               onChange={(event) => onSearchInput(event.target.value)}
             />
             {searchInput || searchActive ? (

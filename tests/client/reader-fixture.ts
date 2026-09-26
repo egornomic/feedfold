@@ -1,6 +1,7 @@
 import { JSDOM } from "jsdom";
 import { act, createElement, type ReactElement, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { VirtuosoMockContext } from "react-virtuoso";
 import { ApplicationApi } from "../../src/server/application-api.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { ApplicationApiError } from "../../src/server/errors.js";
@@ -94,23 +95,6 @@ export function readerFixture(path = "/articles/unread", count = 10) {
   Object.defineProperty(dom.window.HTMLElement.prototype, "scrollIntoView", { value: () => {} });
   dom.window.document.documentElement.dataset.inputModality = "keyboard";
   const restore = exposeBrowserGlobals(dom.window);
-  const observers = new Set<() => void>();
-  const previousObserver = Object.getOwnPropertyDescriptor(globalThis, "IntersectionObserver");
-  Object.defineProperty(globalThis, "IntersectionObserver", {
-    configurable: true,
-    value: class {
-      readonly notify: () => void;
-      constructor(callback: (entries: Array<{ isIntersecting: boolean }>) => void) {
-        this.notify = () => callback([{ isIntersecting: true }]);
-      }
-      observe() {
-        observers.add(this.notify);
-      }
-      disconnect() {
-        observers.delete(this.notify);
-      }
-    },
-  });
   const previousActEnvironment = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
   const container = dom.window.document.querySelector<HTMLElement>("#app");
@@ -125,11 +109,6 @@ export function readerFixture(path = "/articles/unread", count = 10) {
     failures,
     container,
     dom,
-    async reachListEnd() {
-      await act(async () => {
-        for (const notify of [...observers]) notify();
-      });
-    },
     hold(operation: ApiOperation, beforeRequest = false) {
       let resolve = () => {};
       let reject: (error: Error) => void = () => {};
@@ -156,7 +135,13 @@ export function readerFixture(path = "/articles/unread", count = 10) {
       const modulePath: string = "../../src/client/app/app.js";
       const { App } = await import(modulePath);
       await act(async () =>
-        root.render(createElement(StrictMode, null, element ?? createElement(App))),
+        root.render(
+          createElement(
+            VirtuosoMockContext.Provider,
+            { value: { viewportHeight: 40000, itemHeight: 146 } },
+            createElement(StrictMode, null, element ?? createElement(App)),
+          ),
+        ),
       );
     },
     async close() {
@@ -170,9 +155,6 @@ export function readerFixture(path = "/articles/unread", count = 10) {
       await new Promise((resolve) => setTimeout(resolve, 0));
       dom.window.close();
       restore();
-      if (previousObserver)
-        Object.defineProperty(globalThis, "IntersectionObserver", previousObserver);
-      else Reflect.deleteProperty(globalThis, "IntersectionObserver");
       if (previousActEnvironment === undefined)
         Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
       else Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", previousActEnvironment);
