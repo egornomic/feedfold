@@ -12,13 +12,11 @@ import { toast as showToast } from "sonner";
 import type {
   Article,
   ArticleState,
-  BootstrapData,
   Feed,
   Folder as FolderType,
-  Rule,
   SessionUser,
 } from "../../shared/types";
-import { api, errorMessage } from "../api/api";
+import { errorMessage } from "../api/api";
 import { SessionLoading } from "../features/auth/auth";
 import type {
   FeedManagementAction,
@@ -31,7 +29,7 @@ import { Sidebar } from "../features/navigation/sidebar";
 import { useArticleActions } from "../features/reader/article-actions";
 import { useArticleEnrichment } from "../features/reader/article-enrichment";
 import { useArticleQueue } from "../features/reader/article-queue";
-import { type ReaderDataBinding, ReaderDataResource } from "../features/reader/data-resource";
+import { useReaderData } from "../features/reader/reader-data";
 import { useReaderPreferences } from "../features/reader/reader-preferences";
 import {
   filterRuleName,
@@ -87,14 +85,12 @@ export default function AppShell({
   const route = useAppRoute(APP_BASE_PATH);
   const preferences = useReaderPreferences(user.id);
   const { desktopSidebarCollapsed, setDesktopSidebarCollapsed } = preferences;
-  const dataResourceRef = useRef<ReaderDataResource | null>(null);
-  if (!dataResourceRef.current) dataResourceRef.current = new ReaderDataResource();
-  const dataResource = dataResourceRef.current;
-  const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
-  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
-  const [rules, setRules] = useState<Rule[] | null>(null);
-  const [rulesLoading, setRulesLoading] = useState(false);
-  const [rulesError, setRulesError] = useState<string | null>(null);
+  const { data: dataResource, bootstrap: bootstrapResult, rules: rulesResult } = useReaderData();
+  const bootstrap = bootstrapResult.data ?? null;
+  const bootstrapError = bootstrapResult.error ? errorMessage(bootstrapResult.error) : null;
+  const rules = rulesResult.data ?? null;
+  const rulesLoading = rulesResult.isPending;
+  const rulesError = rulesResult.error ? errorMessage(rulesResult.error) : null;
   const [ruleDraft, setRuleDraft] = useState<RuleFormDraft | null>(null);
   const [managementRequest, setManagementRequest] = useState<ManagementRequest | null>(null);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
@@ -109,14 +105,9 @@ export default function AppShell({
     setDesktopSidebarCollapsed((current) => !current);
   }, [setDesktopSidebarCollapsed]);
 
-  useLayoutEffect(() => {
-    dataResource.resume();
-    return () => dataResource.pause();
-  }, [dataResource]);
-
   const queue = useArticleQueue({
     route,
-    dataResource,
+    enabled: true,
     readingMode: preferences.readingMode,
     onReadingModeChange: preferences.setReadingMode,
     showToast,
@@ -162,41 +153,6 @@ export default function AppShell({
       readingWorkspaceRef.current.scrollTop = 0;
     }
   }, [readerPath]);
-
-  const reloadRules = useCallback(async (signal: AbortSignal) => {
-    setRulesLoading(true);
-    setRulesError(null);
-    try {
-      const nextRules = await api.rules(signal);
-      if (!signal.aborted) setRules(nextRules);
-    } catch (error) {
-      if (!signal.aborted) setRulesError(errorMessage(error));
-      throw error;
-    } finally {
-      if (!signal.aborted) setRulesLoading(false);
-    }
-  }, []);
-
-  const resourceBinding: ReaderDataBinding = {
-    getBootstrap: () => bootstrapRef.current,
-    applyBootstrap: (nextBootstrap) => {
-      bootstrapRef.current = nextBootstrap;
-      setBootstrap(nextBootstrap);
-    },
-    setBootstrapError,
-    reloadArticles: (signal, mode) =>
-      mode === "query"
-        ? queue.reloadQuery(signal)
-        : mode === "delivery"
-          ? queue.reloadAfterDelivery(signal)
-          : queue.reloadAfterMutation(signal),
-    reloadRules,
-  };
-  dataResource.connect(resourceBinding);
-
-  useEffect(() => {
-    if (route.view === "rules") void dataResource.loadRules();
-  }, [dataResource, route.view]);
 
   useEffect(() => {
     if (route.route) setNavOpen(false);
@@ -522,7 +478,7 @@ export default function AppShell({
             onMenu={() => setNavOpen(true)}
             onClearDraft={() => setRuleDraft(null)}
             onReturnToArticle={returnToContextArticle}
-            onRetry={() => dataResource.reload({ articles: true, rules: true })}
+            onRetry={() => dataResource.reload()}
             showToast={showToast}
           />
         ) : (

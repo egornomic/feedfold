@@ -94,6 +94,8 @@ async function setup(surface: Surface, touch: boolean) {
   const scope = page.locator(surface === "sidebar" ? ".sidebar" : ".folder-management-list");
   const source = () =>
     scope.locator(surface === "sidebar" ? ".feed-nav-item" : ".folder-feed-drag-region");
+  // Start drag stress only after the real sidebar or management list has rendered.
+  await source().scrollIntoViewIfNeeded();
   const target = (destination: Folder | null) =>
     destination
       ? surface === "sidebar"
@@ -120,12 +122,19 @@ async function point(locator: Locator) {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-async function drag(page: Page, source: Locator, target: Locator, input: Input, cancel = false) {
+async function drag(
+  page: Page,
+  source: Locator,
+  target: Locator,
+  input: Input,
+  cancel = false,
+  focusSource = true,
+) {
   await source.scrollIntoViewIfNeeded();
   const from = await point(source);
   const to = await point(target);
   if (input === "keyboard") {
-    await source.focus();
+    if (focusSource) await source.focus();
     await page.keyboard.press("Space");
     // The sensor moves 20 CSS pixels per arrow press.
     for (const [distance, positive, negative] of [
@@ -176,6 +185,63 @@ async function drag(page: Page, source: Locator, target: Locator, input: Input, 
 
 for (const surface of ["sidebar", "folders"] as const) {
   describe(`${surface} feed moves`, () => {
+    it.each([
+      { timing: "normal rendering", cpu: 1, latency: 0 },
+      { timing: "slow rendering", cpu: 20, latency: 0 },
+      { timing: "slow rendering and delayed data", cpu: 20, latency: 250 },
+    ])(
+      "keeps consecutive keyboard moves usable with $timing",
+      async ({ cpu, latency }) => {
+        const { context, page, source, target, feed, first, second, nested } = await setup(
+          surface,
+          false,
+        );
+        try {
+          const cdp = await context.newCDPSession(page);
+          await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu });
+          if (latency) {
+            await page.route("**/api/bootstrap", async (route) => {
+              const response = await route.fetch();
+              await new Promise((resolve) => setTimeout(resolve, latency));
+              await route.fulfill({ response });
+            });
+          }
+          await source().focus();
+          for (const destination of [first, second, nested, null]) {
+            // Only the first move gets programmatic focus; later moves must work from the keyboard.
+            await drag(page, source(), target(destination), "keyboard", false, false);
+            await expect.poll(() => location(context, feed)).toBe(destination?.id ?? null);
+            await expect
+              .poll(() => source().evaluate((element) => element === document.activeElement))
+              .toBe(true);
+            // A momentary focus on a row that is then removed is not a usable handoff.
+            expect(
+              await source().evaluate(
+                (element) =>
+                  new Promise<boolean>((resolve) => {
+                    let frames = 0;
+                    const check = () => {
+                      if (!element.isConnected || element !== document.activeElement)
+                        resolve(false);
+                      else if (++frames === 12) resolve(true);
+                      else requestAnimationFrame(check);
+                    };
+                    requestAnimationFrame(check);
+                  }),
+              ),
+            ).toBe(true);
+          }
+          await page.keyboard.press("Enter");
+          if (surface === "sidebar")
+            await expect.poll(() => page.url()).toContain(`/feeds/${feed.id}/`);
+          else await expect.poll(() => page.getByRole("dialog").isVisible()).toBe(true);
+        } finally {
+          await context.close();
+        }
+      },
+      30_000,
+    );
+
     it("keeps the feed in place after a rejected move and allows a subsequent move", async () => {
       const { context, page, source, target, feed, first, second } = await setup(surface, false);
       try {

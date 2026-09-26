@@ -41,7 +41,7 @@ import {
   type FolderManagementAction,
 } from "../feeds/feed-management";
 import { folderBranchFeedCount, folderHierarchy, folderPathLabel } from "../feeds/folder-hierarchy";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 import {
   ExportOpmlLink,
   formatDate,

@@ -3,6 +3,7 @@ import {
   startAuthentication,
   startRegistration,
 } from "@simplewebauthn/browser";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BookOpenText,
@@ -43,13 +44,14 @@ import type {
 } from "../../../shared/types";
 import { DUPLICATE_ARTICLE_WINDOW_DAYS } from "../../../shared/types";
 import { ApiError, api, errorMessage } from "../../api/api";
+import { useRequestMutation } from "../../api/use-request-mutation";
 import type { SettingsCategory } from "../../app/routes";
 import { isDesktopApp } from "../../platform/desktop";
 import { COLOR_PALETTES, type ColorPalette } from "../../ui/color-palettes";
 import { Kbd } from "../../ui/controls";
 import { Modal, useDialog } from "../../ui/dialog";
 import { DropdownCombobox, DropdownSelect } from "../../ui/dropdown";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 import {
   type ColorPalettes,
   clearReaderPreferences,
@@ -101,12 +103,26 @@ function AccountSettingsSection({
   showToast: (message: string) => void;
   runSensitive: SensitiveAction;
 }) {
-  const [passkeys, setPasskeys] = useState<Awaited<ReturnType<typeof api.passkeys>>["passkeys"]>(
-    [],
-  );
-  const [hasPassword, setHasPassword] = useState(false);
-  const [passkeysAvailable, setPasskeysAvailable] = useState(false);
-  const [loadingPasskeys, setLoadingPasskeys] = useState(true);
+  const { run: mutateRequest } = useRequestMutation();
+  const client = useQueryClient();
+  const credentials = useQuery({ queryKey: ["passkeys"], queryFn: api.passkeys });
+  const config = useQuery({ queryKey: ["auth-config"], queryFn: api.authConfig });
+  const passkeys = credentials.data?.passkeys ?? [];
+  const hasPassword = credentials.data?.hasPassword ?? false;
+  const passkeysAvailable = !!config.data?.passkeysAvailable && browserSupportsWebAuthn();
+  const loadingPasskeys = credentials.isPending || config.isPending;
+  const setPasskeys = (update: (current: typeof passkeys) => typeof passkeys) =>
+    client.setQueryData(
+      ["passkeys"],
+      (current: Awaited<ReturnType<typeof api.passkeys>> | undefined) =>
+        current ? { ...current, passkeys: update(current.passkeys) } : current,
+    );
+  const setHasPassword = (hasPassword: boolean) =>
+    client.setQueryData(
+      ["passkeys"],
+      (current: Awaited<ReturnType<typeof api.passkeys>> | undefined) =>
+        current ? { ...current, hasPassword } : current,
+    );
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [editingPasskeyId, setEditingPasskeyId] = useState<string | null>(null);
   const [passkeyName, setPasskeyName] = useState("");
@@ -122,24 +138,9 @@ function AccountSettingsSection({
   const accountDialog = useDialog(resetAccountDialog, { autoOpen: false });
 
   useEffect(() => {
-    let active = true;
-    void Promise.all([api.authConfig(), api.passkeys()])
-      .then(([config, credentials]) => {
-        if (!active) return;
-        setPasskeysAvailable(config.passkeysAvailable && browserSupportsWebAuthn());
-        setPasskeys(credentials.passkeys);
-        setHasPassword(credentials.hasPassword);
-      })
-      .catch((caught) => {
-        if (active) setError(errorMessage(caught));
-      })
-      .finally(() => {
-        if (active) setLoadingPasskeys(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (credentials.error || config.error)
+      setError(errorMessage(credentials.error ?? config.error));
+  }, [credentials.error, config.error]);
 
   const addPasskey = async () => {
     setEditingPasskeyId(null);
@@ -147,9 +148,9 @@ function AccountSettingsSection({
     setError(null);
     try {
       const passkey = await runSensitive(async () => {
-        const { ceremonyId, options } = await api.passkeyRegistrationOptions();
+        const { ceremonyId, options } = await mutateRequest(() => api.passkeyRegistrationOptions());
         const response = await startRegistration({ optionsJSON: options });
-        return (await api.registerPasskey(ceremonyId, response)).passkey;
+        return (await mutateRequest(() => api.registerPasskey(ceremonyId, response))).passkey;
       });
       setPasskeys((current) => [passkey, ...current]);
       showToast("Passkey added");
@@ -189,7 +190,7 @@ function AccountSettingsSection({
     setRenamingPasskey(true);
     setError(null);
     try {
-      const { passkey } = await api.renamePasskey(id, name);
+      const { passkey } = await mutateRequest(() => api.renamePasskey(id, name));
       setPasskeys((current) => current.map((item) => (item.id === id ? passkey : item)));
       setEditingPasskeyId(null);
       setPasskeyName("");
@@ -205,7 +206,7 @@ function AccountSettingsSection({
     setPasskeyBusy(true);
     setError(null);
     try {
-      await runSensitive(() => api.deletePasskey(id));
+      await runSensitive(() => mutateRequest(() => api.deletePasskey(id)));
       setPasskeys((current) => current.filter((passkey) => passkey.id !== id));
       showToast("Passkey removed");
     } catch (caught) {
@@ -224,7 +225,7 @@ function AccountSettingsSection({
     setChangingPassword(true);
     setError(null);
     try {
-      await runSensitive(() => api.changePassword(newPassword));
+      await runSensitive(() => mutateRequest(() => api.changePassword(newPassword)));
       setHasPassword(true);
       setNewPassword("");
       setConfirmPassword("");
@@ -240,7 +241,7 @@ function AccountSettingsSection({
     setChangingPassword(true);
     setError(null);
     try {
-      await runSensitive(() => api.removePassword());
+      await runSensitive(() => mutateRequest(() => api.removePassword()));
       setHasPassword(false);
       setNewPassword("");
       setConfirmPassword("");
@@ -261,7 +262,7 @@ function AccountSettingsSection({
     setDeletingAccount(true);
     setAccountDeleteError(null);
     try {
-      await runSensitive(() => api.deleteAccount());
+      await runSensitive(() => mutateRequest(() => api.deleteAccount()));
       clearReaderPreferences(userId);
       onAccountDeleted();
     } catch (caught) {
@@ -542,6 +543,7 @@ function AiSettingsSection({
   showToast: (message: string) => void;
   runSensitive: SensitiveAction;
 }) {
+  const { run: mutateRequest } = useRequestMutation();
   const initialFeature = aiSettings.features.articleSummary;
   const initialProvider = initialFeature?.provider ?? "gemini";
   const initialModel =
@@ -611,10 +613,12 @@ function AiSettingsSection({
     setError(null);
     try {
       onAiSettings(
-        await api.updateAiFeature("article_summary", {
-          provider: nextProvider,
-          model: nextModel.trim(),
-        }),
+        await mutateRequest(() =>
+          api.updateAiFeature("article_summary", {
+            provider: nextProvider,
+            model: nextModel.trim(),
+          }),
+        ),
       );
       showToast("AI provider and model saved");
     } catch (caught) {
@@ -651,12 +655,16 @@ function AiSettingsSection({
     setSavingKey(true);
     setError(null);
     try {
-      const keySettings = await runSensitive(() => api.saveAiProviderKey(providerId, nextKey));
+      const keySettings = await runSensitive(() =>
+        mutateRequest(() => api.saveAiProviderKey(providerId, nextKey)),
+      );
       try {
-        const updated = await api.updateAiFeature("article_summary", {
-          provider: providerId,
-          model: nextModel,
-        });
+        const updated = await mutateRequest(() =>
+          api.updateAiFeature("article_summary", {
+            provider: providerId,
+            model: nextModel,
+          }),
+        );
         onAiSettings(updated);
         setApiKey("");
         setShowKey(false);
@@ -683,7 +691,9 @@ function AiSettingsSection({
     setRemovingKey(true);
     setError(null);
     try {
-      onAiSettings(await runSensitive(() => api.deleteAiProviderKey(providerId)));
+      onAiSettings(
+        await runSensitive(() => mutateRequest(() => api.deleteAiProviderKey(providerId))),
+      );
       setApiKey("");
       setShowKey(false);
       showToast(`${provider.label} API key removed`);
@@ -715,10 +725,12 @@ function AiSettingsSection({
     setPromptError(null);
     try {
       onSettings(
-        await api.updateSettings({
-          summaryPrompt: nextSummaryPrompt,
-          translationPrompt: nextTranslationPrompt,
-        }),
+        await mutateRequest(() =>
+          api.updateSettings({
+            summaryPrompt: nextSummaryPrompt,
+            translationPrompt: nextTranslationPrompt,
+          }),
+        ),
       );
       showToast("Default AI prompts saved");
       promptDialog.close();
@@ -759,7 +771,7 @@ function AiSettingsSection({
     setSavingCustomPrompt(true);
     setCustomPromptError(null);
     try {
-      onSettings(await api.updateSettings({ customPrompts }));
+      onSettings(await mutateRequest(() => api.updateSettings({ customPrompts })));
       showToast(editingCustomPrompt ? "Custom prompt updated" : "Custom prompt added");
       customPromptDialog.close();
     } catch (caught) {
@@ -775,9 +787,11 @@ function AiSettingsSection({
     setError(null);
     try {
       onSettings(
-        await api.updateSettings({
-          customPrompts: settings.customPrompts.filter((item) => item.id !== prompt.id),
-        }),
+        await mutateRequest(() =>
+          api.updateSettings({
+            customPrompts: settings.customPrompts.filter((item) => item.id !== prompt.id),
+          }),
+        ),
       );
       showToast("Custom prompt deleted");
     } catch (caught) {
@@ -1285,8 +1299,10 @@ function SettingsPage({
   showToast: (message: string) => void;
   onAccountDeleted: () => void;
 }) {
+  const { run: mutateRequest } = useRequestMutation();
   const [saving, setSaving] = useState(false);
   const [translationLanguage, setTranslationLanguage] = useState(settings.translationLanguage);
+  const queryClient = useQueryClient();
   const [pendingSensitive, setPendingSensitive] = useState<PendingSensitiveAction | null>(null);
   const [stepUpPassword, setStepUpPassword] = useState("");
   const [stepUpBusy, setStepUpBusy] = useState(false);
@@ -1326,7 +1342,11 @@ function SettingsPage({
           !caught.operationId
         )
           throw caught;
-        const credentials = await api.passkeys();
+        const credentials = await queryClient.fetchQuery({
+          queryKey: ["passkeys"],
+          queryFn: api.passkeys,
+          staleTime: 0,
+        });
         setStepUpHasPassword(credentials.hasPassword);
         setStepUpHasPasskey(credentials.passkeys.length > 0);
         setStepUpPassword("");
@@ -1342,7 +1362,7 @@ function SettingsPage({
         });
       }
     },
-    [stepUpDialog.open],
+    [stepUpDialog.open, queryClient.fetchQuery],
   );
 
   const finishStepUp = async (authenticate: () => Promise<void>) => {
@@ -1367,15 +1387,19 @@ function SettingsPage({
   const authenticateWithPassword = async (event: FormEvent) => {
     event.preventDefault();
     if (!pendingSensitive || !stepUpPassword) return;
-    await finishStepUp(() => api.stepUpPassword(pendingSensitive.operationId, stepUpPassword));
+    await finishStepUp(() =>
+      mutateRequest(() => api.stepUpPassword(pendingSensitive.operationId, stepUpPassword)),
+    );
   };
 
   const authenticateWithPasskey = async () => {
     if (!pendingSensitive) return;
     await finishStepUp(async () => {
-      const { ceremonyId, options } = await api.stepUpPasskeyOptions(pendingSensitive.operationId);
+      const { ceremonyId, options } = await mutateRequest(() =>
+        api.stepUpPasskeyOptions(pendingSensitive.operationId),
+      );
       const response = await startAuthentication({ optionsJSON: options });
-      await api.stepUpPasskey(ceremonyId, response);
+      await mutateRequest(() => api.stepUpPasskey(ceremonyId, response));
     });
   };
 
@@ -1390,7 +1414,7 @@ function SettingsPage({
   const saveSettings = async (change: ApiInput<"updateSettings">) => {
     setSaving(true);
     try {
-      onSettings(await api.updateSettings(change));
+      onSettings(await mutateRequest(() => api.updateSettings(change)));
       showToast("Settings saved");
     } catch (error) {
       showToast(`Could not save settings: ${errorMessage(error)}`);

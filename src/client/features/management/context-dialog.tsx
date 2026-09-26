@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Check,
@@ -29,11 +30,12 @@ import type {
   WebFeedAnalysis,
 } from "../../../shared/types";
 import { api, errorMessage } from "../../api/api";
+import { useRequestMutation } from "../../api/use-request-mutation";
 import { Modal, useDialog } from "../../ui/dialog";
 import { DropdownSelect } from "../../ui/dropdown";
 import type { ManagementRequest } from "../feeds/feed-management";
 import { folderPathLabel } from "../feeds/folder-hierarchy";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 import { formatDate, formatRefreshInterval } from "./shared";
 import "./dialogs.css";
 
@@ -120,26 +122,17 @@ function FeedSettingsPanel({
   onRefresh: (feedId: number) => Promise<void>;
   showToast: (message: string) => void;
 }) {
-  const [details, setDetails] = useState(feed);
-  const [loading, setLoading] = useState(true);
+  const client = useQueryClient();
+  const detailsQuery = useQuery({
+    queryKey: ["reader", "feed", feed.id],
+    queryFn: () => api.feed(feed.id),
+  });
+  const details = detailsQuery.data ?? feed;
+  const loading = detailsQuery.isPending;
+  const setDetails = (updated: Feed) => client.setQueryData(["reader", "feed", feed.id], updated);
   const [busy, setBusy] = useState<"pause" | "refresh" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadDetails = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setDetails(await api.feed(feed.id));
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setLoading(false);
-    }
-  }, [feed.id]);
-
-  useEffect(() => {
-    void loadDetails();
-  }, [loadDetails]);
+  const [actionError, setError] = useState<string | null>(null);
+  const error = actionError ?? (detailsQuery.error ? errorMessage(detailsQuery.error) : null);
 
   const togglePaused = async () => {
     setBusy("pause");
@@ -160,7 +153,7 @@ function FeedSettingsPanel({
     setError(null);
     try {
       await onRefresh(details.id);
-      setDetails(await api.feed(details.id));
+      await detailsQuery.refetch();
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -311,6 +304,7 @@ function WebFeedSelectionPanel({
   onClose: () => void;
   showToast: (message: string) => void;
 }) {
+  const { run: mutateRequest } = useRequestMutation();
   const [analysis, setAnalysis] = useState<WebFeedAnalysis | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -321,7 +315,7 @@ function WebFeedSelectionPanel({
     setLoading(true);
     setError(null);
     try {
-      const result = await api.analyzeWebFeed(feed.id);
+      const result = await mutateRequest(() => api.analyzeWebFeed(feed.id));
       setAnalysis(result);
       setSelectedCandidateId(result.selectedCandidateId ?? result.suggestedCandidateIds[0] ?? null);
     } catch (caught) {
@@ -329,7 +323,7 @@ function WebFeedSelectionPanel({
     } finally {
       setLoading(false);
     }
-  }, [feed.id]);
+  }, [feed.id, mutateRequest]);
 
   useEffect(() => {
     void loadPage();

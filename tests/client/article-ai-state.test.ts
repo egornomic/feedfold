@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { act, createElement, useRef, useState } from "react";
+import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
 import { DemoStore } from "../../src/demo/store.js";
@@ -98,31 +98,35 @@ describe("article AI state", () => {
       if (!container) throw new Error("The app fixture is incomplete");
       let current: HarnessState | null = null;
       let root: ReturnType<typeof createRoot> | null = null;
-      let resource: { pause: () => void } | null = null;
+      let clearQueries = () => {};
 
       try {
         const enrichmentModulePath: string =
           "../../src/client/features/reader/article-enrichment.js";
         const queueModulePath: string = "../../src/client/features/reader/article-queue.js";
         const routeModulePath: string = "../../src/client/app/route.js";
-        const resourceModulePath: string = "../../src/client/features/reader/data-resource.js";
+        const resourceModulePath: string = "../../src/client/features/reader/reader-data.js";
         const [enrichmentModule, queueModule, routeModule, resourceModule] = await Promise.all([
           import(enrichmentModulePath),
           import(queueModulePath),
           import(routeModulePath),
           import(resourceModulePath),
         ]);
-        const dataResource = new resourceModule.ReaderDataResource();
-        resource = dataResource;
+        const { QueryClientProvider } = await import("@tanstack/react-query");
+        const queryModulePath: string = "../../src/client/api/query.js";
+        const { createQueryClient, readerKeys } = await import(queryModulePath);
+        const client = createQueryClient();
+        client.setQueryData(readerKeys.bootstrap, initialBootstrap);
+        clearQueries = () => client.clear();
 
         function Harness() {
-          const [bootstrap, setBootstrap] = useState(initialBootstrap);
-          const bootstrapRef = useRef(bootstrap);
-          bootstrapRef.current = bootstrap;
+          const { data: dataResource, bootstrap: bootstrapResult } = resourceModule.useReaderData();
+          const bootstrap = bootstrapResult.data ?? initialBootstrap;
           const route = routeModule.useAppRoute("/");
           const queue = queueModule.useArticleQueue({
             route,
-            dataResource,
+            enabled: true,
+            onReadingModeChange: () => {},
             readingMode: "magazine",
             showToast: () => {},
           });
@@ -133,21 +137,6 @@ describe("article AI state", () => {
             dataResource,
             readingMode: "magazine",
             showToast: () => {},
-          });
-          dataResource.connect({
-            getBootstrap: () => bootstrapRef.current,
-            applyBootstrap: (next: BootstrapData) => {
-              bootstrapRef.current = next;
-              setBootstrap(next);
-            },
-            setBootstrapError: () => {},
-            reloadArticles: (signal: AbortSignal, mode: "query" | "mutation" | "delivery") =>
-              mode === "query"
-                ? queue.reloadQuery(signal)
-                : mode === "delivery"
-                  ? queue.reloadAfterDelivery(signal)
-                  : queue.reloadAfterMutation(signal),
-            reloadRules: async () => {},
           });
           current = { bootstrap, queue, enrichment };
 
@@ -161,7 +150,9 @@ describe("article AI state", () => {
         }
 
         root = createRoot(container);
-        await act(async () => root?.render(createElement(Harness)));
+        await act(async () =>
+          root?.render(createElement(QueryClientProvider, { client }, createElement(Harness))),
+        );
         await waitFor(
           "a readable demo article",
           () => current?.queue.articles.some((item) => !item.media) === true,
@@ -223,8 +214,9 @@ describe("article AI state", () => {
         expect(translationRequests).toBe(2);
       } finally {
         releaseFirstTranslation();
-        resource?.pause();
+        clearQueries();
         if (root) await act(async () => root?.unmount());
+        await new Promise((resolve) => setTimeout(resolve, 0));
         dom.window.close();
         if (previousActEnvironment === undefined)
           Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");

@@ -4,7 +4,7 @@ import type { Folder, FolderSortDirection } from "../../../shared/types";
 import { errorMessage } from "../../api/api";
 import { DropdownSelect } from "../../ui/dropdown";
 import type { MotionState } from "../../ui/motion";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 import { folderPathLabel } from "./folder-hierarchy";
 
 export function FolderForm({

@@ -11,7 +11,7 @@ import type {
 import { errorMessage, type RuleInput } from "../../api/api";
 import { DropdownSelect } from "../../ui/dropdown";
 import { type MotionState, motionExitDuration } from "../../ui/motion";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 import type { RuleFormPreset } from "./rule-form-types";
 import { RULE_ACTION_COPY, RULE_FIELD_LABELS, RuleActionIcon } from "./rule-presentation";
 import "./rule-form.css";

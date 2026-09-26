@@ -1,18 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
 import type { Article, MarkReadAgeDays, ReadingMode } from "../../../shared/types";
 import { api, errorMessage } from "../../api/api";
+import { updateCachedArticleStates } from "../../api/query";
+import { useRequestMutation } from "../../api/use-request-mutation";
 import type { AppRouteController } from "../../app/route";
 import { copyText } from "../../platform/clipboard";
 import type { ArticleEnrichmentController } from "./article-enrichment";
 import type { ArticleQueueController } from "./article-queue";
-import type { ReaderDataResource } from "./data-resource";
+import type { ReaderData } from "./reader-data";
 import { shouldAutoMarkRoutedArticleRead, updateBootstrapCounts } from "./reader-state";
 
 interface ArticleActionsOptions {
   loadFullArticle: ArticleEnrichmentController["loadFullArticle"];
   queue: ArticleQueueController;
   route: AppRouteController;
-  dataResource: ReaderDataResource;
+  dataResource: ReaderData;
   readingMode: ReadingMode;
   showToast: (message: string) => void;
 }
@@ -25,7 +28,8 @@ export function useArticleActions({
   readingMode,
   showToast,
 }: ArticleActionsOptions) {
-  const [markReadPending, setMarkReadPending] = useState(false);
+  const client = useQueryClient();
+  const { run: mutateRequest, isPending: markReadPending } = useRequestMutation();
   const manuallyUnreadArticleIds = useRef(new Set<number>());
   const loadBootstrap = dataResource.loadBootstrap;
   const loadArticles = queue.loadArticles;
@@ -51,9 +55,15 @@ export function useArticleActions({
       );
 
       try {
-        await dataResource.runCounterMutation(() => api.updateArticleState(article.id, change));
+        await dataResource.runCounterMutation(async () => {
+          await api.updateArticleState(article.id, change);
+          updateCachedArticleStates(client, new Set([article.id]), change);
+        });
+        return true;
       } catch (caught) {
-        if (wasManuallyUnread) manuallyUnreadArticleIds.current.add(article.id);
+        // A rejected automatic read must stay unread until the reader tries again.
+        if (wasManuallyUnread || (change.isRead === true && !article.isRead))
+          manuallyUnreadArticleIds.current.add(article.id);
         else manuallyUnreadArticleIds.current.delete(article.id);
         queue.setArticles((current) =>
           current.map((item) =>
@@ -78,9 +88,10 @@ export function useArticleActions({
         showToast(`Could not update the article: ${errorMessage(caught)}`);
         await loadBootstrap();
         if (route.current().kind === "reader") await loadArticles();
+        return false;
       }
     },
-    [dataResource, loadArticles, loadBootstrap, queue, route.current, showToast],
+    [client, dataResource, loadArticles, loadBootstrap, queue, route.current, showToast],
   );
 
   const activateArticle = useCallback(
@@ -209,7 +220,10 @@ export function useArticleActions({
       });
 
       try {
-        await dataResource.runCounterMutation(() => api.markRead({ articleIds: [...ids] }));
+        await dataResource.runCounterMutation(async () => {
+          await api.markRead({ articleIds: [...ids] });
+          updateCachedArticleStates(client, ids, { isRead: true });
+        });
         return true;
       } catch (caught) {
         for (const id of protectedIds) manuallyUnreadArticleIds.current.add(id);
@@ -218,7 +232,7 @@ export function useArticleActions({
         return false;
       }
     },
-    [dataResource, loadArticles, loadBootstrap, queue, showToast],
+    [dataResource, loadArticles, loadBootstrap, queue, showToast, client],
   );
 
   const markPassedArticlesRead = useCallback(
@@ -244,18 +258,19 @@ export function useArticleActions({
 
   const markOlderArticlesRead = useCallback(
     async (days: MarkReadAgeDays) => {
-      setMarkReadPending(true);
       try {
         const readerRoute = route.readerRoute;
-        const result = await api.markRead({
-          olderThanDays: days,
-          ...(readerRoute.scope === "feed" && readerRoute.scopeId !== null
-            ? { feedId: readerRoute.scopeId }
-            : {}),
-          ...(readerRoute.scope === "folder" && readerRoute.scopeId !== null
-            ? { folderId: readerRoute.scopeId }
-            : {}),
-        });
+        const result = await mutateRequest(() =>
+          api.markRead({
+            olderThanDays: days,
+            ...(readerRoute.scope === "feed" && readerRoute.scopeId !== null
+              ? { feedId: readerRoute.scopeId }
+              : {}),
+            ...(readerRoute.scope === "folder" && readerRoute.scopeId !== null
+              ? { folderId: readerRoute.scopeId }
+              : {}),
+          }),
+        );
         await Promise.all([loadBootstrap(), loadArticles()]);
         showToast(
           result.updated === 0
@@ -264,11 +279,9 @@ export function useArticleActions({
         );
       } catch (caught) {
         showToast(`Could not mark older articles as read: ${errorMessage(caught)}`);
-      } finally {
-        setMarkReadPending(false);
       }
     },
-    [loadArticles, loadBootstrap, route.readerRoute, showToast],
+    [loadArticles, loadBootstrap, route.readerRoute, showToast, mutateRequest],
   );
 
   return {

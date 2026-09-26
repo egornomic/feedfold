@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { INVITE_EXPIRATION_DAYS } from "../../../shared/auth";
-import type { InvitationOverview, InvitationSummary } from "../../../shared/types";
+import type { InvitationSummary } from "../../../shared/types";
 import { api, appUrl, errorMessage } from "../../api/api";
+import { useRequestMutation } from "../../api/use-request-mutation";
 
 type InvitationStatus = "Available" | "Expired" | "Revoked" | "Used";
 
@@ -13,38 +15,22 @@ function invitationStatus(invitation: InvitationSummary): InvitationStatus {
 }
 
 export function InvitationsSection({ showToast }: { showToast: (message: string) => void }) {
-  const [overview, setOverview] = useState<InvitationOverview | null>(null);
+  const overviewQuery = useQuery({ queryKey: ["invitations"], queryFn: api.invitations });
+  const overview = overviewQuery.data;
+  const mutation = useRequestMutation();
+  const busy = mutation.isPending;
   const [createdInvitation, setCreatedInvitation] = useState<Awaited<
     ReturnType<typeof api.createInvitation>
   > | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    void api
-      .invitations()
-      .then((result) => {
-        if (active) setOverview(result);
-      })
-      .catch((caught) => {
-        if (active) setError(errorMessage(caught));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const refreshAfterMutation = async (mutation: () => Promise<void>) => {
-    setBusy(true);
+  const refreshAfterMutation = async (request: () => Promise<void>) => {
     setError(null);
     try {
-      await mutation();
-      setOverview(await api.invitations());
+      await mutation.run(request);
+      await overviewQuery.refetch();
     } catch (caught) {
       setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -77,9 +63,9 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
   };
 
   if (!overview)
-    return error ? (
+    return error || overviewQuery.error ? (
       <p className="login-error" role="alert">
-        {error}
+        {error ?? errorMessage(overviewQuery.error)}
       </p>
     ) : null;
   if (!overview.enabled) return null;

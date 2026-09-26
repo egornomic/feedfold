@@ -4,7 +4,7 @@ import type { BootstrapData, Rule, RuleCondition } from "../../../shared/types";
 import { errorMessage } from "../../api/api";
 import { useDelayedPending } from "../../ui/loading";
 import { useMotionPresence } from "../../ui/motion";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 import { RuleForm } from "../rules/rule-form";
 import type { RuleFormDraft } from "../rules/rule-form-types";
 import { RULE_ACTION_COPY, RULE_FIELD_LABELS, RuleActionIcon } from "../rules/rule-presentation";

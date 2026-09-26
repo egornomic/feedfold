@@ -8,7 +8,7 @@ import {
 } from "react";
 import { api, errorMessage } from "../../api/api";
 import { Menu as BaseMenu } from "../../ui/menu";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 
 export function formatDate(value: string | null): string {
   if (!value) return "Never";
