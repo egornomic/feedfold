@@ -1,7 +1,8 @@
 import { AlertTriangle, Languages, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
-import { lazy, Suspense, useRef } from "react";
+import { motion, useIsPresent, useReducedMotion } from "motion/react";
+import { lazy, Suspense } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import type { useMotionPresence } from "../../../ui/motion";
+import { surfaceTransition } from "../../../ui/motion";
 import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
 
 const AiMarkdown = lazy(() =>
@@ -11,22 +12,19 @@ const AiMarkdown = lazy(() =>
 export function ArticleSummaryPanel({
   article,
   state,
-  presence: summaryPresence,
   customPrompts,
   onRegenerate,
   onOpenSettings,
 }: {
   article: Article;
   state: ArticleSummaryViewState;
-  presence: ReturnType<typeof useMotionPresence>;
   customPrompts: AiCustomPrompt[];
   onRegenerate: (article: Article) => void;
   onOpenSettings: () => void;
 }) {
-  const retainedState = useRef(state);
-  if (state.visible) retainedState.current = state;
-  const displayedState = state.visible ? state : retainedState.current;
-  if (!summaryPresence.present) return null;
+  const present = useIsPresent();
+  const reduced = Boolean(useReducedMotion());
+  const displayedState = state;
   const summary = article.aiSummary;
   const titleId = `article-${article.id}-ai-summary-title`;
   const displayedPromptId = summary ? summary.promptId : displayedState.promptId;
@@ -35,13 +33,27 @@ export function ArticleSummaryPanel({
     : null;
 
   return (
-    <section
+    <motion.section
+      initial={
+        surfaceTransition(reduced).duration === 0
+          ? false
+          : { opacity: 0, transform: reduced ? "none" : "translateY(4px)" }
+      }
+      animate={{ opacity: 1, transform: reduced ? "none" : "translateY(0px)" }}
+      exit="closed"
+      variants={{
+        closed: ({ reduced: reduce }) => ({
+          opacity: 0,
+          transform: reduce ? "none" : "translateY(4px)",
+          transition: surfaceTransition(reduce, true),
+        }),
+      }}
+      transition={surfaceTransition(reduced)}
       id={`article-${article.id}-ai-summary`}
       className="article-ai-summary"
-      data-motion-state={summaryPresence.state}
-      inert={summaryPresence.state === "closed" ? true : undefined}
+      inert={!present}
       aria-labelledby={titleId}
-      aria-hidden={summaryPresence.state === "closed"}
+      aria-hidden={!present}
       aria-live="polite"
       aria-busy={displayedState.loading}
     >
@@ -121,7 +133,7 @@ export function ArticleSummaryPanel({
           ) : null}
         </div>
       ) : null}
-    </section>
+    </motion.section>
   );
 }
 

@@ -31,6 +31,9 @@ export function MenuPopup({
           className={`overlay-menu ${className}`}
           {...props}
           onKeyDown={(event) => {
+            // A closing menu can retain focus during its exit. Reader shortcuts
+            // must resume as soon as the action has been chosen.
+            if (event.currentTarget.hasAttribute("data-closed")) return;
             event.stopPropagation();
             onKeyDown?.(event);
           }}

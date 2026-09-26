@@ -1,8 +1,9 @@
 import { Popover } from "@base-ui/react/popover";
 import { ListFilter } from "lucide-react";
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import { interactionMotionIsInstant, useMotionPresence } from "../../../ui/motion";
+import { surfaceTransition } from "../../../ui/motion";
 import type { FeedManagementAction } from "../../feeds/feed-management";
 import {
   captureTextSelection,
@@ -54,62 +55,12 @@ export function ArticleDocument({
   onFilterSelection: (article: Article, text: string) => void;
 }) {
   const documentRef = useRef<HTMLDivElement>(null);
-  const readingFlowRef = useRef<HTMLDivElement>(null);
-  const readingFlowTop = useRef<number | null>(null);
-  const readingFlowAnimation = useRef<Animation | null>(null);
-  const summaryPresence = useMotionPresence(summaryState.visible);
-  const previousSummaryPresence = useRef(summaryPresence.present);
+  const reduced = Boolean(useReducedMotion());
   const menuRef = useRef<HTMLDivElement>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const retainedSelectionMenu = useRef<SelectionMenuState | null>(selectionMenu);
   if (selectionMenu) retainedSelectionMenu.current = selectionMenu;
   const displayedSelectionMenu = selectionMenu ?? retainedSelectionMenu.current;
-
-  useLayoutEffect(() => {
-    const flow = readingFlowRef.current;
-    const root = documentRef.current;
-    if (!flow || !root) return;
-    const presenceChanged = previousSummaryPresence.current !== summaryPresence.present;
-    previousSummaryPresence.current = summaryPresence.present;
-    const nextTop = flow.getBoundingClientRect().top - root.getBoundingClientRect().top;
-    const previousTop = readingFlowTop.current;
-    readingFlowTop.current = nextTop;
-    if (!presenceChanged) return;
-    readingFlowAnimation.current?.cancel();
-    readingFlowAnimation.current = null;
-    if (previousTop === null) return;
-
-    const delta = previousTop - nextTop;
-    const styles = window.getComputedStyle(document.documentElement);
-    const duration = Number.parseFloat(styles.getPropertyValue("--duration-surface"));
-    if (
-      Math.abs(delta) < 0.5 ||
-      duration === 0 ||
-      interactionMotionIsInstant() ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
-
-    const animation = flow.animate(
-      [{ transform: `translate3d(0, ${delta}px, 0)` }, { transform: "translate3d(0, 0, 0)" }],
-      {
-        duration,
-        easing: styles.getPropertyValue("--ease-in-out").trim(),
-      },
-    );
-    readingFlowAnimation.current = animation;
-    animation.onfinish = () => {
-      if (readingFlowAnimation.current === animation) readingFlowAnimation.current = null;
-    };
-  }, [summaryPresence.present]);
-
-  useEffect(
-    () => () => {
-      readingFlowAnimation.current?.cancel();
-    },
-    [],
-  );
 
   const showSelectionMenu = useCallback(() => {
     const root = documentRef.current;
@@ -182,16 +133,23 @@ export function ArticleDocument({
         <ArticleHeader article={article} id={titleId} onFeedAction={onFeedAction} />
         <div className="article-document-flow">
           {contentPlaceholder ?? (
-            <>
-              <ArticleSummaryPanel
-                article={article}
-                state={summaryState}
-                presence={summaryPresence}
-                customPrompts={customPrompts}
-                onRegenerate={onRegenerateSummary}
-                onOpenSettings={onOpenAiSettings}
-              />
-              <div ref={readingFlowRef} className="article-reading-flow">
+            <LayoutGroup>
+              <AnimatePresence initial={false} custom={{ reduced }}>
+                {summaryState.visible ? (
+                  <ArticleSummaryPanel
+                    article={article}
+                    state={summaryState}
+                    customPrompts={customPrompts}
+                    onRegenerate={onRegenerateSummary}
+                    onOpenSettings={onOpenAiSettings}
+                  />
+                ) : null}
+              </AnimatePresence>
+              <motion.div
+                layout="position"
+                transition={{ layout: reduced ? { duration: 0 } : surfaceTransition(false) }}
+                className="article-reading-flow"
+              >
                 <ArticleTranslationNotice
                   state={translationState}
                   language={translationLanguage}
@@ -204,8 +162,8 @@ export function ArticleDocument({
                   showYouTubeDescriptions={showYouTubeDescriptions}
                   onToggleFullContent={onToggleFullContent}
                 />
-              </div>
-            </>
+              </motion.div>
+            </LayoutGroup>
           )}
         </div>
       </div>

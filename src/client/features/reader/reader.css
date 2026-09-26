@@ -758,25 +758,6 @@
   background-blend-mode: var(--paper-blend);
   clip-path: inset(0);
   color: var(--text-secondary);
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity var(--duration-surface) var(--ease-out),
-    transform var(--duration-surface) var(--ease-out);
-}
-
-.article-ai-summary[data-motion-state="closed"] {
-  opacity: 0;
-  transform: translateY(4px);
-  pointer-events: none;
-  transition-duration: var(--duration-fast);
-}
-
-@starting-style {
-  .article-ai-summary[data-motion-state="open"] {
-    opacity: 0;
-    transform: translateY(4px);
-  }
 }
 
 .article-content-stage {
