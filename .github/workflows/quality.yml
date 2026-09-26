@@ -1,21 +1,110 @@
 name: Quality
+
 on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  diagnose:
-    name: Diagnose public verification
+  quality:
+    name: Quality
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
+    timeout-minutes: 15
     steps:
-      - name: Inspect public responses
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps --only-shell chromium
+
+      - name: Allow Chromium to create its sandbox
         run: |
-          getent ahosts feedfold.com
-          for path in /health /api/auth/config; do
-            echo "Checking $path"
-            curl --silent --show-error --max-time 20 --dump-header response-headers --output response-body --write-out 'HTTP %{http_code}\n' "https://feedfold.com$path"
-            cat response-headers
-            head -c 800 response-body
-            echo
-          done
+          cat <<EOF | sudo tee /etc/apparmor.d/feedfold-chromium
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile feedfold-chromium ${HOME}/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser --replace /etc/apparmor.d/feedfold-chromium
+
+      - name: Check types, formatting, tests, coverage, and builds
+        run: npm run check
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Build static demo
+        run: npm run build:demo
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  deploy:
+    name: Deploy to DigitalOcean
+    needs: quality
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://feedfold.com/
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Build production image
+        run: docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" --tag "feedfold:$GITHUB_SHA" .
+
+      - name: Install deployment SSH credentials
+        env:
+          DEPLOY_KEY: ${{ secrets.FEEDFOLD_DEPLOY_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.FEEDFOLD_DEPLOY_HOST_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/feedfold
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/feedfold ~/.ssh/known_hosts
+
+      - name: Deploy verified image
+        env:
+          DEPLOY_HOST: ${{ vars.FEEDFOLD_DEPLOY_HOST }}
+        run: docker save "feedfold:$GITHUB_SHA" | gzip -1 | ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "$GITHUB_SHA"
+
+      - name: Verify public service
+        env:
+          DEPLOY_HOST: ${{ vars.FEEDFOLD_DEPLOY_HOST }}
+        # Cloudflare challenges GitHub-hosted runners; verify public URLs from the server.
+        run: ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "verify $GITHUB_SHA"
+
+      - name: Remove deployment SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/feedfold
