@@ -1,14 +1,13 @@
 import { pointerIntersection } from "@dnd-kit/collision";
 import {
   Accessibility,
-  type DragDropManager,
   Feedback,
   KeyboardSensor,
   PointerActivationConstraints,
   PointerSensor,
 } from "@dnd-kit/dom";
 import { DragDropProvider, useDraggable, useDragOperation, useDroppable } from "@dnd-kit/react";
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import type { Feed } from "../../../shared/types";
 
 export type FeedDropTarget = number | "top-level";
@@ -19,11 +18,13 @@ export interface FeedDragState {
 }
 
 interface FeedFocusTarget {
-  manager: DragDropManager;
   feedId: number;
+  folderId: number | null;
 }
 
-const FeedDragContext = createContext<FeedDragState>({ draggedFeed: null, movingFeedId: null });
+const FeedDragContext = createContext<
+  FeedDragState & { focusAfterMove: FeedFocusTarget | null; clearFocusAfterMove: () => void }
+>({ draggedFeed: null, movingFeedId: null, focusAfterMove: null, clearFocusAfterMove: () => {} });
 const sensors = [
   PointerSensor.configure({
     activationConstraints: (event) =>
@@ -64,6 +65,7 @@ export function FeedDragProvider({
   const [movingFeedId, setMovingFeedId] = useState<number | null>(null);
 
   const [focusAfterMove, setFocusAfterMove] = useState<FeedFocusTarget | null>(null);
+  const clearFocusAfterMove = useCallback(() => setFocusAfterMove(null), []);
 
   return (
     <DragDropProvider
@@ -77,7 +79,7 @@ export function FeedDragProvider({
         setFocusAfterMove(null);
         setDraggedFeed(operation.source?.data.feed ?? null);
       }}
-      onDragEnd={async ({ operation, canceled }, manager) => {
+      onDragEnd={async ({ operation, canceled }) => {
         setDraggedFeed(null);
         const feed: Feed | undefined = operation.source?.data.feed;
         const destination = operation.target?.data;
@@ -88,7 +90,7 @@ export function FeedDragProvider({
             destination.onMoved?.();
             if (operation.activatorEvent instanceof KeyboardEvent) {
               // A fast move can batch away the moving state; focus needs its own update.
-              setFocusAfterMove({ manager, feedId: feed.id });
+              setFocusAfterMove({ feedId: feed.id, folderId: destination.folderId });
             }
           }
         } finally {
@@ -96,21 +98,11 @@ export function FeedDragProvider({
         }
       }}
     >
-      <RestoreFeedFocus target={focusAfterMove} />
-      <FeedDragContext value={{ draggedFeed, movingFeedId }}>{children}</FeedDragContext>
+      <FeedDragContext value={{ draggedFeed, movingFeedId, focusAfterMove, clearFocusAfterMove }}>
+        {children}
+      </FeedDragContext>
     </DragDropProvider>
   );
-}
-
-function RestoreFeedFocus({ target }: { target: FeedFocusTarget | null }) {
-  const { source } = useDragOperation();
-  useEffect(() => {
-    // Removing the drag preview can blur the row, so wait for dnd kit to finish cleanup.
-    if (!target || source) return;
-    const element = target.manager.registry.draggables.get(`feed:${target.feedId}`)?.element;
-    if (element instanceof HTMLElement) element.focus();
-  }, [target, source]);
-  return null;
 }
 
 export function useFeedDrag(): FeedDragState {
@@ -118,8 +110,25 @@ export function useFeedDrag(): FeedDragState {
 }
 
 export function useFeedDraggable(feed: Feed) {
-  const { movingFeedId } = useFeedDrag();
-  return useDraggable({ id: `feed:${feed.id}`, data: { feed }, disabled: movingFeedId !== null });
+  const { movingFeedId, focusAfterMove, clearFocusAfterMove } = useContext(FeedDragContext);
+  const { source } = useDragOperation();
+  const result = useDraggable({
+    id: `feed:${feed.id}`,
+    data: { feed },
+    disabled: movingFeedId !== null,
+  });
+  useEffect(() => {
+    // Query notifications can render the destination after the move promise resolves.
+    // Wait for that row and for removal of the drag preview before restoring focus.
+    if (source || focusAfterMove?.feedId !== feed.id || focusAfterMove.folderId !== feed.folderId)
+      return;
+    const element = result.draggable.element;
+    if (element instanceof HTMLElement) {
+      element.focus();
+      clearFocusAfterMove();
+    }
+  }, [source, focusAfterMove, feed.id, feed.folderId, result.draggable, clearFocusAfterMove]);
+  return result;
 }
 
 export function useFeedDropTarget(folderId: number | null, label: string, onMoved?: () => void) {
