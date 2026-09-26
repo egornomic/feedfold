@@ -198,6 +198,9 @@ for (const surface of ["sidebar", "folders"] as const) {
         expect((await rejection).status()).toBe(400);
         expect(await location(context, feed)).toBeNull();
         await expect.poll(() => page.getByText(/Could not move Daily news/).isVisible()).toBe(true);
+        await expect
+          .poll(() => page.getByRole("status").allTextContents())
+          .toContain("Move requested for Daily news to First.");
         await drag(page, source(), target(second), "mouse");
         await expect.poll(() => location(context, feed)).toBe(second.id);
       } finally {

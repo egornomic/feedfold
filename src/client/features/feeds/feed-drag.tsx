@@ -40,7 +40,7 @@ const accessibility: NonNullable<ConstructorParameters<typeof Accessibility>[1]>
     dragend: ({ operation: { source, target }, canceled }) =>
       canceled || !target
         ? "Move canceled."
-        : `Dropped ${source?.data.feed.title} on ${target.data.label}.`,
+        : `Move requested for ${source?.data.feed.title} to ${target.data.label}.`,
   },
 };
 
