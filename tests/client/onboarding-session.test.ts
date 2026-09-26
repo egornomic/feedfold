@@ -5,7 +5,12 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { Agent, EventSource as HttpEventSource } from "undici";
+import {
+  Agent,
+  EventSource as HttpEventSource,
+  type RequestInit as HttpRequestInit,
+  fetch as httpFetch,
+} from "undici";
 import { assert, expect, it } from "vitest";
 import { api } from "../../src/client/api/api.js";
 import { httpRequest } from "../../src/client/api/http-request.js";
@@ -35,7 +40,8 @@ it.each(["logout", "account switch", "a failed default Shorts rule"])(
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
     const browser = new JSDOM('<div id="root"></div>', { url: origin });
     const restore = exposeBrowserGlobals(browser.window);
-    const nativeFetch = globalThis.fetch;
+    const previousFetch = globalThis.fetch;
+    const requests = new Agent();
     let cookie = "";
     const previousEventSource = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
     const events = new Agent().compose(
@@ -57,14 +63,15 @@ it.each(["logout", "account switch", "a failed default Shorts rule"])(
       const abort = () => controller.abort();
       if (init?.signal?.aborted) abort();
       init?.signal?.addEventListener("abort", abort, { once: true });
-      const response = await nativeFetch(new URL(String(input), origin), {
-        ...init,
+      const response = await httpFetch(new URL(String(input), origin), {
+        ...(init as HttpRequestInit),
         headers,
         signal: controller.signal,
+        dispatcher: requests,
       }).finally(() => init?.signal?.removeEventListener("abort", abort));
       const setCookie = response.headers.get("set-cookie");
       if (setCookie) cookie = setCookie.split(";", 1)[0] ?? "";
-      return response;
+      return response as unknown as Response;
     };
     browser.window.document.documentElement.dataset.inputModality = "keyboard";
     const container = browser.window.document.getElementById("root");
@@ -164,11 +171,11 @@ it.each(["logout", "account switch", "a failed default Shorts rule"])(
     } finally {
       await act(async () => root.unmount());
       client.clear();
-      await events.destroy();
+      await Promise.all([events.destroy(), requests.destroy()]);
       if (previousEventSource)
         Object.defineProperty(globalThis, "EventSource", previousEventSource);
       else Reflect.deleteProperty(globalThis, "EventSource");
-      globalThis.fetch = nativeFetch;
+      globalThis.fetch = previousFetch;
       restore();
       browser.window.close();
       await app.close();
