@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { api, errorMessage } from "../../api/api";
+import { useInterfaceState } from "../../app/session-state";
 import { Menu as BaseMenu } from "../../ui/menu";
 import type { ReaderDataMutations } from "../reader/reader-data";
 
@@ -62,20 +63,19 @@ export function handleTabListKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
 export function PageHeader({
   title,
   description,
-  onMenu,
   actions,
 }: {
   title: string;
   description: string;
-  onMenu: () => void;
   actions?: ReactNode;
 }) {
+  const setNavOpen = useInterfaceState((state) => state.setNavOpen);
   return (
     <header className="page-header">
       <button
         className="icon-button menu-button"
         type="button"
-        onClick={onMenu}
+        onClick={() => setNavOpen(true)}
         aria-label="Open navigation"
       >
         <Menu aria-hidden="true" size={19} />

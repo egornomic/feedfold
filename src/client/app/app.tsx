@@ -43,7 +43,9 @@ function Session() {
   }, []);
 
   const clearSession = useCallback(() => {
-    client.clear();
+    // Keep the observed session query so subscribers receive the signed-out value.
+    client.removeQueries({ predicate: (query) => query.queryKey[0] !== "session" });
+    client.getMutationCache().clear();
     client.setQueryData(["session"], null);
     setOnboardingComplete(false);
   }, [client]);

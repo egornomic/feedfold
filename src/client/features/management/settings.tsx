@@ -46,18 +46,14 @@ import { DUPLICATE_ARTICLE_WINDOW_DAYS } from "../../../shared/types";
 import { ApiError, api, errorMessage } from "../../api/api";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import type { SettingsCategory } from "../../app/routes";
+import { useReaderPreferences } from "../../app/session-state";
 import { isDesktopApp } from "../../platform/desktop";
-import { COLOR_PALETTES, type ColorPalette } from "../../ui/color-palettes";
+import { COLOR_PALETTES } from "../../ui/color-palettes";
 import { Kbd } from "../../ui/controls";
 import { Modal, useDialog } from "../../ui/dialog";
 import { DropdownCombobox, DropdownSelect } from "../../ui/dropdown";
 import type { ReaderDataMutations } from "../reader/reader-data";
-import {
-  type ColorPalettes,
-  clearReaderPreferences,
-  type ResolvedTheme,
-  type Theme,
-} from "../reader/reader-preferences";
+import { clearReaderPreferences } from "../reader/reader-preferences";
 import { InvitationsSection } from "./invitations";
 import {
   ExportOpmlLink,
@@ -1267,15 +1263,8 @@ function SettingsPage({
   category,
   settings,
   aiSettings,
-  theme,
-  colorPalettes,
-  fontSize,
   mutations,
-  onMenu,
   onCategory,
-  onTheme,
-  onColorPalette,
-  onFontSize,
   onSettings,
   onAiSettings,
   showToast,
@@ -1285,20 +1274,19 @@ function SettingsPage({
   category: SettingsCategory;
   settings: AppSettings;
   aiSettings: AiSettings;
-  theme: Theme;
-  colorPalettes: ColorPalettes;
-  fontSize: number;
   mutations: ReaderDataMutations;
-  onMenu: () => void;
   onCategory: (category: SettingsCategory, historyMode?: "push" | "replace") => void;
-  onTheme: (theme: Theme) => void;
-  onColorPalette: (mode: ResolvedTheme, palette: ColorPalette) => void;
-  onFontSize: (value: number | ((current: number) => number)) => void;
   onSettings: (settings: AppSettings) => void;
   onAiSettings: (settings: AiSettings) => void;
   showToast: (message: string) => void;
   onAccountDeleted: () => void;
 }) {
+  const theme = useReaderPreferences((state) => state.theme);
+  const colorPalettes = useReaderPreferences((state) => state.colorPalettes);
+  const fontSize = useReaderPreferences((state) => state.articleFontSize);
+  const onTheme = useReaderPreferences((state) => state.setTheme);
+  const onColorPalette = useReaderPreferences((state) => state.setColorPalette);
+  const onFontSize = useReaderPreferences((state) => state.setArticleFontSize);
   const { run: mutateRequest } = useRequestMutation();
   const [saving, setSaving] = useState(false);
   const [translationLanguage, setTranslationLanguage] = useState(settings.translationLanguage);
@@ -1428,7 +1416,6 @@ function SettingsPage({
       <PageHeader
         title="Settings"
         description="Tune appearance, reading, feeds, AI, and account access."
-        onMenu={onMenu}
         actions={
           saving ? (
             <span className="saving-label">

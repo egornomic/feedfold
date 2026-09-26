@@ -15,7 +15,6 @@ export default function AddFeedPage({
   initialSourceUrl,
   initialSourceType,
   mutations,
-  onMenu,
   onBack,
   onYouTubeSettings,
   showToast,
@@ -25,7 +24,6 @@ export default function AddFeedPage({
   initialSourceUrl: string;
   initialSourceType?: AddFeedSourceType | undefined;
   mutations: ReaderDataMutations;
-  onMenu: () => void;
   onBack: () => void;
   onYouTubeSettings: () => void;
   showToast: (message: string) => void;
@@ -42,7 +40,6 @@ export default function AddFeedPage({
       <PageHeader
         title="Add feed"
         description="Choose a source, preview what Feedfold finds, then subscribe."
-        onMenu={onMenu}
         actions={
           <button
             className="secondary-button"

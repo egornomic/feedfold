@@ -18,7 +18,6 @@ function RulesPage({
   error,
   draft,
   mutations,
-  onMenu,
   onClearDraft,
   onReturnToArticle,
   onRetry,
@@ -30,7 +29,6 @@ function RulesPage({
   error: string | null;
   draft: RuleFormDraft | null;
   mutations: ReaderDataMutations;
-  onMenu: () => void;
   onClearDraft: () => void;
   onReturnToArticle: (draft: RuleFormDraft) => void;
   onRetry: () => Promise<void> | void;
@@ -57,7 +55,6 @@ function RulesPage({
       <PageHeader
         title="Rules"
         description="Filter articles by their text or media type, then choose what happens to matches."
-        onMenu={onMenu}
         actions={
           <button
             ref={addRuleTriggerRef}

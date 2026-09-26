@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { type ComponentProps, type ReactNode, useState } from "react";
 import type { BootstrapData, Feed, Folder } from "../../../shared/types";
+import { useInterfaceState } from "../../app/session-state";
 import { DropdownSelect } from "../../ui/dropdown";
 import { Menu, MenuPopup } from "../../ui/menu";
 import {
@@ -139,25 +140,21 @@ function FeedsPage(props: ComponentProps<typeof FeedsPageContent>) {
 function FeedsPageContent({
   bootstrap,
   mutations,
-  onMenu,
   onAddFeed,
-  onAddFolder,
   onRefresh,
-  onFeedAction,
-  onFolderAction,
   showToast,
 }: {
   bootstrap: BootstrapData;
   mutations: ReaderDataMutations;
-  onMenu: () => void;
   onAddFeed: () => void;
-  onAddFolder: () => void;
   onRefresh: (feedId: number) => void;
-  onFeedAction: (feed: Feed, action: FeedManagementAction) => void;
-  onFolderAction: (folder: Folder, action: FolderManagementAction) => void;
   onMoveFeed: (feed: Feed, folderId: number | null) => Promise<boolean>;
   showToast: (message: string) => void;
 }) {
+  const setManagementRequest = useInterfaceState((state) => state.setManagementRequest);
+  const onAddFolder = () => setManagementRequest({ kind: "create-folder" });
+  const onFeedAction = useInterfaceState((state) => state.openFeedManagement);
+  const onFolderAction = useInterfaceState((state) => state.openFolderManagement);
   const [activeTab, setActiveTab] = useState<FeedsPageTab>("subscriptions");
   const [searchQuery, setSearchQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -222,7 +219,6 @@ function FeedsPageContent({
       <PageHeader
         title="Manage feeds"
         description="Subscriptions, folders, and source health in one place."
-        onMenu={onMenu}
         actions={
           activeTab === "subscriptions" ? (
             <div className="feed-page-actions">
