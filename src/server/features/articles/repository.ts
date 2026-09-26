@@ -105,10 +105,12 @@ export class ArticleRepository {
       queueWhere.push(
         `(articles.title LIKE ? ESCAPE '\\' COLLATE NOCASE
           OR COALESCE(articles.author, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-          OR articles.summary LIKE ? ESCAPE '\\' COLLATE NOCASE)`,
+          OR articles.summary LIKE ? ESCAPE '\\' COLLATE NOCASE
+          OR COALESCE(articles.feed_content_html, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+          OR COALESCE(articles.content_html, '') LIKE ? ESCAPE '\\' COLLATE NOCASE)`,
       );
       const escaped = query.search.replace(/[\\%_]/g, "\\$&");
-      queueValues.push(`%${escaped}%`, `%${escaped}%`, `%${escaped}%`);
+      queueValues.push(...Array<string>(5).fill(`%${escaped}%`));
     }
     if (query.anchorId === undefined) {
       where.push(...queueWhere);

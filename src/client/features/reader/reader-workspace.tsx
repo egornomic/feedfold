@@ -151,6 +151,10 @@ export function ReaderWorkspace({
           <>
             <ArticleList
               key={readerPath}
+              enabled={!queue.loading && !readerOpen}
+              positions={queue.readingPositions}
+              positionKey={`magazine:${readerPath}`}
+              loadMoreError={queue.loadMoreError}
               articles={queue.articles}
               activeId={queue.activeArticleId}
               markReadOnScroll={!queue.loading && bootstrap.settings.markReadOnScroll}
@@ -231,7 +235,11 @@ export function ReaderWorkspace({
           </>
         ) : (
           <ExpandedStream
-            key={readerPath}
+            enabled={!queue.loading}
+            positions={queue.readingPositions}
+            positionKey={`expanded:${route.routedArticleId ?? readerPath}`}
+            loadMoreError={queue.loadMoreError}
+            key={`expanded:${route.routedArticleId ?? readerPath}`}
             articles={
               route.routedArticleId !== null && queue.activeArticle
                 ? [queue.activeArticle]

@@ -556,7 +556,14 @@ export class DemoStore {
         return false;
       }
       if (!search) return true;
-      return [article.title, article.author, article.summary, article.feedTitle]
+      return [
+        article.title,
+        article.author,
+        article.summary,
+        article.feedTitle,
+        article.feedContentHtml,
+        article.contentHtml,
+      ]
         .filter((value): value is string => value !== null)
         .some((value) => value.toLocaleLowerCase().includes(search));
     });

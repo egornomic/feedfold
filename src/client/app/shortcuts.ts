@@ -94,7 +94,7 @@ export function useAppShortcuts({
         sequence.current = { startedAt: Date.now() };
         return;
       }
-      if (queue.loading || route.pending) return;
+      if (queue.loading || (route.pending && route.current().kind !== "article")) return;
       if (key === "r" && !bootstrap.capabilities.manualRefresh) return;
       if (event.shiftKey && key === "r") {
         event.preventDefault();

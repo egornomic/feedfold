@@ -33,7 +33,7 @@ describe("reader navigation", () => {
   it.each(["all", "unread", "saved"] as const)(
     "returns to the loaded %s queue without waiting for another download",
     async (state) => {
-      const fixture = readerFixture(`/articles/${state}`, 250);
+      const fixture = readerFixture(`/articles/${state}`, 200);
       try {
         if (state === "saved") {
           for (const article of fixture.database.articles.listArticlePage(1, {
@@ -49,7 +49,11 @@ describe("reader navigation", () => {
         await fixture.mount();
         const rows = () => fixture.container.querySelectorAll(".article-open-button");
         await waitFor("the first page", () => rows().length === 100);
-        await fixture.reachListEnd();
+        await act(async () =>
+          fixture.container
+            .querySelector<HTMLButtonElement>(".virtual-article-footer button")
+            ?.click(),
+        );
         await waitFor("the second page", () => rows().length === 200);
         const selected = [...rows()].find((row) => row.textContent === "Open Article 151");
         expect(selected).toBeDefined();

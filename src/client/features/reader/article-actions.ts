@@ -139,15 +139,11 @@ export function useArticleActions({
         openArticle(queue.activeArticle, true);
         return true;
       }
-      const currentIndex = queue.articles.findIndex(
-        (article) => article.id === queue.activeArticleId,
-      );
-      if (
-        direction === 1 &&
-        currentIndex === queue.articles.length - 1 &&
-        queue.nextCursor &&
-        !queue.loadingMore
-      ) {
+      const currentRoute = route.current();
+      const currentId =
+        currentRoute.kind === "article" ? currentRoute.articleId : queue.activeArticleId;
+      const currentIndex = queue.articles.findIndex((article) => article.id === currentId);
+      if (direction === 1 && currentIndex === queue.articles.length - 1 && queue.nextCursor) {
         const appended = await queue.loadOlderArticles();
         const next = appended[0];
         if (!next) return false;
@@ -165,7 +161,7 @@ export function useArticleActions({
       }
       return false;
     },
-    [openArticle, queue, readingMode, route.routedArticleId],
+    [openArticle, queue, readingMode, route.routedArticleId, route.current],
   );
 
   const copyArticleUrl = useCallback(
