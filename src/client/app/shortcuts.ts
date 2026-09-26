@@ -1,28 +1,19 @@
 import { useEffect, useRef } from "react";
 import { toast as showToast } from "sonner";
 import type { BootstrapData, ReadingMode } from "../../shared/types";
-import type { ManagementRequest } from "../features/feeds/feed-management";
 import type { useArticleActions } from "../features/reader/article-actions";
 import type { ArticleEnrichmentController } from "../features/reader/article-enrichment";
 import type { ArticleQueueController } from "../features/reader/article-queue";
-import {
-  ARTICLE_FONT_MAX,
-  ARTICLE_FONT_MIN,
-  type useReaderPreferences,
-} from "../features/reader/reader-preferences";
+import { ARTICLE_FONT_MAX, ARTICLE_FONT_MIN } from "../features/reader/reader-preferences";
 import type { AppRouteController } from "./route";
+import { useInterfaceState, useReaderPreferences } from "./session-state";
 
 interface AppShortcuts {
   bootstrap: BootstrapData | null;
-  managementRequest: ManagementRequest | null;
-  shortcutHelpOpen: boolean;
-  setShortcutHelpOpen: (open: boolean) => void;
-  setNavOpen: (open: boolean) => void;
   route: AppRouteController;
   queue: ArticleQueueController;
   articleActions: ReturnType<typeof useArticleActions>;
   articleEnrichment: ArticleEnrichmentController;
-  preferences: ReturnType<typeof useReaderPreferences>;
   selectScope: AppRouteController["selectScope"];
   navigateTo: AppRouteController["navigateToView"];
   refresh: (feedId?: number, forceAll?: boolean) => Promise<void>;
@@ -51,21 +42,22 @@ function usesSpaceForActivation(target: EventTarget | null): boolean {
 
 export function useAppShortcuts({
   bootstrap,
-  managementRequest,
-  shortcutHelpOpen,
-  setShortcutHelpOpen,
-  setNavOpen,
   route,
   queue,
   articleActions,
   articleEnrichment,
-  preferences,
   selectScope,
   navigateTo,
   refresh,
   scrollArticlePage,
   changeReadingMode,
 }: AppShortcuts) {
+  const managementRequest = useInterfaceState((state) => state.managementRequest);
+  const shortcutHelpOpen = useInterfaceState((state) => state.shortcutHelpOpen);
+  const setShortcutHelpOpen = useInterfaceState((state) => state.setShortcutHelpOpen);
+  const setNavOpen = useInterfaceState((state) => state.setNavOpen);
+  const articleFontSize = useReaderPreferences((state) => state.articleFontSize);
+  const setArticleFontSize = useReaderPreferences((state) => state.setArticleFontSize);
   const sequence = useRef<{ startedAt: number } | null>(null);
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -161,13 +153,13 @@ export function useAppShortcuts({
         },
         r: () => void refresh(),
         "[": () => {
-          const next = Math.max(ARTICLE_FONT_MIN, preferences.articleFontSize - 1);
-          preferences.setArticleFontSize(next);
+          const next = Math.max(ARTICLE_FONT_MIN, articleFontSize - 1);
+          setArticleFontSize(next);
           showToast(`Article text size set to ${next}px`);
         },
         "]": () => {
-          const next = Math.min(ARTICLE_FONT_MAX, preferences.articleFontSize + 1);
-          preferences.setArticleFontSize(next);
+          const next = Math.min(ARTICLE_FONT_MAX, articleFontSize + 1);
+          setArticleFontSize(next);
           showToast(`Article text size set to ${next}px`);
         },
         "1": () => changeReadingMode("magazine"),
@@ -190,7 +182,8 @@ export function useAppShortcuts({
     changeReadingMode,
     managementRequest,
     navigateTo,
-    preferences,
+    articleFontSize,
+    setArticleFontSize,
     queue.activeArticle,
     queue.loading,
     queue.readingMode,

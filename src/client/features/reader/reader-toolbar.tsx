@@ -14,6 +14,7 @@ import {
 import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
 import type { ArticleState, MarkReadAgeDays, ReadingMode } from "../../../shared/types";
 import { MARK_READ_AGE_DAYS } from "../../../shared/types";
+import { useInterfaceState } from "../../app/session-state";
 import { IconButton } from "../../ui/controls";
 import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
 import { useMotionPresence } from "../../ui/motion";
@@ -27,10 +28,8 @@ interface ReaderToolbarProps {
   mode: ReadingMode;
   refreshing: boolean;
   markReadPending: boolean;
-  navOpen: boolean;
   readingArticle: boolean;
   manualRefreshEnabled: boolean;
-  onToggleNav: () => void;
   onArticleStateChange: (state: "unread" | "all") => void;
   onSearchInput: (value: string) => void;
   onSearch: (event: FormEvent) => void;
@@ -40,7 +39,6 @@ interface ReaderToolbarProps {
   onRefreshAll: () => void;
   onMarkRead: () => void;
   onMarkReadByAge: (days: MarkReadAgeDays) => void;
-  onHelp: () => void;
 }
 
 export function ReaderToolbar({
@@ -52,10 +50,8 @@ export function ReaderToolbar({
   mode,
   refreshing,
   markReadPending,
-  navOpen,
   readingArticle,
   manualRefreshEnabled,
-  onToggleNav,
   onArticleStateChange,
   onSearchInput,
   onSearch,
@@ -65,8 +61,11 @@ export function ReaderToolbar({
   onRefreshAll,
   onMarkRead,
   onMarkReadByAge,
-  onHelp,
 }: ReaderToolbarProps) {
+  const navOpen = useInterfaceState((state) => state.navOpen);
+  const onToggleNav = useInterfaceState((state) => state.toggleNav);
+  const setShortcutHelpOpen = useInterfaceState((state) => state.setShortcutHelpOpen);
+  const onHelp = () => setShortcutHelpOpen(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);

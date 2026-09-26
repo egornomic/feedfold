@@ -25,6 +25,7 @@ import type {
   SessionUser,
 } from "../../../shared/types";
 import type { AppView } from "../../app/routes";
+import { useInterfaceState, useReaderPreferences } from "../../app/session-state";
 import { BrandIdentity } from "../../ui/brand";
 import { IconButton, Kbd } from "../../ui/controls";
 import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
@@ -83,18 +84,11 @@ interface SidebarProps {
   selectedFeedId: number | null;
   selectedFolderId: number | null;
   currentView: AppView;
-  open: boolean;
-  collapsed: boolean;
-  onClose: () => void;
-  onToggleCollapse: () => void;
   onSelectState: (state: ArticleState) => void;
   onSelectScope: (feedId: number | null, folderId: number | null) => void;
   onAddFeed: () => void;
   onAddSubscription: (sourceType: AddFeedSourceType) => void;
-  onAddFolder: () => void;
   onNavigate: (view: AppView) => void;
-  onFeedAction: (feed: Feed, action: FeedManagementAction) => void;
-  onFolderAction: (folder: FolderType, action: FolderManagementAction) => void;
   onMoveFeed: (feed: Feed, folderId: number | null) => Promise<boolean>;
   onRefresh: () => void;
   onLogout: () => Promise<void>;
@@ -134,21 +128,23 @@ function SidebarContent({
   selectedFeedId,
   selectedFolderId,
   currentView,
-  open,
-  collapsed,
-  onClose,
-  onToggleCollapse,
   onSelectState,
   onSelectScope,
   onAddFeed,
   onAddSubscription,
-  onAddFolder,
   onNavigate,
-  onFeedAction,
-  onFolderAction,
   onRefresh,
   onLogout,
 }: SidebarProps) {
+  const open = useInterfaceState((state) => state.navOpen);
+  const setNavOpen = useInterfaceState((state) => state.setNavOpen);
+  const onClose = () => setNavOpen(false);
+  const collapsed = useReaderPreferences((state) => state.desktopSidebarCollapsed);
+  const onToggleCollapse = useReaderPreferences((state) => state.toggleDesktopSidebar);
+  const setManagementRequest = useInterfaceState((state) => state.setManagementRequest);
+  const onAddFolder = () => setManagementRequest({ kind: "create-folder" });
+  const onFeedAction = useInterfaceState((state) => state.openFeedManagement);
+  const onFolderAction = useInterfaceState((state) => state.openFolderManagement);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
   const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 1020px)").matches);
 

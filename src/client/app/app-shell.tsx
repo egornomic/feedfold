@@ -9,20 +9,10 @@ import {
   useState,
 } from "react";
 import { toast as showToast } from "sonner";
-import type {
-  Article,
-  ArticleState,
-  Feed,
-  Folder as FolderType,
-  SessionUser,
-} from "../../shared/types";
+import type { Article, ArticleState, Feed, SessionUser } from "../../shared/types";
 import { errorMessage } from "../api/api";
 import { SessionLoading } from "../features/auth/auth";
-import type {
-  FeedManagementAction,
-  FolderManagementAction,
-  ManagementRequest,
-} from "../features/feeds/feed-management";
+import type { FeedManagementAction } from "../features/feeds/feed-management";
 import type { AddFeedSourceType } from "../features/feeds/feed-source";
 import { folderPathLabel } from "../features/feeds/folder-hierarchy";
 import { Sidebar } from "../features/navigation/sidebar";
@@ -30,7 +20,6 @@ import { useArticleActions } from "../features/reader/article-actions";
 import { useArticleEnrichment } from "../features/reader/article-enrichment";
 import { useArticleQueue } from "../features/reader/article-queue";
 import { useReaderData } from "../features/reader/reader-data";
-import { useReaderPreferences } from "../features/reader/reader-preferences";
 import {
   filterRuleName,
   readerRouteForSelection,
@@ -49,6 +38,7 @@ import {
   type ReaderRoute,
   routeAfterFeedDeletion,
 } from "./routes";
+import { SessionStateProvider, useInterfaceState, useReaderPreferences } from "./session-state";
 import { useAppShortcuts } from "./shortcuts";
 
 const APP_BASE_PATH = import.meta.env.BASE_URL;
@@ -64,27 +54,32 @@ const SettingsPage = lazy(() => import("../features/management/settings"));
 const ShortcutHelp = lazy(() => import("../features/management/shortcut-help"));
 const ContextManagementDialog = lazy(() => import("../features/management/context-dialog"));
 
-function feedManagementRequest(feedId: number, action: FeedManagementAction): ManagementRequest {
-  if (action === "settings") return { kind: "feed-settings", feedId };
-  if (action === "selection") return { kind: "web-feed-selection", feedId };
-  if (action === "rename") return { kind: "rename-feed", feedId };
-  if (action === "move") return { kind: "move-feed", feedId };
-  if (action === "rule") return { kind: "create-feed-rule", feedId };
-  return { kind: "unsubscribe-feed", feedId };
-}
-
-export default function AppShell({
-  user,
-  onLogout,
-  onAccountDeleted,
-}: {
+interface AppShellProps {
   user: SessionUser;
   onLogout: () => Promise<void>;
   onAccountDeleted: () => void;
-}) {
+}
+
+export default function AppShell(props: AppShellProps) {
+  return (
+    <SessionStateProvider userId={props.user.id}>
+      <AppShellContent {...props} />
+    </SessionStateProvider>
+  );
+}
+
+function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
   const route = useAppRoute(APP_BASE_PATH);
-  const preferences = useReaderPreferences(user.id);
-  const { desktopSidebarCollapsed, setDesktopSidebarCollapsed } = preferences;
+  const readingMode = useReaderPreferences((state) => state.readingMode);
+  const setReadingMode = useReaderPreferences((state) => state.setReadingMode);
+  const desktopSidebarCollapsed = useReaderPreferences((state) => state.desktopSidebarCollapsed);
+  const managementRequest = useInterfaceState((state) => state.managementRequest);
+  const shortcutHelpOpen = useInterfaceState((state) => state.shortcutHelpOpen);
+  const navOpen = useInterfaceState((state) => state.navOpen);
+  const setNavOpen = useInterfaceState((state) => state.setNavOpen);
+  const setShortcutHelpOpen = useInterfaceState((state) => state.setShortcutHelpOpen);
+  const setManagementRequest = useInterfaceState((state) => state.setManagementRequest);
+  const openFeedManagement = useInterfaceState((state) => state.openFeedManagement);
   const { data: dataResource, bootstrap: bootstrapResult, rules: rulesResult } = useReaderData();
   const bootstrap = bootstrapResult.data ?? null;
   const bootstrapError = bootstrapResult.error ? errorMessage(bootstrapResult.error) : null;
@@ -92,24 +87,17 @@ export default function AppShell({
   const rulesLoading = rulesResult.isPending;
   const rulesError = rulesResult.error ? errorMessage(rulesResult.error) : null;
   const [ruleDraft, setRuleDraft] = useState<RuleFormDraft | null>(null);
-  const [managementRequest, setManagementRequest] = useState<ManagementRequest | null>(null);
-  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
   const ruleDraftId = useRef(0);
   const ruleReturnRoute = useRef<ReaderRoute | null>(null);
   const bootstrapRef = useRef(bootstrap);
   const readingWorkspaceRef = useRef<HTMLDivElement>(null);
   bootstrapRef.current = bootstrap;
 
-  const toggleDesktopSidebar = useCallback(() => {
-    setDesktopSidebarCollapsed((current) => !current);
-  }, [setDesktopSidebarCollapsed]);
-
   const queue = useArticleQueue({
     route,
     enabled: true,
-    readingMode: preferences.readingMode,
-    onReadingModeChange: preferences.setReadingMode,
+    readingMode,
+    onReadingModeChange: setReadingMode,
     showToast,
   });
   const articleEnrichment = useArticleEnrichment({
@@ -156,7 +144,7 @@ export default function AppShell({
 
   useEffect(() => {
     if (route.route) setNavOpen(false);
-  }, [route.route]);
+  }, [route.route, setNavOpen]);
 
   const selectScope = useCallback(
     (feedId: number | null, folderId: number | null, state: ArticleState = "unread") => {
@@ -169,7 +157,7 @@ export default function AppShell({
       setNavOpen(false);
       void dataResource.loadBootstrap();
     },
-    [dataResource, route],
+    [dataResource, route, setNavOpen],
   );
 
   const navigateTo = useCallback(
@@ -177,13 +165,13 @@ export default function AppShell({
       route.navigateToView(view);
       setNavOpen(false);
     },
-    [route],
+    [route, setNavOpen],
   );
 
   const openAddFeed = useCallback(() => {
     route.navigate({ kind: "add-feed", sourceUrl: "" });
     setNavOpen(false);
-  }, [route]);
+  }, [route, setNavOpen]);
 
   const submitSearch = useCallback(
     (event: FormEvent) => {
@@ -232,10 +220,6 @@ export default function AppShell({
     [queue, route],
   );
 
-  const openFeedManagement = useCallback((feed: Feed, action: FeedManagementAction) => {
-    setManagementRequest(feedManagementRequest(feed.id, action));
-  }, []);
-
   const openFeedManagementById = useCallback(
     (feedId: number, action: FeedManagementAction) => {
       const feed = bootstrap?.feeds.find((candidate) => candidate.id === feedId);
@@ -243,20 +227,6 @@ export default function AppShell({
     },
     [bootstrap, openFeedManagement],
   );
-
-  const openFolderManagement = useCallback((folder: FolderType, action: FolderManagementAction) => {
-    if (action === "settings") {
-      setManagementRequest({ kind: "folder-settings", folderId: folder.id });
-    } else if (action === "add-feed") {
-      setManagementRequest({ kind: "add-feed-to-folder", folderId: folder.id });
-    } else if (action === "add-folder") {
-      setManagementRequest({ kind: "add-folder", parentId: folder.id });
-    } else if (action === "rule") {
-      setManagementRequest({ kind: "create-folder-rule", folderId: folder.id });
-    } else {
-      setManagementRequest({ kind: "delete-folder", folderId: folder.id });
-    }
-  }, []);
 
   const moveFeed = useCallback(
     async (feed: Feed, folderId: number | null): Promise<boolean> => {
@@ -322,9 +292,9 @@ export default function AppShell({
   const changeReadingMode = useCallback(
     (mode: "magazine" | "expanded") => {
       queue.clearKeyboardTarget();
-      preferences.setReadingMode(mode);
+      setReadingMode(mode);
     },
-    [preferences, queue],
+    [setReadingMode, queue],
   );
 
   const scrollArticlePage = useCallback(
@@ -346,15 +316,10 @@ export default function AppShell({
 
   useAppShortcuts({
     bootstrap,
-    managementRequest,
-    shortcutHelpOpen,
-    setShortcutHelpOpen,
-    setNavOpen,
     route,
     queue,
     articleActions,
     articleEnrichment,
-    preferences,
     selectScope,
     navigateTo,
     refresh,
@@ -388,10 +353,6 @@ export default function AppShell({
         selectedFeedId={selectedFeedId}
         selectedFolderId={selectedFolderId}
         currentView={route.view}
-        open={navOpen}
-        collapsed={desktopSidebarCollapsed}
-        onClose={() => setNavOpen(false)}
-        onToggleCollapse={toggleDesktopSidebar}
         onSelectState={(state) => selectScope(null, null, state)}
         onSelectScope={selectScope}
         onAddFeed={openAddFeed}
@@ -399,10 +360,7 @@ export default function AppShell({
           route.navigate({ kind: "add-feed", sourceUrl: "", sourceType });
           setNavOpen(false);
         }}
-        onAddFolder={() => setManagementRequest({ kind: "create-folder" })}
         onNavigate={navigateTo}
-        onFeedAction={openFeedManagement}
-        onFolderAction={openFolderManagement}
         onMoveFeed={moveFeed}
         onRefresh={() => void refresh()}
         onLogout={onLogout}
@@ -427,13 +385,9 @@ export default function AppShell({
             articleActions={articleActions}
             articleEnrichment={articleEnrichment}
             route={route}
-            preferences={preferences}
             displayedReaderRoute={displayedReaderRoute}
             readerOpen={readerOpen}
             readingWorkspaceRef={readingWorkspaceRef}
-            navOpen={navOpen}
-            setNavOpen={setNavOpen}
-            setShortcutHelpOpen={setShortcutHelpOpen}
             selectScope={selectScope}
             submitSearch={submitSearch}
             changeReadingMode={changeReadingMode}
@@ -449,7 +403,6 @@ export default function AppShell({
             initialSourceUrl={route.route.sourceUrl}
             initialSourceType={route.route.sourceType}
             mutations={dataResource}
-            onMenu={() => setNavOpen(true)}
             onBack={() => route.navigate({ kind: "feeds" }, "replace")}
             onYouTubeSettings={() => route.navigate({ kind: "settings", category: "feeds" })}
             showToast={showToast}
@@ -458,12 +411,8 @@ export default function AppShell({
           <FeedsPage
             bootstrap={bootstrap}
             mutations={dataResource}
-            onMenu={() => setNavOpen(true)}
             onAddFeed={openAddFeed}
-            onAddFolder={() => setManagementRequest({ kind: "create-folder" })}
             onRefresh={(feedId) => void refresh(feedId)}
-            onFeedAction={openFeedManagement}
-            onFolderAction={openFolderManagement}
             onMoveFeed={moveFeed}
             showToast={showToast}
           />
@@ -475,7 +424,6 @@ export default function AppShell({
             error={rulesError}
             draft={ruleDraft}
             mutations={dataResource}
-            onMenu={() => setNavOpen(true)}
             onClearDraft={() => setRuleDraft(null)}
             onReturnToArticle={returnToContextArticle}
             onRetry={() => dataResource.reload()}
@@ -487,17 +435,10 @@ export default function AppShell({
             category={route.route.kind === "settings" ? route.route.category : "appearance"}
             settings={bootstrap.settings}
             aiSettings={bootstrap.aiSettings}
-            theme={preferences.theme}
-            colorPalettes={preferences.colorPalettes}
-            fontSize={preferences.articleFontSize}
             mutations={dataResource}
-            onMenu={() => setNavOpen(true)}
             onCategory={(category, historyMode) =>
               route.navigate({ kind: "settings", category }, historyMode)
             }
-            onTheme={preferences.setTheme}
-            onColorPalette={preferences.setColorPalette}
-            onFontSize={preferences.setArticleFontSize}
             onSettings={articleEnrichment.applySettings}
             onAiSettings={articleEnrichment.applyAiSettings}
             onAccountDeleted={onAccountDeleted}

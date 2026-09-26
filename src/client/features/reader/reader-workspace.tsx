@@ -1,7 +1,8 @@
-import type { Dispatch, FormEvent, RefObject, SetStateAction } from "react";
+import type { FormEvent, RefObject } from "react";
 import type { Article, BootstrapData, ReadingMode } from "../../../shared/types";
 import type { AppRouteController } from "../../app/route";
 import { appRoutePath, type ReaderRoute } from "../../app/routes";
+import { useReaderPreferences } from "../../app/session-state";
 import type { FeedManagementAction } from "../feeds/feed-management";
 import {
   EMPTY_ARTICLE_SUMMARY_STATE,
@@ -10,7 +11,6 @@ import {
 import type { useArticleActions } from "./article-actions";
 import type { ArticleEnrichmentController } from "./article-enrichment";
 import type { ArticleQueueController } from "./article-queue";
-import type { useReaderPreferences } from "./reader-preferences";
 import { readerRouteForSelection, readerScopeLabel, readerScopeUnreadCount } from "./reader-state";
 import { ArticleListSkeleton, EmptyArticles, InlineError } from "./reader-states";
 import { ReaderToolbar } from "./reader-toolbar";
@@ -24,13 +24,9 @@ interface ReaderWorkspaceProps {
   articleActions: ReturnType<typeof useArticleActions>;
   articleEnrichment: ArticleEnrichmentController;
   route: AppRouteController;
-  preferences: ReturnType<typeof useReaderPreferences>;
   displayedReaderRoute: ReaderRoute;
   readerOpen: boolean;
   readingWorkspaceRef: RefObject<HTMLDivElement | null>;
-  navOpen: boolean;
-  setNavOpen: Dispatch<SetStateAction<boolean>>;
-  setShortcutHelpOpen: (open: boolean) => void;
   selectScope: AppRouteController["selectScope"];
   submitSearch: (event: FormEvent) => void;
   changeReadingMode: (mode: ReadingMode) => void;
@@ -46,13 +42,9 @@ export function ReaderWorkspace({
   articleActions,
   articleEnrichment,
   route,
-  preferences,
   displayedReaderRoute,
   readerOpen,
   readingWorkspaceRef,
-  navOpen,
-  setNavOpen,
-  setShortcutHelpOpen,
   selectScope,
   submitSearch,
   changeReadingMode,
@@ -61,6 +53,7 @@ export function ReaderWorkspace({
   openFeedManagementById,
   filterSelectedText,
 }: ReaderWorkspaceProps) {
+  const readingMode = useReaderPreferences((state) => state.readingMode);
   const selectedFeedId = route.readerRoute.scope === "feed" ? route.readerRoute.scopeId : null;
   const selectedFolderId = route.readerRoute.scope === "folder" ? route.readerRoute.scopeId : null;
   const displayedFeedId =
@@ -86,10 +79,8 @@ export function ReaderWorkspace({
         mode={queue.readingMode}
         refreshing={bootstrap.feeds.some((feed) => feed.refreshing)}
         markReadPending={articleActions.markReadPending || queue.loading}
-        navOpen={navOpen}
         readingArticle={readerOpen && queue.readingMode === "magazine"}
         manualRefreshEnabled={bootstrap.capabilities.manualRefresh}
-        onToggleNav={() => setNavOpen((current) => !current)}
         onArticleStateChange={(state) => selectScope(displayedFeedId, displayedFolderId, state)}
         onSearchInput={route.setSearchInput}
         onSearch={submitSearch}
@@ -104,7 +95,6 @@ export function ReaderWorkspace({
         onRefreshAll={() => void refresh(undefined, true)}
         onMarkRead={() => void articleActions.markVisibleRead()}
         onMarkReadByAge={(days) => void articleActions.markOlderArticlesRead(days)}
-        onHelp={() => setShortcutHelpOpen(true)}
       />
 
       <div
@@ -165,7 +155,7 @@ export function ReaderWorkspace({
               activeId={queue.activeArticleId}
               markReadOnScroll={!queue.loading && bootstrap.settings.markReadOnScroll}
               showYouTubeDescriptions={bootstrap.settings.showYouTubeDescriptions}
-              hasMore={queue.nextCursor !== null && queue.readingMode === preferences.readingMode}
+              hasMore={queue.nextCursor !== null && queue.readingMode === readingMode}
               loadingMore={queue.loadingMore}
               onLoadMore={() => void queue.loadOlderArticles()}
               onOpen={articleActions.openArticle}
@@ -259,7 +249,7 @@ export function ReaderWorkspace({
             hasMore={
               route.routedArticleId === null &&
               queue.nextCursor !== null &&
-              queue.readingMode === preferences.readingMode
+              queue.readingMode === readingMode
             }
             loadingMore={queue.loadingMore}
             onLoadMore={() => void queue.loadOlderArticles()}
