@@ -90,17 +90,6 @@ body {
   inset: 0;
   height: fit-content;
   margin: auto;
-  opacity: 1;
-  transform: scale(1);
-  transition:
-    opacity var(--duration-surface) var(--ease-out),
-    transform var(--duration-surface) var(--ease-out);
-}
-
-.dialog-popup[data-starting-style],
-.dialog-popup[data-ending-style] {
-  opacity: 0;
-  transform: scale(0.96);
 }
 
 .dialog-backdrop[data-starting-style],
@@ -116,21 +105,17 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .overlay-menu,
-  .dialog-popup,
   .dialog-backdrop {
     transition: opacity var(--duration-reduced) ease;
   }
 
   .overlay-menu,
   .overlay-menu[data-starting-style],
-  .overlay-menu[data-ending-style],
-  .dialog-popup,
-  .dialog-popup[data-starting-style],
-  .dialog-popup[data-ending-style] {
+  .overlay-menu[data-ending-style] {
     transform: none;
   }
 }
 
-:root[data-input-modality="keyboard"] :is(.overlay-menu, .dialog-popup, .dialog-backdrop) {
+:root[data-input-modality="keyboard"] :is(.overlay-menu, .dialog-backdrop) {
   transition: none;
 }

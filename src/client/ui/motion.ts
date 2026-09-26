@@ -38,3 +38,15 @@ export function useMotionPresence(visible: boolean): {
     state: visible ? "open" : "closed",
   };
 }
+
+// Share the CSS timing tokens with coordinated React transitions.
+export function surfaceTransition(reduced: boolean, exiting = false) {
+  const styles = window.getComputedStyle(document.documentElement);
+  const token = reduced ? "--duration-reduced" : exiting ? "--duration-fast" : "--duration-surface";
+  return {
+    duration: interactionMotionIsInstant()
+      ? 0
+      : (Number.parseFloat(styles.getPropertyValue(token)) || 0) / 1000,
+    ease: [0.23, 1, 0.32, 1] as const,
+  };
+}
