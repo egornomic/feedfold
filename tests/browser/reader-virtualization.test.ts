@@ -427,53 +427,74 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
     });
   }
 
-  it("keeps the next article steady when the preceding article expands or shows an AI summary", async () => {
-    const id = 4;
-    database.connection
-      .prepare("UPDATE articles SET content_html = ?, extraction_status = 'complete' WHERE id = ?")
-      .run("<p>Expanded article text.</p>".repeat(30), id);
-    const revision = (
+  for (const update of ["full text", "AI summary"] as const) {
+    it(`keeps the next article heading steady after loading ${update} above it`, async () => {
+      const id = 4;
       database.connection
-        .prepare("SELECT content_revision AS revision FROM articles WHERE id = ?")
-        .get(id) as { revision: number }
-    ).revision;
-    database.ai.saveArticleAiSummary(1, id, revision, {
-      promptVersion: 1,
-      promptId: null,
-      sourceKind: "feed",
-      provider: "openai",
-      model: "saved-summary",
-      text: `## Cached summary\n\n${"A saved summary paragraph.\n\n".repeat(20)}`,
-      usage: { inputTokens: 20, outputTokens: 20 },
-    });
-    const page = await open("expanded");
-    try {
-      await page.keyboard.press("j");
-      await page.keyboard.press("j");
-      await page.keyboard.press("j");
-      await expect
-        .poll(() =>
-          page.locator(".expanded-article.is-active").locator("..").getAttribute("data-article-id"),
+        .prepare(
+          "UPDATE articles SET content_html = ?, extraction_status = 'complete' WHERE id = ?",
         )
-        .toBe(String(id));
-      const next = page.locator(`[data-article-id="${id + 1}"]`);
-      await next.evaluate((element) => element.scrollIntoView({ block: "start" }));
-      await settle(page);
-      const before = await next.evaluate((element) => element.getBoundingClientRect().top);
-      await page.keyboard.press("m");
-      await settle(page);
-      expect(
-        Math.abs((await next.evaluate((element) => element.getBoundingClientRect().top)) - before),
-      ).toBeLessThan(2);
-      await page.keyboard.press("w");
-      await settle(page);
-      expect(
-        Math.abs((await next.evaluate((element) => element.getBoundingClientRect().top)) - before),
-      ).toBeLessThan(2);
-    } finally {
-      await page.close();
-    }
-  });
+        .run("<p>Expanded article text.</p>".repeat(30), id);
+      const revision = (
+        database.connection
+          .prepare("SELECT content_revision AS revision FROM articles WHERE id = ?")
+          .get(id) as { revision: number }
+      ).revision;
+      database.ai.saveArticleAiSummary(1, id, revision, {
+        promptVersion: 1,
+        promptId: null,
+        sourceKind: "feed",
+        provider: "openai",
+        model: "saved-summary",
+        text: `## Cached summary\n\n${"A saved summary paragraph.\n\n".repeat(20)}`,
+        usage: { inputTokens: 20, outputTokens: 20 },
+      });
+      const page = await open("expanded");
+      try {
+        for (let activeId = 2; activeId <= id; activeId++) {
+          await page.keyboard.press("j");
+          await expect
+            .poll(() =>
+              page
+                .locator(".expanded-article.is-active")
+                .locator("..")
+                .getAttribute("data-article-id"),
+            )
+            .toBe(String(activeId));
+        }
+        const next = page.locator(`[data-article-id="${id + 1}"] h2`);
+        await next.evaluate(async (element) => {
+          element.scrollIntoView({ block: "start" });
+          await new Promise(requestAnimationFrame);
+          await new Promise(requestAnimationFrame);
+        });
+        const before = await next.evaluate((element) => element.getBoundingClientRect().top);
+        await page.keyboard.press(update === "full text" ? "w" : "m");
+        const changedArticle = page.locator(`[data-article-id="${id}"]`);
+        await expect
+          .poll(
+            () =>
+              changedArticle
+                .getByText(
+                  update === "full text" ? "Expanded article text." : "A saved summary paragraph.",
+                  { exact: true },
+                )
+                .count(),
+            { timeout: 5000 },
+          )
+          .toBe(update === "full text" ? 30 : 20);
+        const after = await next.evaluate(async (element) => {
+          // Allow measurement and its scheduled scroll correction to run after the content commits.
+          await new Promise(requestAnimationFrame);
+          await new Promise(requestAnimationFrame);
+          return element.getBoundingClientRect().top;
+        });
+        expect(Math.abs(after - before)).toBeLessThan(2);
+      } finally {
+        await page.close();
+      }
+    });
+  }
 
   it("navigates beyond mounted rows and across page boundaries with the keyboard", async () => {
     const page = await open("expanded");
