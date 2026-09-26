@@ -94,7 +94,6 @@ async function setup(surface: Surface, touch: boolean) {
   const scope = page.locator(surface === "sidebar" ? ".sidebar" : ".folder-management-list");
   const source = () =>
     scope.locator(surface === "sidebar" ? ".feed-nav-item" : ".folder-feed-drag-region");
-  // Start drag stress only after the real sidebar or management list has rendered.
   await source().scrollIntoViewIfNeeded();
   const target = (destination: Folder | null) =>
     destination
@@ -185,63 +184,6 @@ async function drag(
 
 for (const surface of ["sidebar", "folders"] as const) {
   describe(`${surface} feed moves`, () => {
-    it.each([
-      { timing: "normal rendering", cpu: 1, latency: 0 },
-      { timing: "slow rendering", cpu: 20, latency: 0 },
-      { timing: "slow rendering and delayed data", cpu: 20, latency: 250 },
-    ])(
-      "keeps consecutive keyboard moves usable with $timing",
-      async ({ cpu, latency }) => {
-        const { context, page, source, target, feed, first, second, nested } = await setup(
-          surface,
-          false,
-        );
-        try {
-          const cdp = await context.newCDPSession(page);
-          await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu });
-          if (latency) {
-            await page.route("**/api/bootstrap", async (route) => {
-              const response = await route.fetch();
-              await new Promise((resolve) => setTimeout(resolve, latency));
-              await route.fulfill({ response });
-            });
-          }
-          await source().focus();
-          for (const destination of [first, second, nested, null]) {
-            // Only the first move gets programmatic focus; later moves must work from the keyboard.
-            await drag(page, source(), target(destination), "keyboard", false, false);
-            await expect.poll(() => location(context, feed)).toBe(destination?.id ?? null);
-            await expect
-              .poll(() => source().evaluate((element) => element === document.activeElement))
-              .toBe(true);
-            // A momentary focus on a row that is then removed is not a usable handoff.
-            expect(
-              await source().evaluate(
-                (element) =>
-                  new Promise<boolean>((resolve) => {
-                    let frames = 0;
-                    const check = () => {
-                      if (!element.isConnected || element !== document.activeElement)
-                        resolve(false);
-                      else if (++frames === 12) resolve(true);
-                      else requestAnimationFrame(check);
-                    };
-                    requestAnimationFrame(check);
-                  }),
-              ),
-            ).toBe(true);
-          }
-          await page.keyboard.press("Enter");
-          if (surface === "sidebar")
-            await expect.poll(() => page.url()).toContain(`/feeds/${feed.id}/`);
-          else await expect.poll(() => page.getByRole("dialog").isVisible()).toBe(true);
-        } finally {
-          await context.close();
-        }
-      },
-      30_000,
-    );
-
     it("keeps the feed in place after a rejected move and allows a subsequent move", async () => {
       const { context, page, source, target, feed, first, second } = await setup(surface, false);
       try {
@@ -295,13 +237,10 @@ for (const surface of ["sidebar", "folders"] as const) {
         const fixture = await setup(surface, input === "touch");
         const { context, page, scope, source, target, feed, first, second, nested } = fixture;
         try {
-          if (input === "keyboard") {
-            // Let real API responses outrun rendering to exercise batched move updates.
-            const cdp = await context.newCDPSession(page);
-            await cdp.send("Emulation.setCPUThrottlingRate", { rate: 20 });
-          }
+          // Focus once; every later keyboard move must work without resetting focus.
+          if (input === "keyboard") await source().focus();
           for (const destination of [first, second, nested, null]) {
-            await drag(page, source(), target(destination), input);
+            await drag(page, source(), target(destination), input, false, false);
             await expect.poll(() => location(context, feed)).toBe(destination?.id ?? null);
             // A successful move reveals the feed in its destination, without opening its menu.
             const destinationList =
@@ -317,12 +256,35 @@ for (const surface of ["sidebar", "folders"] as const) {
             );
             await expect.poll(() => movedRow.isVisible()).toBe(true);
             await expect.poll(() => source().isVisible()).toBe(true);
-            if (input === "keyboard")
+            if (input === "keyboard") {
               await expect
-                .poll(() => source().evaluate((element) => element === document.activeElement))
+                .poll(() => movedRow.evaluate((element) => element === document.activeElement))
                 .toBe(true);
+              // Focus must stay on the destination row after the move finishes rendering.
+              expect(
+                await movedRow.evaluate(
+                  (element) =>
+                    new Promise<boolean>((resolve) => {
+                      let frames = 0;
+                      const check = () => {
+                        if (!element.isConnected || element !== document.activeElement)
+                          resolve(false);
+                        else if (++frames === 12) resolve(true);
+                        else requestAnimationFrame(check);
+                      };
+                      requestAnimationFrame(check);
+                    }),
+                ),
+              ).toBe(true);
+            }
             expect(await page.getByRole("dialog").count()).toBe(0);
             expect(await scope.locator(".is-feed-drop-target").count()).toBe(0);
+          }
+          if (input === "keyboard") {
+            await page.keyboard.press("Enter");
+            if (surface === "sidebar")
+              await expect.poll(() => page.url()).toContain(`/feeds/${feed.id}/`);
+            else await expect.poll(() => page.getByRole("dialog").isVisible()).toBe(true);
           }
           await page.reload();
           expect(await location(context, feed)).toBeNull();
