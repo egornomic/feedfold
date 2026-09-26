@@ -1,14 +1,24 @@
 #!/bin/bash
 set -euo pipefail
 
-# The dedicated SSH key can only submit an image for the current GitHub master.
-revision=${SSH_ORIGINAL_COMMAND:-${1:-}}
+# The dedicated SSH key can deploy GitHub master or verify the running revision.
+request=${SSH_ORIGINAL_COMMAND:-${1:-}}
+revision=${request#verify }
 if [[ ! $revision =~ ^[a-f0-9]{40}$ ]]; then
   echo 'Expected a full Git commit ID.' >&2
   exit 1
 fi
 exec 9>/run/lock/feedfold-deploy.lock
 flock 9
+if [[ $request == "verify $revision" ]]; then
+  if [[ $(cat /srv/feedfold/revision) != "$revision" ]]; then
+    echo 'The running revision does not match the requested verification.' >&2
+    exit 1
+  fi
+  curl --fail --silent --show-error --retry 5 --retry-all-errors --dump-header /dev/stderr https://feedfold.com/health | jq --exit-status '.status == "ok"'
+  curl --fail --silent --show-error --dump-header /dev/stderr https://feedfold.com/api/auth/config | jq --exit-status '.registrationMode == "invite"'
+  exit 0
+fi
 cd /srv/feedfold/app
 git fetch --depth=1 origin master
 if [[ $(git rev-parse origin/master) != "$revision" ]]; then

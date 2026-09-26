@@ -100,9 +100,10 @@ jobs:
         run: docker save "feedfold:$GITHUB_SHA" | gzip -1 | ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "$GITHUB_SHA"
 
       - name: Verify public service
-        run: |
-          curl --fail --silent --show-error --retry 5 --retry-all-errors https://feedfold.com/health
-          curl --fail --silent --show-error https://feedfold.com/api/auth/config | jq --exit-status '.registrationMode == "invite"'
+        env:
+          DEPLOY_HOST: ${{ vars.FEEDFOLD_DEPLOY_HOST }}
+        # Cloudflare challenges GitHub-hosted runners; verify public URLs from the server.
+        run: ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "verify $GITHUB_SHA"
 
       - name: Remove deployment SSH credentials
         if: always()
