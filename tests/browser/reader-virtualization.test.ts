@@ -526,7 +526,9 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
             timeout: 5000,
           })
           .toContain(title);
+        if (title === "0100") await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
       }
+      await page.locator('.reading-workspace[aria-busy="false"]').waitFor();
       await page.getByRole("button", { name: "Back to articles", exact: true }).click();
       await page.locator(".article-list-item.is-active").waitFor();
       const active = page.locator(".article-list-item.is-active");
