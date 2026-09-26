@@ -229,6 +229,11 @@ for (const surface of ["sidebar", "folders"] as const) {
         const fixture = await setup(surface, input === "touch");
         const { context, page, scope, source, target, feed, first, second, nested } = fixture;
         try {
+          if (input === "keyboard") {
+            // Let real API responses outrun rendering to exercise batched move updates.
+            const cdp = await context.newCDPSession(page);
+            await cdp.send("Emulation.setCPUThrottlingRate", { rate: 20 });
+          }
           for (const destination of [first, second, nested, null]) {
             await drag(page, source(), target(destination), input);
             await expect.poll(() => location(context, feed)).toBe(destination?.id ?? null);
