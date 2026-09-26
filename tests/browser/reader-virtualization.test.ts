@@ -146,6 +146,11 @@ async function open(mode: "magazine" | "expanded") {
       app.emit("activate");
     });
   const page = desktop ? await desktop.firstWindow() : await context.newPage();
+  // Exercise asynchronous mode changes even on a fast development machine.
+  await page.route("**/api/articles?**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
   page.setDefaultTimeout(5000);
   if (desktop) await page.locator(".reader-toolbar").waitFor();
   await page.goto(`${origin}feeds/${backlog.feed.id}/all`, { waitUntil: "domcontentloaded" });
@@ -155,7 +160,10 @@ async function open(mode: "magazine" | "expanded") {
       exact: true,
     })
     .click();
-  await page.locator(".virtual-article-row").first().waitFor();
+  await page
+    .locator(`.reading-workspace.mode-${mode}[aria-busy="false"] .virtual-article-row`)
+    .first()
+    .waitFor();
   return page;
 }
 const surface = (page: Page) => page.locator("[data-virtuoso-scroller=true]");
@@ -185,10 +193,12 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
         expect(await page.locator(".virtual-article-row").count()).toBeLessThan(25);
         const scrolling = await surface(page).evaluate(async (element) => {
           const frames: Array<{ elapsed: number; rows: number; visible: boolean }> = [];
+          let detachedFrames = 0;
           let previous = performance.now();
           for (let index = 0; index < 60; index++) {
             await new Promise(requestAnimationFrame);
             const now = performance.now();
+            if (!element.isConnected) detachedFrames++;
             const viewport = element.getBoundingClientRect();
             const rows = [...element.querySelectorAll(".virtual-article-row")];
             frames.push({
@@ -204,12 +214,13 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
           }
           element.scrollTop = 0;
           return {
+            detachedFrames,
             blankFrames: frames.filter((frame) => !frame.visible).length,
             maxRows: Math.max(...frames.map((frame) => frame.rows)),
             p95Milliseconds: frames.map((frame) => frame.elapsed).sort((a, b) => a - b)[56],
           };
         });
-        expect(scrolling.blankFrames).toBe(0);
+        expect(scrolling).toMatchObject({ blankFrames: 0, detachedFrames: 0 });
         expect(scrolling.maxRows).toBeLessThan(25);
         if (process.env.FEEDFOLD_READER_METRICS) console.info(mode, scrolling);
         let fail = true;
