@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -68,19 +69,6 @@ describe("article HTML", () => {
     });
     Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
     dom.window.addEventListener("keydown", handleArticleShortcuts);
-    Object.defineProperty(dom.window.HTMLDialogElement.prototype, "showModal", {
-      configurable: true,
-      value(this: HTMLDialogElement) {
-        this.setAttribute("open", "");
-      },
-    });
-    Object.defineProperty(dom.window.HTMLDialogElement.prototype, "close", {
-      configurable: true,
-      value(this: HTMLDialogElement) {
-        this.removeAttribute("open");
-        this.dispatchEvent(new dom.window.Event("close"));
-      },
-    });
     Object.defineProperty(dom.window, "requestAnimationFrame", {
       configurable: true,
       value(callback: FrameRequestCallback) {
@@ -119,14 +107,16 @@ describe("article HTML", () => {
         );
       });
 
-      const dialog = container.querySelector<HTMLDialogElement>("dialog.image-lightbox");
+      const dialog = dom.window.document.querySelector<HTMLElement>(
+        '[role="dialog"].image-lightbox',
+      );
       const pressViewerKey = (key: string) =>
         act(async () => {
           dialog?.dispatchEvent(
             new dom.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
           );
         });
-      expect(dialog?.hasAttribute("open")).toBe(true);
+      expect(dialog?.hasAttribute("data-open")).toBe(true);
       expect(dialog?.querySelector("img")?.alt).toBe("Detailed diagram");
       expect(dialog?.querySelector<HTMLImageElement>(".image-lightbox-stage img")?.src).toBe(
         "https://images.test/diagram.png",
@@ -232,7 +222,7 @@ describe("article HTML", () => {
       await touchViewer("touchstart", 100);
       await touchViewer("touchcancel", null);
       await act(async () => viewerImage.click());
-      expect(dialog?.open).toBe(true);
+      expect(dialog?.hasAttribute("data-open")).toBe(true);
 
       await pressViewerKey("ArrowRight");
       expect(dialog?.querySelector("img")?.alt).toBe("Chart");
@@ -253,13 +243,15 @@ describe("article HTML", () => {
 
       dom.window.document.documentElement.dataset.inputModality = "keyboard";
       await pressViewerKey("Escape");
-      expect(container.querySelector("dialog.image-lightbox")).toBeNull();
+      expect(dom.window.document.querySelector('[role="dialog"].image-lightbox')).toBeNull();
       expect(articleEscapeCount).toBe(0);
       expect(dom.window.document.activeElement).toBe(images[0]);
 
       for (const closeWith of ["button", "background"]) {
         await act(async () => images[1]?.click());
-        const reopened = container.querySelector<HTMLDialogElement>("dialog.image-lightbox");
+        const reopened = dom.window.document.querySelector<HTMLElement>(
+          '[role="dialog"].image-lightbox',
+        );
         expect(reopened?.querySelector("img")?.alt).toBe("Chart");
         await act(async () => {
           reopened
@@ -270,7 +262,7 @@ describe("article HTML", () => {
             )
             ?.click();
         });
-        expect(container.querySelector("dialog.image-lightbox")).toBeNull();
+        expect(dom.window.document.querySelector('[role="dialog"].image-lightbox')).toBeNull();
         expect(dom.window.document.activeElement).toBe(images[1]?.closest("a"));
       }
 
@@ -279,7 +271,7 @@ describe("article HTML", () => {
           new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
         );
       });
-      expect(container.querySelector("dialog.image-lightbox")).toBeNull();
+      expect(dom.window.document.querySelector('[role="dialog"].image-lightbox')).toBeNull();
     } finally {
       dom.window.removeEventListener("keydown", handleArticleShortcuts);
       await act(async () => root.unmount());

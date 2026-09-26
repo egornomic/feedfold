@@ -1,0 +1,136 @@
+#root {
+  isolation: isolate;
+}
+
+body {
+  position: relative;
+}
+
+.overlay-positioner {
+  z-index: 52;
+  outline: none;
+}
+
+.overlay-menu {
+  position: relative;
+  max-height: var(--available-height);
+  margin: 0;
+  overflow-y: auto;
+  color: var(--text);
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.overlay-menu[data-starting-style],
+.overlay-menu[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.overlay-menu[data-ending-style] {
+  pointer-events: none;
+}
+
+.dropdown-select-trigger > span:last-child {
+  display: flex;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.dropdown-select-option[data-highlighted] {
+  background: var(--surface-hover);
+  color: var(--text);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.dropdown-select-option[data-disabled] {
+  opacity: 0.5;
+}
+
+.dropdown-select-option[data-selected][data-highlighted] {
+  background: var(--surface-active);
+}
+
+.dropdown-select-option > span:last-child svg {
+  color: var(--accent);
+}
+
+.context-action-menu > button[data-highlighted] {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.context-action-menu > .danger-menu-item[data-highlighted] {
+  background: var(--danger-surface);
+  color: var(--danger);
+}
+
+.dialog-backdrop {
+  position: absolute;
+  z-index: 50;
+  inset: 0;
+  min-height: 100dvh;
+  background: oklch(0 0 0 / 0.7);
+  opacity: 1;
+  transition: opacity var(--duration-surface) var(--ease-out);
+}
+
+.image-lightbox-backdrop {
+  background: transparent;
+}
+
+.dialog-popup {
+  position: fixed;
+  z-index: 51;
+  inset: 0;
+  height: fit-content;
+  margin: auto;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--duration-surface) var(--ease-out),
+    transform var(--duration-surface) var(--ease-out);
+}
+
+.dialog-popup[data-starting-style],
+.dialog-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.dialog-backdrop[data-starting-style],
+.dialog-backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+.dialog-popup.image-lightbox {
+  height: 100dvh;
+  margin: 0;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-menu,
+  .dialog-popup,
+  .dialog-backdrop {
+    transition: opacity var(--duration-reduced) ease;
+  }
+
+  .overlay-menu,
+  .overlay-menu[data-starting-style],
+  .overlay-menu[data-ending-style],
+  .dialog-popup,
+  .dialog-popup[data-starting-style],
+  .dialog-popup[data-ending-style] {
+    transform: none;
+  }
+}
+
+:root[data-input-modality="keyboard"] :is(.overlay-menu, .dialog-popup, .dialog-backdrop) {
+  transition: none;
+}

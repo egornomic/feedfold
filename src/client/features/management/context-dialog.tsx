@@ -29,8 +29,8 @@ import type {
   WebFeedAnalysis,
 } from "../../../shared/types";
 import { api, errorMessage } from "../../api/api";
+import { Modal, useDialog } from "../../ui/dialog";
 import { DropdownSelect } from "../../ui/dropdown";
-import { useAnimatedDialog } from "../../ui/motion";
 import type { ManagementRequest } from "../feeds/feed-management";
 import { folderPathLabel } from "../feeds/folder-hierarchy";
 import type { ReaderDataMutations } from "../reader/data-resource";
@@ -806,14 +806,7 @@ function ContextManagementDialog({
     });
   }, [onClose, request]);
 
-  const dialog = useAnimatedDialog(finishClose);
-
-  useEffect(() => {
-    const focusFrame = window.requestAnimationFrame(() => {
-      dialog.dialogRef.current?.querySelector<HTMLElement>("[data-dialog-initial-focus]")?.focus();
-    });
-    return () => window.cancelAnimationFrame(focusFrame);
-  }, [dialog.dialogRef]);
+  const dialog = useDialog(finishClose);
 
   const close = dialog.close;
   const isRule = request.kind === "create-feed-rule" || request.kind === "create-folder-rule";
@@ -876,15 +869,12 @@ function ContextManagementDialog({
     );
 
   return (
-    <dialog
-      ref={dialog.dialogRef}
+    <Modal
+      dialog={dialog}
+      finalFocus={false}
       className={`management-dialog${isWide ? " is-wide" : ""}`}
-      data-state={dialog.closing ? "closing" : "open"}
-      inert={dialog.closing}
       aria-labelledby={isRule ? undefined : "management-dialog-title"}
       aria-label={isRule ? "Create rule" : undefined}
-      onClose={dialog.handleClose}
-      onCancel={dialog.handleCancel}
     >
       {isRule ? (
         <RuleForm
@@ -998,7 +988,7 @@ function ContextManagementDialog({
           ) : null}
         </>
       )}
-    </dialog>
+    </Modal>
   );
 }
 

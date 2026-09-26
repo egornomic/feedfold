@@ -1,7 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import type { Article } from "../../../../shared/types";
+import { Menu, MenuPopup } from "../../../ui/menu";
 import { FeedActionMenuItems, type FeedManagementAction } from "../../feeds/feed-management";
-import { useActionMenu } from "./article-action-menu";
 import { articleDate, formatViewCount, mediaTypeLabel } from "./article-format";
 
 function ArticleSourceMenu({
@@ -11,49 +11,32 @@ function ArticleSourceMenu({
   article: Article;
   onFeedAction: (feedId: number, action: FeedManagementAction) => void;
 }) {
-  const menu = useActionMenu();
   const menuId = `article-${article.id}-source-menu`;
-  const anchorName = `--article-${article.id}-source`;
 
   return (
-    <>
-      <button
-        ref={menu.triggerRef}
+    <Menu.Root modal={false}>
+      <Menu.Trigger
         data-management-feed-id={article.feedId}
         className="article-source-trigger"
-        type="button"
         aria-label={`${article.feedTitle} feed actions`}
-        aria-haspopup="menu"
-        aria-expanded={menu.open}
-        aria-controls={menuId}
-        popoverTarget={menuId}
-        style={{ anchorName }}
-        onPointerDown={menu.handleTriggerPointerDown}
-        onKeyDown={menu.handleTriggerKeyDown}
       >
         <span>{article.feedTitle}</span>
         <ChevronDown aria-hidden="true" size={15} />
-      </button>
-      <div
-        ref={menu.menuRef}
+      </Menu.Trigger>
+      <MenuPopup
+        positioner={{ align: "start" }}
         id={menuId}
         className="article-source-menu context-action-menu"
-        popover="auto"
-        role="menu"
         aria-label={`${article.feedTitle} feed actions`}
-        style={{ positionAnchor: anchorName }}
-        onToggle={menu.handleMenuToggle}
-        onKeyDown={menu.handleMenuKeyDown}
       >
         <FeedActionMenuItems
           sourceKind={article.feedSourceKind}
           onAction={(action) => {
-            menu.closeMenu();
             onFeedAction(article.feedId, action);
           }}
         />
-      </div>
-    </>
+      </MenuPopup>
+    </Menu.Root>
   );
 }
 

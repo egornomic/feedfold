@@ -554,11 +554,6 @@
     min-height: var(--control-size-touch);
     grid-area: options;
   }
-  .reader-options-menu {
-    position-area: none;
-    inset: 52px 9px auto auto;
-    margin: 0;
-  }
   .reader-options-menu .dropdown-select-option {
     min-height: var(--control-size-touch);
   }
@@ -703,17 +698,8 @@
   }
   .summary-prompt-menu,
   .article-more-menu {
-    position-area: none;
-    inset: auto 9px calc(82px + env(safe-area-inset-bottom)) 9px;
     width: auto;
     max-height: calc(100dvh - 100px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-    margin: 0;
-    transform: translateY(4px) scale(0.95);
-    transform-origin: bottom center;
-  }
-  .summary-prompt-menu:popover-open,
-  .article-more-menu:popover-open {
-    transform: translateY(0) scale(1);
   }
   .mode-magazine.is-reading-article .article-document {
     padding: 18px 22px max(114px, calc(98px + env(safe-area-inset-bottom)));
@@ -995,32 +981,9 @@
   .feed-preview-loading[data-motion-state="closed"],
   .feed-confirmation-form,
   .feed-confirmation-form[data-motion-state="closed"],
-  .article-selection-menu,
-  .article-source-menu,
-  .summary-prompt-menu,
-  .article-more-menu,
-  .mark-read-menu,
-  .sidebar-context-menu,
-  .dropdown-select-menu,
   .pwa-update,
   .pwa-update[data-motion-state="closed"] {
     transition: opacity var(--duration-reduced) ease;
-  }
-
-  :root .shortcut-dialog,
-  :root .management-dialog {
-    transition:
-      opacity var(--duration-reduced) ease,
-      display var(--duration-reduced) allow-discrete,
-      overlay var(--duration-reduced) allow-discrete;
-  }
-
-  :root .shortcut-dialog::backdrop,
-  :root .management-dialog::backdrop {
-    transition:
-      opacity var(--duration-reduced) ease,
-      display var(--duration-reduced) allow-discrete,
-      overlay var(--duration-reduced) allow-discrete;
   }
 
   .inline-state.empty-state,
@@ -1036,37 +999,12 @@
   .feed-preview-loading[data-motion-state="closed"],
   .feed-confirmation-form,
   .feed-confirmation-form[data-motion-state="closed"],
-  :root .shortcut-dialog,
-  :root .shortcut-dialog[open],
-  :root .shortcut-dialog[data-state="closing"],
-  :root .management-dialog,
-  :root .management-dialog[open],
-  :root .management-dialog[data-state="closing"],
   .pwa-update,
   .pwa-update[data-motion-state="closed"] {
     transform: none;
   }
 
-  .mark-read-menu[data-state="closed"] {
-    transform: translateY(0) scale(1);
-  }
-
-  .article-source-menu,
-  .article-source-menu:popover-open,
-  .summary-prompt-menu,
-  .summary-prompt-menu:popover-open,
-  .article-more-menu,
-  .article-more-menu:popover-open,
-  .sidebar-context-menu {
-    transform: none;
-  }
-
-  .dropdown-select-menu,
-  .dropdown-select-menu:popover-open {
-    transform: none;
-  }
-
-  .dropdown-select-trigger > svg {
+  .dropdown-select-trigger > span:last-child svg {
     transition: none;
   }
 
@@ -1076,14 +1014,6 @@
 
   .article-source-trigger svg {
     transition: none;
-  }
-
-  .article-selection-menu[data-state="closed"] {
-    transform: translate(-50%, calc(-100% - 8px)) scale(1);
-  }
-
-  .article-selection-menu[data-placement="below"][data-state="closed"] {
-    transform: translate(-50%, 8px) scale(1);
   }
 
   .primary-button:active:not(:disabled, :focus-visible),
@@ -1111,10 +1041,6 @@
   }
 
   @starting-style {
-    :root .management-dialog[open] {
-      transform: none;
-    }
-
     .inline-state.empty-state,
     .inline-editor[data-motion-state="open"],
     .add-folder-form[data-motion-state="open"],
@@ -1124,22 +1050,6 @@
     .feed-preview-loading[data-motion-state="open"],
     .feed-confirmation-form[data-motion-state="open"] {
       transform: none;
-    }
-
-    .mark-read-menu[data-state="open"] {
-      transform: translateY(0) scale(1);
-    }
-
-    .sidebar-context-menu {
-      transform: none;
-    }
-
-    .article-selection-menu[data-state="open"] {
-      transform: translate(-50%, calc(-100% - 8px)) scale(1);
-    }
-
-    .article-selection-menu[data-placement="below"][data-state="open"] {
-      transform: translate(-50%, 8px) scale(1);
     }
   }
 }
@@ -1154,14 +1064,13 @@
 :root[data-input-modality="keyboard"]
   :is(
     .dropdown-select-trigger,
-    .dropdown-select-trigger > svg,
+    .dropdown-select-trigger > span:last-child svg,
     .dropdown-combobox > svg,
     .dropdown-select-menu,
     .dropdown-select-option,
     .management-actions-popover
   ),
-:root[data-input-modality="keyboard"] :is(.shortcut-dialog, .management-dialog),
-:root[data-input-modality="keyboard"] :is(.shortcut-dialog, .management-dialog)::backdrop {
+:root[data-input-modality="keyboard"] :is(.shortcut-dialog, .management-dialog) {
   transition: none;
 }
 

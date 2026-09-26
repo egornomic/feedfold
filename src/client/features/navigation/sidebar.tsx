@@ -16,8 +16,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useState } from "react";
 import type {
   ArticleState,
   BootstrapData,
@@ -26,9 +25,9 @@ import type {
   SessionUser,
 } from "../../../shared/types";
 import type { AppView } from "../../app/routes";
-import { handleActionMenuKeyDown } from "../../ui/action-menu";
 import { BrandIdentity } from "../../ui/brand";
 import { IconButton, Kbd } from "../../ui/controls";
+import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
 import { type FeedDragState, useFeedDrag } from "../feeds/feed-drag";
 import {
   FeedActionMenuItems,
@@ -458,93 +457,54 @@ function SidebarContextMenu({
   onFeedAction: (feed: Feed, action: FeedManagementAction) => void;
   onFolderAction: (folder: FolderType, action: FolderManagementAction) => void;
 }) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ left: state.left, top: state.top });
-
-  useLayoutEffect(() => {
-    const menu = menuRef.current;
-    if (!menu) return;
-    setPosition({
-      left: Math.max(8, Math.min(state.left, window.innerWidth - menu.offsetWidth - 8)),
-      top: Math.max(8, Math.min(state.top, window.innerHeight - menu.offsetHeight - 8)),
-    });
-  }, [state]);
-
-  useEffect(() => {
-    const focusFrame = window.requestAnimationFrame(() => {
-      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-    });
-    const dismissPointer = (event: PointerEvent) => {
-      if (
-        !menuRef.current?.contains(event.target as Node) &&
-        !state.trigger.contains(event.target as Node)
-      )
-        onClose();
-    };
-    const dismissFocus = (event: FocusEvent) => {
-      const target = event.target as Node;
-      if (!menuRef.current?.contains(target) && target !== state.trigger) onClose();
-    };
-    document.addEventListener("pointerdown", dismissPointer, true);
-    document.addEventListener("focusin", dismissFocus);
-    window.addEventListener("resize", onClose);
-    window.addEventListener("scroll", onClose, true);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener("pointerdown", dismissPointer, true);
-      document.removeEventListener("focusin", dismissFocus);
-      window.removeEventListener("resize", onClose);
-      window.removeEventListener("scroll", onClose, true);
-    };
-  }, [onClose, state.trigger]);
-
-  return createPortal(
-    <div
-      ref={menuRef}
-      id={state.kind === "add" ? "sidebar-add-menu" : undefined}
-      className="sidebar-context-menu context-action-menu"
-      role="menu"
-      aria-label={
-        state.kind === "add"
-          ? "Add subscription or folder"
-          : `${state.kind === "feed" ? state.feed.title : state.folder.name} actions`
-      }
-      style={position}
-      onContextMenu={(event) => event.preventDefault()}
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        handleActionMenuKeyDown(event, onClose);
+  return (
+    <Menu.Root
+      defaultOpen
+      modal={false}
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
     >
-      {state.kind === "add" ? (
-        <>
-          {ADD_FEED_SOURCE_OPTIONS.map(({ value, label, icon: Icon }) => (
-            <button
-              key={value}
-              type="button"
-              role="menuitem"
-              onClick={() => onAddSubscription(value)}
-            >
-              <Icon aria-hidden="true" size={16} />
-              {label}
-            </button>
-          ))}
-          <hr className="context-menu-separator" />
-          <button type="button" role="menuitem" onClick={onAddFolder}>
-            <Folder aria-hidden="true" size={16} />
-            New folder
-          </button>
-        </>
-      ) : state.kind === "feed" ? (
-        <FeedActionMenuItems
-          feed={state.feed}
-          onAction={(action) => onFeedAction(state.feed, action)}
-        />
-      ) : (
-        <FolderActionMenuItems onAction={(action) => onFolderAction(state.folder, action)} />
-      )}
-    </div>,
-    document.body,
+      <MenuPopup
+        id={state.kind === "add" ? "sidebar-add-menu" : undefined}
+        className="sidebar-context-menu context-action-menu"
+        aria-label={
+          state.kind === "add"
+            ? "Add subscription or folder"
+            : `${state.kind === "feed" ? state.feed.title : state.folder.name} actions`
+        }
+        finalFocus={() => state.trigger}
+        positioner={{
+          anchor: { getBoundingClientRect: () => new DOMRect(state.left, state.top, 0, 0) },
+          align: "start",
+          sideOffset: 0,
+        }}
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        {state.kind === "add" ? (
+          <>
+            {ADD_FEED_SOURCE_OPTIONS.map(({ value, label, icon: Icon }) => (
+              <MenuItem key={value} onClick={() => onAddSubscription(value)}>
+                <Icon aria-hidden="true" size={16} />
+                {label}
+              </MenuItem>
+            ))}
+            <hr className="context-menu-separator" />
+            <MenuItem onClick={onAddFolder}>
+              <Folder aria-hidden="true" size={16} />
+              New folder
+            </MenuItem>
+          </>
+        ) : state.kind === "feed" ? (
+          <FeedActionMenuItems
+            feed={state.feed}
+            onAction={(action) => onFeedAction(state.feed, action)}
+          />
+        ) : (
+          <FolderActionMenuItems onAction={(action) => onFolderAction(state.folder, action)} />
+        )}
+      </MenuPopup>
+    </Menu.Root>
   );
 }
 

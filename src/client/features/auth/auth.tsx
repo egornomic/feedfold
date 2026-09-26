@@ -17,7 +17,7 @@ import {
 import type { RegistrationMode, SessionUser } from "../../../shared/types.js";
 import { AUTH_REQUIRED_EVENT, api, appUrl, errorMessage } from "../../api/api.js";
 import { BrandIdentity } from "../../ui/brand.js";
-import { useAnimatedDialog } from "../../ui/motion.js";
+import { Modal, useDialog } from "../../ui/dialog.js";
 import { Onboarding } from "./onboarding.js";
 import { finishOnboarding, saveOnboardingStep } from "./onboarding-state.js";
 
@@ -69,7 +69,7 @@ export function LoginDialog({
   const [error, setError] = useState<string | null>(null);
   const [registrationAvailable, setRegistrationAvailable] = useState(false);
   const [passkeysAvailable, setPasskeysAvailable] = useState(false);
-  const { dialogRef, close, closing, handleCancel, handleClose } = useAnimatedDialog(
+  const dialog = useDialog(
     () => {
       if (setupUser) {
         finishOnboarding(setupUser.id);
@@ -81,6 +81,8 @@ export function LoginDialog({
       autoOpen: configLoaded,
     },
   );
+
+  const { close } = dialog;
 
   useEffect(() => {
     const requireAuthentication = () => {
@@ -197,20 +199,12 @@ export function LoginDialog({
   const ActionIcon = registering ? UserPlus : LogIn;
 
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: Native dialog already handles Escape dismissal.
-    <dialog
-      ref={dialogRef}
+    <Modal
+      dialog={dialog}
+      outsideDismiss
+      dismissible={!setupUser}
       className={`login-dialog${setupUser ? " onboarding-dialog" : ""}`}
       aria-labelledby="auth-heading"
-      data-state={closing ? "closing" : undefined}
-      onCancel={(event) => {
-        if (setupUser) event.preventDefault();
-        else handleCancel(event);
-      }}
-      onClose={handleClose}
-      onClick={(event) => {
-        if (!setupUser && event.target === event.currentTarget) close();
-      }}
     >
       <section className="login-panel" aria-labelledby="auth-heading">
         {!setupUser ? (
@@ -387,6 +381,6 @@ export function LoginDialog({
           </>
         )}
       </section>
-    </dialog>
+    </Modal>
   );
 }

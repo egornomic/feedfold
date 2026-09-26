@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /// <reference types="vite/client" />
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
@@ -40,13 +41,6 @@ it.each(["logout", "account switch"])(
       const setCookie = response.headers.get("set-cookie");
       if (setCookie) cookie = setCookie.split(";", 1)[0] ?? "";
       return response;
-    };
-    browser.window.HTMLDialogElement.prototype.showModal = function () {
-      this.open = true;
-    };
-    browser.window.HTMLDialogElement.prototype.close = function () {
-      this.open = false;
-      this.dispatchEvent(new browser.window.Event("close"));
     };
     browser.window.document.documentElement.dataset.inputModality = "keyboard";
     const container = browser.window.document.getElementById("root");
@@ -94,9 +88,15 @@ it.each(["logout", "account switch"])(
         browser.window.document.querySelector('button[aria-label="Close sign in"]'),
       ).not.toBeNull();
       await act(async () => {
-        const dialog = browser.window.document.querySelector("dialog");
+        const dialog = browser.window.document.querySelector('[role="dialog"]');
         assert(dialog);
-        dialog.dispatchEvent(new browser.window.Event("cancel", { cancelable: true }));
+        dialog.dispatchEvent(
+          new browser.window.KeyboardEvent("keydown", {
+            key: "Escape",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
       });
       expect(dismissed).toBe(true);
       expect(authenticated).toBe(false);

@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Feed, FeedSourceKind } from "../../../shared/types";
+import { MenuItem } from "../../ui/menu";
 
 export type FeedManagementAction =
   | "settings"
@@ -45,38 +46,33 @@ export function FeedActionMenuItems({
 }) {
   return (
     <>
-      <button type="button" role="menuitem" onClick={() => onAction("settings")}>
+      <MenuItem onClick={() => onAction("settings")}>
         <Settings aria-hidden="true" size={15} />
         Feed settings
-      </button>
+      </MenuItem>
       {(feed?.sourceKind ?? sourceKind) === "web" ? (
-        <button type="button" role="menuitem" onClick={() => onAction("selection")}>
+        <MenuItem onClick={() => onAction("selection")}>
           <MousePointer2 aria-hidden="true" size={15} />
           Edit page selection
-        </button>
+        </MenuItem>
       ) : null}
-      <button type="button" role="menuitem" onClick={() => onAction("rename")}>
+      <MenuItem onClick={() => onAction("rename")}>
         <Edit3 aria-hidden="true" size={15} />
         Rename feed
-      </button>
-      <button type="button" role="menuitem" onClick={() => onAction("move")}>
+      </MenuItem>
+      <MenuItem onClick={() => onAction("move")}>
         <Folder aria-hidden="true" size={15} />
         Move to folder
-      </button>
-      <button type="button" role="menuitem" onClick={() => onAction("rule")}>
+      </MenuItem>
+      <MenuItem onClick={() => onAction("rule")}>
         <ListFilter aria-hidden="true" size={15} />
         Create rule
-      </button>
+      </MenuItem>
       <hr className="context-menu-separator" />
-      <button
-        className="danger-menu-item"
-        type="button"
-        role="menuitem"
-        onClick={() => onAction("unsubscribe")}
-      >
+      <MenuItem className="danger-menu-item" onClick={() => onAction("unsubscribe")}>
         <Trash2 aria-hidden="true" size={15} />
         Unsubscribe from feed
-      </button>
+      </MenuItem>
     </>
   );
 }
@@ -88,32 +84,27 @@ export function FolderActionMenuItems({
 }) {
   return (
     <>
-      <button type="button" role="menuitem" onClick={() => onAction("settings")}>
+      <MenuItem onClick={() => onAction("settings")}>
         <Settings aria-hidden="true" size={15} />
         Folder settings
-      </button>
-      <button type="button" role="menuitem" onClick={() => onAction("add-feed")}>
+      </MenuItem>
+      <MenuItem onClick={() => onAction("add-feed")}>
         <Rss aria-hidden="true" size={15} />
         Add feed to folder
-      </button>
-      <button type="button" role="menuitem" onClick={() => onAction("add-folder")}>
+      </MenuItem>
+      <MenuItem onClick={() => onAction("add-folder")}>
         <FolderPlus aria-hidden="true" size={15} />
         Add subfolder
-      </button>
-      <button type="button" role="menuitem" onClick={() => onAction("rule")}>
+      </MenuItem>
+      <MenuItem onClick={() => onAction("rule")}>
         <ListFilter aria-hidden="true" size={15} />
         Create rule
-      </button>
+      </MenuItem>
       <hr className="context-menu-separator" />
-      <button
-        className="danger-menu-item"
-        type="button"
-        role="menuitem"
-        onClick={() => onAction("delete")}
-      >
+      <MenuItem className="danger-menu-item" onClick={() => onAction("delete")}>
         <Trash2 aria-hidden="true" size={15} />
         Delete folder
-      </button>
+      </MenuItem>
     </>
   );
 }

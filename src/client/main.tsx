@@ -13,6 +13,7 @@ import "./features/auth/authentication.css";
 import "./features/reader/reader-toolbar.css";
 import "./features/reader/reader.css";
 import "./styles/responsive.css";
+import "./ui/overlays.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("The feedfold root element is missing.");

@@ -406,43 +406,17 @@
 }
 
 .management-actions-popover {
-  position: fixed;
-  position-area: block-end span-inline-end;
-  position-try-fallbacks: flip-block, flip-inline;
-  z-index: var(--z-context-menu);
-  inset: auto;
   width: min(224px, calc(100vw - 16px));
-  max-height: min(420px, calc(100dvh - 16px));
-  margin: 6px 0 0;
+  max-height: min(420px, var(--available-height));
   overflow-y: auto;
   overscroll-behavior: contain;
-  opacity: 0;
-  transform: translateY(-4px) scale(0.95);
-  transform-origin: top right;
-  transition:
-    opacity var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out),
-    display var(--duration-fast) allow-discrete,
-    overlay var(--duration-fast) allow-discrete;
-}
-
-.management-actions-popover:popover-open {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-@starting-style {
-  .management-actions-popover:popover-open {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.95);
-  }
 }
 
 .feed-transfer-popover {
   gap: 5px;
 }
 
-.feed-transfer-popover:popover-open {
+.feed-transfer-popover[data-open] {
   display: grid;
 }
 
@@ -1044,15 +1018,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .management-actions-popover,
-  .management-actions-popover:popover-open {
-    transform: none;
-    transition:
-      opacity var(--duration-reduced) ease,
-      display var(--duration-reduced) allow-discrete,
-      overlay var(--duration-reduced) allow-discrete;
-  }
-
   .folder-disclosure,
   .folder-management-row,
   .folder-feed-row {

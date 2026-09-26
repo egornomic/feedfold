@@ -47,8 +47,8 @@ import type { SettingsCategory } from "../../app/routes";
 import { isDesktopApp } from "../../platform/desktop";
 import { COLOR_PALETTES, type ColorPalette } from "../../ui/color-palettes";
 import { Kbd } from "../../ui/controls";
+import { Modal, useDialog } from "../../ui/dialog";
 import { DropdownCombobox, DropdownSelect } from "../../ui/dropdown";
-import { useAnimatedDialog } from "../../ui/motion";
 import type { ReaderDataMutations } from "../reader/data-resource";
 import {
   type ColorPalettes,
@@ -119,7 +119,7 @@ function AccountSettingsSection({
   const [error, setError] = useState<string | null>(null);
   const passkeyNameRef = useRef<HTMLInputElement>(null);
   const resetAccountDialog = useCallback(() => setAccountDeleteError(null), []);
-  const accountDialog = useAnimatedDialog(resetAccountDialog, { autoOpen: false });
+  const accountDialog = useDialog(resetAccountDialog, { autoOpen: false });
 
   useEffect(() => {
     let active = true;
@@ -466,20 +466,11 @@ function AccountSettingsSection({
           <span>{error}</span>
         </div>
       ) : null}
-      <dialog
-        ref={accountDialog.dialogRef}
+      <Modal
+        dialog={accountDialog}
         className="management-dialog passkey-dialog"
         aria-labelledby="account-delete-dialog-title"
-        data-state={accountDialog.closing ? "closing" : "open"}
-        inert={accountDialog.closing}
-        onClose={accountDialog.handleClose}
-        onCancel={(event) => {
-          if (deletingAccount) {
-            event.preventDefault();
-            return;
-          }
-          accountDialog.handleCancel(event);
-        }}
+        dismissible={!deletingAccount}
       >
         <form className="passkey-dialog-form" onSubmit={(event) => void deleteAccount(event)}>
           <header className="management-dialog-heading">
@@ -531,7 +522,7 @@ function AccountSettingsSection({
             </div>
           </footer>
         </form>
-      </dialog>
+      </Modal>
     </section>
   );
 }
@@ -584,8 +575,8 @@ function AiSettingsSection({
     setTranslationPrompt(settings.translationPrompt);
     setPromptError(null);
   }, [settings.summaryPrompt, settings.translationPrompt]);
-  const promptDialog = useAnimatedDialog(resetPromptDraft, { autoOpen: false });
-  const customPromptDialog = useAnimatedDialog(() => setCustomPromptError(null), {
+  const promptDialog = useDialog(resetPromptDraft, { autoOpen: false });
+  const customPromptDialog = useDialog(() => setCustomPromptError(null), {
     autoOpen: false,
   });
 
@@ -708,7 +699,6 @@ function AiSettingsSection({
     setTranslationPrompt(settings.translationPrompt);
     setPromptError(null);
     promptDialog.open();
-    window.requestAnimationFrame(() => summaryPromptRef.current?.focus());
   };
 
   const closePromptDialog = () => {
@@ -745,7 +735,6 @@ function AiSettingsSection({
     setCustomPromptText(prompt?.prompt ?? "");
     setCustomPromptError(null);
     customPromptDialog.open();
-    window.requestAnimationFrame(() => customPromptNameRef.current?.focus());
   };
 
   const closeCustomPromptDialog = () => {
@@ -1034,20 +1023,12 @@ function AiSettingsSection({
         )}
       </div>
 
-      <dialog
-        ref={promptDialog.dialogRef}
+      <Modal
+        dialog={promptDialog}
+        initialFocus={summaryPromptRef}
         className="management-dialog is-wide ai-prompt-dialog"
         aria-labelledby="ai-prompt-dialog-title"
-        data-state={promptDialog.closing ? "closing" : "open"}
-        inert={promptDialog.closing}
-        onClose={promptDialog.handleClose}
-        onCancel={(event) => {
-          if (savingPrompts) {
-            event.preventDefault();
-            return;
-          }
-          promptDialog.handleCancel(event);
-        }}
+        dismissible={!savingPrompts}
       >
         <form className="ai-prompt-dialog-form" onSubmit={(event) => void savePrompts(event)}>
           <header className="management-dialog-heading">
@@ -1159,22 +1140,14 @@ function AiSettingsSection({
             </div>
           </footer>
         </form>
-      </dialog>
+      </Modal>
 
-      <dialog
-        ref={customPromptDialog.dialogRef}
+      <Modal
+        dialog={customPromptDialog}
+        initialFocus={customPromptNameRef}
         className="management-dialog custom-prompt-dialog"
         aria-labelledby="custom-prompt-dialog-title"
-        data-state={customPromptDialog.closing ? "closing" : "open"}
-        inert={customPromptDialog.closing}
-        onClose={customPromptDialog.handleClose}
-        onCancel={(event) => {
-          if (savingCustomPrompt) {
-            event.preventDefault();
-            return;
-          }
-          customPromptDialog.handleCancel(event);
-        }}
+        dismissible={!savingCustomPrompt}
       >
         <form className="custom-prompt-form" onSubmit={(event) => void saveCustomPrompt(event)}>
           <header className="management-dialog-heading">
@@ -1270,7 +1243,7 @@ function AiSettingsSection({
             </div>
           </footer>
         </form>
-      </dialog>
+      </Modal>
     </section>
   );
 }
@@ -1321,7 +1294,7 @@ function SettingsPage({
   const [stepUpHasPassword, setStepUpHasPassword] = useState(false);
   const [stepUpHasPasskey, setStepUpHasPasskey] = useState(false);
   const pageRef = useRef<HTMLDivElement>(null);
-  const stepUpDialogRef = useRef<HTMLDialogElement>(null);
+  const stepUpDialog = useDialog(() => cancelStepUp(), { autoOpen: false });
   const stepUpPasswordRef = useRef<HTMLInputElement>(null);
   const desktopApp = isDesktopApp();
   const visibleCategories = desktopApp
@@ -1342,35 +1315,35 @@ function SettingsPage({
     setTranslationLanguage(settings.translationLanguage);
   }, [settings.translationLanguage]);
 
-  const runSensitive = useCallback<SensitiveAction>(async <T,>(action: () => Promise<T>) => {
-    try {
-      return await action();
-    } catch (caught) {
-      if (
-        !(caught instanceof ApiError) ||
-        caught.code !== "RECENT_AUTH_REQUIRED" ||
-        !caught.operationId
-      )
-        throw caught;
-      const credentials = await api.passkeys();
-      setStepUpHasPassword(credentials.hasPassword);
-      setStepUpHasPasskey(credentials.passkeys.length > 0);
-      setStepUpPassword("");
-      setStepUpError(null);
-      return await new Promise<T>((resolve, reject) => {
-        setPendingSensitive({
-          operationId: caught.operationId as string,
-          action,
-          resolve: resolve as (value: unknown) => void,
-          reject,
+  const runSensitive = useCallback<SensitiveAction>(
+    async <T,>(action: () => Promise<T>) => {
+      try {
+        return await action();
+      } catch (caught) {
+        if (
+          !(caught instanceof ApiError) ||
+          caught.code !== "RECENT_AUTH_REQUIRED" ||
+          !caught.operationId
+        )
+          throw caught;
+        const credentials = await api.passkeys();
+        setStepUpHasPassword(credentials.hasPassword);
+        setStepUpHasPasskey(credentials.passkeys.length > 0);
+        setStepUpPassword("");
+        setStepUpError(null);
+        return await new Promise<T>((resolve, reject) => {
+          setPendingSensitive({
+            operationId: caught.operationId as string,
+            action,
+            resolve: resolve as (value: unknown) => void,
+            reject,
+          });
+          stepUpDialog.open();
         });
-        window.requestAnimationFrame(() => {
-          stepUpDialogRef.current?.showModal();
-          stepUpPasswordRef.current?.focus();
-        });
-      });
-    }
-  }, []);
+      }
+    },
+    [stepUpDialog.open],
+  );
 
   const finishStepUp = async (authenticate: () => Promise<void>) => {
     const pending = pendingSensitive;
@@ -1383,7 +1356,7 @@ function SettingsPage({
       pending.resolve(result);
       setPendingSensitive(null);
       setStepUpPassword("");
-      stepUpDialogRef.current?.close();
+      stepUpDialog.close();
     } catch (caught) {
       setStepUpError(errorMessage(caught));
     } finally {
@@ -1411,7 +1384,7 @@ function SettingsPage({
     pendingSensitive?.reject(new DOMException("Authentication was cancelled.", "AbortError"));
     setPendingSensitive(null);
     setStepUpPassword("");
-    stepUpDialogRef.current?.close();
+    stepUpDialog.close();
   };
 
   const saveSettings = async (change: ApiInput<"updateSettings">) => {
@@ -1843,14 +1816,12 @@ function SettingsPage({
           </section>
         </div>
       ) : null}
-      <dialog
-        ref={stepUpDialogRef}
+      <Modal
+        dialog={stepUpDialog}
+        initialFocus={stepUpPasswordRef}
         className="management-dialog passkey-dialog"
         aria-labelledby="step-up-dialog-title"
-        onCancel={(event) => {
-          event.preventDefault();
-          cancelStepUp();
-        }}
+        dismissible={!stepUpBusy}
       >
         <form
           className="passkey-dialog-form"
@@ -1937,7 +1908,7 @@ function SettingsPage({
             </div>
           </footer>
         </form>
-      </dialog>
+      </Modal>
     </div>
   );
 }

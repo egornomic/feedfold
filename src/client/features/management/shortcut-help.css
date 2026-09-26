@@ -40,51 +40,6 @@
   background-blend-mode: var(--paper-blend);
   color: var(--text);
   box-shadow: 0 8px 8px oklch(0 0 0 / 0.34);
-  opacity: 0;
-  transform: scale(0.96);
-  transition:
-    opacity var(--duration-surface) var(--ease-out),
-    transform var(--duration-surface) var(--ease-out),
-    display var(--duration-surface) allow-discrete,
-    overlay var(--duration-surface) allow-discrete;
-}
-
-.shortcut-dialog[open] {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.shortcut-dialog[data-state="closing"] {
-  opacity: 0;
-  transform: scale(0.96);
-}
-
-.shortcut-dialog::backdrop {
-  background: oklch(0 0 0 / 0.7);
-  opacity: 0;
-  transition:
-    opacity var(--duration-surface) var(--ease-out),
-    display var(--duration-surface) allow-discrete,
-    overlay var(--duration-surface) allow-discrete;
-}
-
-.shortcut-dialog[open]::backdrop {
-  opacity: 1;
-}
-
-.shortcut-dialog[data-state="closing"]::backdrop {
-  opacity: 0;
-}
-
-@starting-style {
-  .shortcut-dialog[open] {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-
-  .shortcut-dialog[open]::backdrop {
-    opacity: 0;
-  }
 }
 .dialog-heading {
   display: flex;
