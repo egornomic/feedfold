@@ -1,28 +1,25 @@
+import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { YouTubeStatus } from "../../../shared/youtube";
 import { appUrl, errorMessage } from "../../api/api-contract";
 import { httpRequest } from "../../api/http-request";
+import { youtubeQuery } from "../../api/query";
+import { useRequestMutation } from "../../api/use-request-mutation";
 import { Modal, useDialog } from "../../ui/dialog";
 
 export function YouTubeSettings({ userId }: { userId: string }) {
-  const [status, setStatus] = useState<YouTubeStatus | null>(null);
+  const statusQuery = useQuery(youtubeQuery(userId));
+  const status = statusQuery.data ?? null;
+  const { run: mutateRequest } = useRequestMutation();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
+  const error = actionError ?? (statusQuery.error ? errorMessage(statusQuery.error) : null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const connectDialog = useDialog(() => setError(null), { autoOpen: false });
   const headers = { "X-Feedfold-Account": userId };
 
   useEffect(() => {
-    let active = true;
-    void httpRequest<YouTubeStatus>("/api/youtube", { headers: { "X-Feedfold-Account": userId } })
-      .then((result) => {
-        if (active) setStatus(result);
-      })
-      .catch((caught) => {
-        if (active) setError(errorMessage(caught));
-      });
     const url = new URL(window.location.href);
     const result = url.searchParams.get("youtube");
     if (result) {
@@ -36,10 +33,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
       url.searchParams.delete("youtube");
       window.history.replaceState(window.history.state, "", url);
     }
-    return () => {
-      active = false;
-    };
-  }, [userId]);
+  }, []);
 
   const act = async (action: "connect" | "disconnect" | "status", filterShorts = false) => {
     setBusy(true);
@@ -47,26 +41,25 @@ export function YouTubeSettings({ userId }: { userId: string }) {
     setNotice(null);
     try {
       if (action === "connect") {
-        const { url } = await httpRequest<{ url: string }>("/api/youtube/connect", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ filterShorts }),
-        });
+        const { url } = await mutateRequest(() =>
+          httpRequest<{ url: string }>("/api/youtube/connect", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ filterShorts }),
+          }),
+        );
         window.location.assign(url);
         return;
       }
       if (action === "disconnect") {
-        await httpRequest<void>("/api/youtube", { method: "DELETE", headers });
+        await mutateRequest(() => httpRequest<void>("/api/youtube", { method: "DELETE", headers }));
         setConfirmDisconnect(false);
         setNotice("YouTube disconnected. Synced feeds and their reading history were removed.");
       }
-      setStatus(await httpRequest<YouTubeStatus>("/api/youtube", { headers }));
+      await statusQuery.refetch();
     } catch (caught) {
       setError(errorMessage(caught));
-      const updated = await httpRequest<YouTubeStatus>("/api/youtube", { headers }).catch(
-        () => null,
-      );
-      if (updated) setStatus(updated);
+      await statusQuery.refetch();
     } finally {
       setBusy(false);
     }

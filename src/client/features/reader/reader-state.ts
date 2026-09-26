@@ -5,7 +5,6 @@ import type {
   ArticleState,
   BootstrapData,
   Folder,
-  ReadingMode,
 } from "../../../shared/types.js";
 import type { ReaderRoute } from "../../app/routes.js";
 import { folderPath } from "../feeds/folder-hierarchy.js";
@@ -95,30 +94,6 @@ export function articleQueryForReaderRoute(
     ...(route.search ? { search: route.search } : {}),
     ...options,
   };
-}
-
-export function hasReadingModeContent(
-  readingMode: ReadingMode,
-  articles: Article[],
-  fullContentLoadedIds: ReadonlySet<number>,
-): boolean {
-  return (
-    readingMode === "magazine" || articles.every((article) => fullContentLoadedIds.has(article.id))
-  );
-}
-
-export function fullContentIdsAfterReload(
-  readingMode: ReadingMode,
-  articles: Article[],
-  refreshedActiveArticleId: number | null,
-): Set<number> {
-  return new Set(
-    readingMode === "expanded"
-      ? articles.map((article) => article.id)
-      : refreshedActiveArticleId === null
-        ? []
-        : [refreshedActiveArticleId],
-  );
 }
 
 export function shouldAutoMarkRoutedArticleRead(

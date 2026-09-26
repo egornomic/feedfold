@@ -1,3 +1,4 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,14 +10,16 @@ import {
   Rss,
   Upload,
 } from "lucide-react";
-import { type ChangeEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Feed, ImportResult, Rule, SessionUser } from "../../../shared/types.js";
+import { type ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ImportResult, Rule, SessionUser } from "../../../shared/types.js";
 import { xFeedUrl } from "../../../shared/x.js";
-import type { YouTubeStatus } from "../../../shared/youtube.js";
 import { api, appUrl, errorMessage } from "../../api/api.js";
 import { httpRequest } from "../../api/http-request.js";
+import { readerKeys, youtubeQuery } from "../../api/query.js";
+import { useRequestMutation } from "../../api/use-request-mutation.js";
 import { BrandIdentity } from "../../ui/brand.js";
 import { feedSourceUrl } from "../feeds/feed-source.js";
+import { useReaderData } from "../reader/reader-data.js";
 import {
   HIDE_SHORTS_RULE,
   nextOnboardingStep,
@@ -112,50 +115,55 @@ const isShortsRule = (rule: Rule) =>
   rule.conditions[0].pattern === "youtube short";
 
 export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: () => void }) {
+  const { run: mutateRequest } = useRequestMutation();
   const [step, setStep] = useState<OnboardingStep>(() => onboardingStep(user.id) ?? "feeds");
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
-  const [feeds, setFeeds] = useState<Feed[]>([]);
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [youtube, setYoutube] = useState<YouTubeStatus | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const client = useQueryClient();
+  const { data: mutations, bootstrap: bootstrapResult, rules: rulesResult } = useReaderData();
+  const youtubeResult = useQuery(youtubeQuery(user.id));
+  const feeds = bootstrapResult.data?.feeds ?? [];
+  const rules = rulesResult.data ?? [];
+  const youtube = youtubeResult.data ?? null;
+  const loaded = !!bootstrapResult.data && !!rulesResult.data && !!youtubeResult.data;
+  const defaultRule = useMutation({
+    mutationKey: ["onboarding-default-rule", user.id],
+    mutationFn: () => api.createRule(HIDE_SHORTS_RULE),
+    onSuccess: (rule) => {
+      client.setQueryData(readerKeys.rules, (current: Rule[] | undefined) => [
+        ...(current ?? []),
+        rule,
+      ]);
+    },
+  });
   const [busy, setBusy] = useState<string | null>(null);
   const [savingShorts, setSavingShorts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [addresses, setAddresses] = useState({ feeds: "", "youtube-manual": "", x: "" });
-  const defaultShortsRule = useRef<Promise<Rule> | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const headers = { "X-Feedfold-Account": user.id };
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const [data, savedRules, status] = await Promise.all([
-        api.bootstrap(),
-        api.rules(),
-        httpRequest<YouTubeStatus>("/api/youtube", { headers: { "X-Feedfold-Account": user.id } }),
-      ]);
-      setFeeds(data.feeds);
-      if (!savedRules.some(isShortsRule)) {
-        defaultShortsRule.current ??= api.createRule(HIDE_SHORTS_RULE).catch((caught) => {
-          defaultShortsRule.current = null;
-          throw caught;
-        });
-        savedRules.push(await defaultShortsRule.current);
-      }
-      setRules(savedRules);
-      setYoutube(status);
-      setLoaded(true);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  }, [user.id]);
-
+  const load = () =>
+    Promise.all([bootstrapResult.refetch(), rulesResult.refetch(), youtubeResult.refetch()]);
   useEffect(() => {
-    void load();
+    if (
+      rulesResult.data &&
+      !rulesResult.data.some(isShortsRule) &&
+      !defaultRule.isError &&
+      client.isMutating({ mutationKey: ["onboarding-default-rule", user.id] }) === 0
+    ) {
+      defaultRule.mutate();
+    }
+  }, [rulesResult.data, defaultRule.mutate, defaultRule.isError, client, user.id]);
+  useEffect(() => {
+    const failure =
+      bootstrapResult.error ?? rulesResult.error ?? youtubeResult.error ?? defaultRule.error;
+    if (failure) setError(errorMessage(failure));
+  }, [bootstrapResult.error, rulesResult.error, youtubeResult.error, defaultRule.error]);
+  useEffect(() => {
     const result = new URLSearchParams(window.location.search).get("youtube");
     if (result) {
       setNotice(
@@ -167,7 +175,7 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
       );
       window.history.replaceState(null, "", appUrl("/"));
     }
-  }, [load]);
+  }, []);
 
   useLayoutEffect(() => {
     void step;
@@ -210,7 +218,7 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
       const url = feedSourceUrl(sourceType, address);
       if (step === "x" && !xFeedUrl(url))
         throw new Error("Enter a public X profile URL or an @handle.");
-      const result = await api.discoverFeed(url);
+      const result = await mutateRequest(() => api.discoverFeed(url));
       if (result.kind !== "published")
         throw new Error(
           "No published feed found. Try another website or a direct RSS link. You can set up feeds without RSS in the reader later.",
@@ -219,13 +227,13 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
         setNotice(`${result.preview.title} is already added.`);
         return;
       }
-      const feed = await api.createFeed({
+      const feed = await mutations.createFeed({
         sourceKind: "published",
         title: result.preview.title,
         feedUrl: result.preview.feedUrl,
         siteUrl: result.preview.siteUrl,
       });
-      setFeeds((current) => [...current, feed]);
+
       setNotice(`${feed.title} added.`);
       if (step !== "youtube") setAddresses((current) => ({ ...current, [step]: "" }));
     } catch (caught) {
@@ -243,12 +251,11 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
     setError(null);
     setNotice("");
     try {
-      const result = await api.importOpml(file);
+      const result = await mutations.importOpml(file);
       setImportResult(result);
       setNotice(
         `${result.imported} imported · ${result.duplicates} already added${result.failed.length ? ` · ${result.failed.length} failed` : ""}`,
       );
-      setFeeds((await api.bootstrap()).feeds);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -263,8 +270,8 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
     setError(null);
     setNotice("");
     try {
-      await api.deleteFeed(feed.id);
-      setFeeds((current) => current.filter((item) => item.id !== feed.id));
+      await mutations.deleteFeed(feed.id);
+
       setNotice(`${feed.title} removed.`);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -278,9 +285,12 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
     setError(null);
     try {
       const rule = shortsRule
-        ? await api.updateRule(shortsRule.id, { enabled: !shortsRule.enabled })
-        : await api.createRule(HIDE_SHORTS_RULE);
-      setRules((current) => [...current.filter((item) => item.id !== rule.id), rule]);
+        ? await mutations.updateRule(shortsRule.id, { enabled: !shortsRule.enabled })
+        : await mutations.createRule(HIDE_SHORTS_RULE);
+      client.setQueryData(readerKeys.rules, (current: Rule[] | undefined) => [
+        ...(current ?? []).filter((item) => item.id !== rule.id),
+        rule,
+      ]);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -292,10 +302,12 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
     setBusy("youtube");
     setError(null);
     try {
-      const { url } = await httpRequest<{ url: string }>("/api/youtube/connect", {
-        method: "POST",
-        headers,
-      });
+      const { url } = await mutateRequest(() =>
+        httpRequest<{ url: string }>("/api/youtube/connect", {
+          method: "POST",
+          headers,
+        }),
+      );
       window.location.assign(url);
     } catch (caught) {
       setError(errorMessage(caught));

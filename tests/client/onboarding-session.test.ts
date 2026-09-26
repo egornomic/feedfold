@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 /// <reference types="vite/client" />
+import { QueryClientProvider } from "@tanstack/react-query";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { Agent, EventSource as HttpEventSource } from "undici";
 import { assert, expect, it } from "vitest";
 import { api } from "../../src/client/api/api.js";
 import { httpRequest } from "../../src/client/api/http-request.js";
+import { createQueryClient } from "../../src/client/api/query.js";
 import { LoginDialog } from "../../src/client/features/auth/auth.js";
 import { createApp } from "../../src/server/app.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
@@ -33,6 +36,18 @@ it.each(["logout", "account switch"])(
     const restore = exposeBrowserGlobals(browser.window);
     const nativeFetch = globalThis.fetch;
     let cookie = "";
+    const previousEventSource = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
+    const events = new Agent().compose(
+      (dispatch) => (options, handler) => dispatch({ ...options, headers: { cookie } }, handler),
+    );
+    Object.defineProperty(globalThis, "EventSource", {
+      configurable: true,
+      value: class extends HttpEventSource {
+        constructor(url: string) {
+          super(new URL(url, origin), { node: { dispatcher: events } });
+        }
+      },
+    });
     // Supply browser URL resolution and cookie transport to the real HTTP server.
     globalThis.fetch = async (input, init) => {
       const headers = new Headers(init?.headers);
@@ -46,22 +61,27 @@ it.each(["logout", "account switch"])(
     const container = browser.window.document.getElementById("root");
     assert(container);
     const root = createRoot(container);
+    const client = createQueryClient();
     let dismissed = false;
     let authenticated = false;
     try {
       const user = await api.register("onboarding-revoked", "reader-password");
       await act(async () => {
         root.render(
-          createElement(LoginDialog, {
-            initialOnboardingUser: user,
-            onAuthenticated: () => {
-              authenticated = true;
-            },
-            onDismiss: () => {
-              dismissed = true;
-            },
-            onReady: () => {},
-          }),
+          createElement(
+            QueryClientProvider,
+            { client },
+            createElement(LoginDialog, {
+              initialOnboardingUser: user,
+              onAuthenticated: () => {
+                authenticated = true;
+              },
+              onDismiss: () => {
+                dismissed = true;
+              },
+              onReady: () => {},
+            }),
+          ),
         );
       });
       await waitFor(
@@ -102,6 +122,11 @@ it.each(["logout", "account switch"])(
       expect(authenticated).toBe(false);
     } finally {
       await act(async () => root.unmount());
+      client.clear();
+      await events.destroy();
+      if (previousEventSource)
+        Object.defineProperty(globalThis, "EventSource", previousEventSource);
+      else Reflect.deleteProperty(globalThis, "EventSource");
       globalThis.fetch = nativeFetch;
       restore();
       browser.window.close();

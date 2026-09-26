@@ -1,180 +1,7 @@
-import { JSDOM } from "jsdom";
-import { act, createElement, StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { act, createElement, Fragment } from "react";
 import { describe, expect, it } from "vitest";
-import { ApplicationApi } from "../../src/server/application-api.js";
-import { AppDatabase } from "../../src/server/database.js";
-import { ApplicationApiError } from "../../src/server/errors.js";
-import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
-import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
-import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
-import { completeFeedRefresh } from "../helpers/feeds.js";
-import { exposeBrowserGlobals, waitFor } from "./react-harness.js";
-
-function readerFixture(path = "/articles/unread", count = 10) {
-  const database = new AppDatabase(":memory:");
-  for (const feed of database.feeds.listFeeds(1)) database.feeds.deleteFeed(1, feed.id);
-  const feed = database.feeds.createFeed(1, {
-    title: "Reading queue",
-    feedUrl: "https://example.test/reading.xml",
-  });
-  const refresh = { httpStatus: 200, etag: null, lastModified: null };
-  completeFeedRefresh(database.feeds, feed.id, {
-    ...refresh,
-    parsed: { title: feed.title, siteUrl: null, articles: [] },
-  });
-  completeFeedRefresh(database.feeds, feed.id, {
-    ...refresh,
-    parsed: {
-      title: feed.title,
-      siteUrl: null,
-      articles: Array.from({ length: count }, (_, index) => ({
-        externalId: `article-${index}`,
-        title: `Article ${index + 1}`,
-        url: null,
-        author: null,
-        publishedAt: new Date(Date.UTC(2026, 8, 22, 12, 0, -index)).toISOString(),
-        summary: `Summary ${index + 1}`,
-        imageUrl: null,
-        feedContentHtml: `<p>Full content ${index + 1}</p>`,
-      })),
-    },
-  });
-  const services = createApplicationServices({ database, credentialCipher: null });
-  const application = new ApplicationApi(services);
-  const gates = new Map<
-    ApiOperation,
-    { wait: Promise<void>; release: () => void; held: number; beforeRequest: boolean }
-  >();
-  const failures: Error[] = [];
-  const invoke = async <K extends ApiOperation>(
-    request: ApiRequest<K>,
-  ): Promise<DesktopResponse<ApiOutput<K>>> => {
-    try {
-      const gate = gates.get(request.operation);
-      if (gate?.beforeRequest) {
-        gate.held += 1;
-        await gate.wait;
-      }
-      const value = await application.invoke(request);
-      if (gate && !gate.beforeRequest) {
-        gate.held += 1;
-        await gate.wait;
-      }
-      return { ok: true, value };
-    } catch (error) {
-      if (error instanceof Error) failures.push(error);
-      return {
-        ok: false,
-        error: {
-          message: error instanceof Error ? error.message : String(error),
-          status: error instanceof ApplicationApiError ? error.status : 500,
-          code: error instanceof ApplicationApiError ? error.code : null,
-        },
-      };
-    }
-  };
-  const bridge: FeedfoldDesktopBridge = {
-    platform: "desktop",
-    invoke,
-    exportOpml: async () => ({ ok: true, value: undefined }),
-    onDataChanged: (listener) => services.refreshService.subscribe(1, listener),
-  };
-  const dom = new JSDOM('<div id="app"></div>', {
-    pretendToBeVisual: true,
-    url: `https://feedfold.test${path}`,
-  });
-  Object.defineProperty(dom.window, "feedfoldDesktop", { value: bridge });
-  Object.defineProperty(dom.window, "matchMedia", {
-    value: (query: string) => ({
-      matches: query === "(prefers-reduced-motion: reduce)",
-      addEventListener() {},
-      removeEventListener() {},
-    }),
-  });
-  Object.defineProperty(dom.window.HTMLElement.prototype, "scrollIntoView", { value: () => {} });
-  dom.window.document.documentElement.dataset.inputModality = "keyboard";
-  const restore = exposeBrowserGlobals(dom.window);
-  const observers = new Set<() => void>();
-  const previousObserver = Object.getOwnPropertyDescriptor(globalThis, "IntersectionObserver");
-  Object.defineProperty(globalThis, "IntersectionObserver", {
-    configurable: true,
-    value: class {
-      readonly notify: () => void;
-      constructor(callback: (entries: Array<{ isIntersecting: boolean }>) => void) {
-        this.notify = () => callback([{ isIntersecting: true }]);
-      }
-      observe() {
-        observers.add(this.notify);
-      }
-      disconnect() {
-        observers.delete(this.notify);
-      }
-    },
-  });
-  const previousActEnvironment = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
-  const container = dom.window.document.querySelector<HTMLElement>("#app");
-  if (!container) throw new Error("The reader fixture is incomplete");
-  const root = createRoot(container);
-
-  return {
-    database,
-    application,
-    failures,
-    container,
-    dom,
-    async reachListEnd() {
-      await act(async () => {
-        for (const notify of [...observers]) notify();
-      });
-    },
-    hold(operation: ApiOperation, beforeRequest = false) {
-      let resolve = () => {};
-      let reject: (error: Error) => void = () => {};
-      const gate = {
-        beforeRequest,
-        held: 0,
-        wait: new Promise<void>((done, fail) => {
-          resolve = done;
-          reject = fail;
-        }),
-        release() {
-          gates.delete(operation);
-          resolve();
-        },
-        fail() {
-          gates.delete(operation);
-          reject(new ApplicationApiError(503, "The list is temporarily unavailable"));
-        },
-      };
-      gates.set(operation, gate);
-      return gate;
-    },
-    async mount() {
-      const modulePath: string = "../../src/client/app/app.js";
-      const { App } = await import(modulePath);
-      await act(async () => root.render(createElement(StrictMode, null, createElement(App))));
-    },
-    async close() {
-      await act(async () => {
-        for (const gate of gates.values()) gate.release();
-        root.unmount();
-      });
-      await Promise.all([services.refreshService.stop(), services.extractionQueue.stop()]);
-      await services.webFeedService.close();
-      database.close();
-      dom.window.close();
-      restore();
-      if (previousObserver)
-        Object.defineProperty(globalThis, "IntersectionObserver", previousObserver);
-      else Reflect.deleteProperty(globalThis, "IntersectionObserver");
-      if (previousActEnvironment === undefined)
-        Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-      else Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", previousActEnvironment);
-    },
-  };
-}
+import { waitFor } from "./react-harness.js";
+import { readerFixture } from "./reader-fixture.js";
 
 describe("reader navigation", () => {
   it("loads the reading queue while sidebar settings are still arriving", async () => {
@@ -319,6 +146,104 @@ describe("reader navigation", () => {
       }
     },
   );
+
+  it("keeps a failed automatic read unread and permits an explicit retry", async () => {
+    const fixture = readerFixture();
+    try {
+      fixture.database.connection.exec(`
+        CREATE TRIGGER reject_article_state BEFORE UPDATE ON feed_articles
+        BEGIN SELECT RAISE(ABORT, 'article state write rejected'); END;
+      `);
+      const appPath: string = "../../src/client/app/app.js";
+      const { App } = await import(appPath);
+      const { Toaster } = await import("sonner");
+      await fixture.mount(
+        createElement(Fragment, null, createElement(App), createElement(Toaster)),
+      );
+      await waitFor("articles", () => !!fixture.container.querySelector(".article-open-button"));
+      await act(async () =>
+        fixture.container.querySelector<HTMLButtonElement>(".article-open-button")?.click(),
+      );
+      await waitFor("read failure", () => fixture.failures.length > 0);
+      await waitFor(
+        "unread rollback",
+        () => !!fixture.container.querySelector('[aria-label="Mark as read (U)"]'),
+      );
+      // Refetch the live data while the failed article remains open.
+      await act(async () =>
+        fixture.dom.window.dispatchEvent(new fixture.dom.window.Event("online")),
+      );
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 100)));
+      expect(fixture.failures).toHaveLength(1);
+      expect(fixture.database.bootstrap.getBootstrap(1).counts.unread).toBe(10);
+      const key = (key: string) =>
+        fixture.dom.window.dispatchEvent(
+          new fixture.dom.window.KeyboardEvent("keydown", { key, bubbles: true }),
+        );
+      await act(async () => key("s"));
+      await waitFor("save failure", () => fixture.failures.length === 2);
+      expect(fixture.dom.window.document.body.textContent).not.toContain("Article saved");
+      expect(fixture.container.querySelector('[aria-label="Save article (S)"]')).not.toBeNull();
+      fixture.database.connection.exec("DROP TRIGGER reject_article_state");
+      await act(async () => key("u"));
+      await waitFor(
+        "explicit read",
+        () => fixture.database.bootstrap.getBootstrap(1).counts.unread === 9,
+      );
+      await waitFor(
+        "read success",
+        () =>
+          fixture.dom.window.document.body.textContent?.includes("Article marked as read") === true,
+      );
+      expect(fixture.failures).toHaveLength(2);
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  it("keeps a save made while the full article response is still arriving", async () => {
+    const fixture = readerFixture("/articles/all");
+    const detail = fixture.hold("article");
+    try {
+      await fixture.mount();
+      await waitFor(
+        "article previews and prefetch",
+        () => detail.held > 0 && !!fixture.container.querySelector(".article-open-button"),
+      );
+      await act(async () =>
+        fixture.container.querySelector<HTMLButtonElement>(".article-open-button")?.click(),
+      );
+      await waitFor(
+        "article toolbar",
+        () => !!fixture.container.querySelector('[aria-label="Save article (S)"]'),
+      );
+      await act(async () =>
+        fixture.container
+          .querySelector<HTMLButtonElement>('[aria-label="Save article (S)"]')
+          ?.click(),
+      );
+      await waitFor(
+        "persisted save",
+        () => fixture.database.bootstrap.getBootstrap(1).counts.starred === 1,
+      );
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+      await act(async () => detail.release());
+      await waitFor(
+        "full article content",
+        () =>
+          fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
+            ?.textContent === "Full content 1",
+      );
+      expect(
+        fixture.container.querySelector('[aria-label="Remove from Saved (S)"]'),
+      ).not.toBeNull();
+      expect(
+        fixture.database.articles.listArticlePage(1, { state: "starred" }).articles,
+      ).toHaveLength(1);
+    } finally {
+      await fixture.close();
+    }
+  });
 
   it("shows a bookmarked article before its neighbors and preserves changes made while they load", async () => {
     const fixture = readerFixture();

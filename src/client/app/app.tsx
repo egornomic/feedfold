@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
 import type { SessionUser } from "../../shared/types";
 import { ApiError, AUTH_REQUIRED_EVENT, api, appUrl, errorMessage } from "../api/api";
+import { createQueryClient } from "../api/query";
 import { SessionLoading } from "../features/auth/auth";
 import { Homepage } from "../features/auth/homepage";
 import { onboardingStep } from "../features/auth/onboarding-state";
@@ -8,87 +10,85 @@ import { StartupError } from "../features/reader/reader-states";
 import AppShell from "./app-shell";
 
 export function App() {
-  const [checkingSession, setCheckingSession] = useState(true);
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [setupUser, setSetupUser] = useState<SessionUser | undefined>();
-  const [sessionError, setSessionError] = useState<string | null>(null);
-  const sessionRequestId = useRef(0);
+  const [client] = useState(createQueryClient);
+  return (
+    <QueryClientProvider client={client}>
+      <Session />
+    </QueryClientProvider>
+  );
+}
+
+function Session() {
+  const client = useQueryClient();
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const session = useQuery({
+    queryKey: ["session"],
+    queryFn: async () => {
+      try {
+        return await api.session();
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) return null;
+        throw error;
+      }
+    },
+    staleTime: Infinity,
+  });
+  const { mutateAsync: logout } = useMutation({
+    mutationFn: api.logout,
+    onSettled: () => signedOut(),
+  });
 
   useEffect(() => {
     document.documentElement.dataset.theme = "dark";
   }, []);
 
-  const loadSession = useCallback(async () => {
-    const requestId = sessionRequestId.current + 1;
-    sessionRequestId.current = requestId;
-    setCheckingSession(true);
-    setSessionError(null);
-    try {
-      const sessionUser = await api.session();
-      if (sessionRequestId.current === requestId) {
-        if (onboardingStep(sessionUser.id)) setSetupUser(sessionUser);
-        else setUser(sessionUser);
-      }
-    } catch (error) {
-      if (sessionRequestId.current !== requestId) return;
-      setUser(null);
-      if (!(error instanceof ApiError && error.status === 401)) {
-        setSessionError(
-          !navigator.onLine
-            ? "You are offline. Reconnect, then try again."
-            : error instanceof ApiError
-              ? errorMessage(error)
-              : "feedfold could not reach the server. Check the connection, then try again.",
-        );
-      }
-    } finally {
-      if (sessionRequestId.current === requestId) setCheckingSession(false);
-    }
-  }, []);
-
+  const clearSession = useCallback(() => {
+    client.clear();
+    client.setQueryData(["session"], null);
+    setOnboardingComplete(false);
+  }, [client]);
   useEffect(() => {
-    void loadSession();
-    return () => {
-      sessionRequestId.current += 1;
-    };
-  }, [loadSession]);
-
-  useEffect(() => {
-    const requireAuthentication = () => {
-      setUser(null);
-      setSetupUser(undefined);
-      setCheckingSession(false);
-    };
-    window.addEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
-    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
-  }, []);
-
+    window.addEventListener(AUTH_REQUIRED_EVENT, clearSession);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, clearSession);
+  }, [clearSession]);
   const signedOut = useCallback(() => {
     window.history.replaceState(null, "", appUrl("/"));
-    setUser(null);
-  }, []);
+    clearSession();
+  }, [clearSession]);
 
-  const logout = useCallback(async () => {
-    try {
-      await api.logout();
-    } finally {
-      signedOut();
-    }
-  }, [signedOut]);
-
-  if (checkingSession) return <SessionLoading />;
-  if (sessionError) {
-    return <StartupError message={sessionError} retry={() => void loadSession()} />;
-  }
-  if (!user)
+  if (session.isPending) return <SessionLoading />;
+  if (session.error)
+    return (
+      <StartupError
+        message={
+          !navigator.onLine
+            ? "You are offline. Reconnect, then try again."
+            : errorMessage(session.error)
+        }
+        retry={() => void session.refetch()}
+      />
+    );
+  const user = session.data;
+  const needsSetup = user && !onboardingComplete && onboardingStep(user.id);
+  if (!user || needsSetup)
     return (
       <Homepage
-        onboardingUser={setupUser}
-        onAuthenticated={(authenticated) => {
-          setSetupUser(undefined);
-          setUser(authenticated);
+        onboardingUser={needsSetup ? user : undefined}
+        onAuthenticated={(authenticated: SessionUser) => {
+          client.clear();
+          client.setQueryData(["session"], authenticated);
+          setOnboardingComplete(true);
         }}
       />
     );
-  return <AppShell key={user.id} user={user} onLogout={logout} onAccountDeleted={signedOut} />;
+  return (
+    <AppShell
+      key={user.id}
+      user={user}
+      onLogout={async () => {
+        await logout();
+      }}
+      onAccountDeleted={signedOut}
+    />
+  );
 }

@@ -1,16 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Article, TelegramArticleMedia, XArticleMedia } from "../../../../shared/types";
+import type { Article } from "../../../../shared/types";
 import { xPostId } from "../../../../shared/x";
 import { api, errorMessage } from "../../../api/api";
 import { articleImageUrl } from "./article-image-url";
 import { ImageLightbox, type ImageLightboxItem, type ImageLightboxState } from "./image-lightbox";
-
-type XMediaViewState =
-  | { status: "loading" }
-  | { status: "ready"; media: XArticleMedia }
-  | { status: "error"; message: string };
 
 export function XPostVideo({
   article,
@@ -21,42 +17,27 @@ export function XPostVideo({
   postId: string;
   targetId: string | null;
 }) {
-  const [state, setState] = useState<XMediaViewState>({ status: "loading" });
+  const mediaQuery = useQuery({
+    queryKey: ["article-media", article.id, "x", postId],
+    queryFn: ({ signal }) => api.xArticleMedia(article.id, postId, signal),
+  });
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  const requestController = useRef<AbortController | null>(null);
-
-  const loadMedia = useCallback(() => {
-    requestController.current?.abort();
-    const controller = new AbortController();
-    requestController.current = controller;
-    setState({ status: "loading" });
-    void api
-      .xArticleMedia(article.id, postId, controller.signal)
-      .then((media) => setState({ status: "ready", media }))
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "error", message: errorMessage(error) });
-        }
-      });
-  }, [article.id, postId]);
-
-  useEffect(() => {
-    loadMedia();
-    return () => requestController.current?.abort();
-  }, [loadMedia]);
-
   useLayoutEffect(() => {
     setPortalTarget(targetId && article.feedContentHtml ? document.getElementById(targetId) : null);
   }, [article.feedContentHtml, targetId]);
 
-  if (state.status === "loading") return null;
+  if (mediaQuery.isPending) return null;
   const isQuotedPostVideo = xPostId(article.url) !== postId;
-  if (state.status === "error") {
+  if (mediaQuery.isError) {
     const error = (
       <div className="x-media-state x-media-error" role="alert">
         <AlertTriangle aria-hidden="true" size={16} />
-        <span>{state.message}</span>
-        <button className="secondary-button" type="button" onClick={loadMedia}>
+        <span>{errorMessage(mediaQuery.error)}</span>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => void mediaQuery.refetch()}
+        >
           Try again
         </button>
         <a href={`https://x.com/i/status/${postId}`} target="_blank" rel="noreferrer">
@@ -71,14 +52,14 @@ export function XPostVideo({
     // biome-ignore lint/a11y/useMediaCaption: X's public media metadata does not expose caption tracks.
     <video
       className="x-video-player"
-      src={articleImageUrl(state.media.sourceUrl)}
-      poster={state.media.posterUrl ? articleImageUrl(state.media.posterUrl) : undefined}
+      src={articleImageUrl(mediaQuery.data.sourceUrl)}
+      poster={mediaQuery.data.posterUrl ? articleImageUrl(mediaQuery.data.posterUrl) : undefined}
       aria-label={
         isQuotedPostVideo
           ? "X video from quoted post"
           : `X video from ${article.author ?? "this post"}`
       }
-      style={state.media.aspectRatio ? { aspectRatio: state.media.aspectRatio } : undefined}
+      style={mediaQuery.data.aspectRatio ? { aspectRatio: mediaQuery.data.aspectRatio } : undefined}
       controls
       playsInline
       preload="metadata"
@@ -87,52 +68,32 @@ export function XPostVideo({
   return portalTarget ? createPortal(video, portalTarget) : video;
 }
 
-type TelegramMediaViewState =
-  | { status: "loading" }
-  | { status: "ready"; media: TelegramArticleMedia }
-  | { status: "error"; message: string };
-
 export function TelegramPostMedia({ article }: { article: Article }) {
-  const [state, setState] = useState<TelegramMediaViewState>({ status: "loading" });
+  const mediaQuery = useQuery({
+    queryKey: ["article-media", article.id, "telegram"],
+    queryFn: ({ signal }) => api.telegramArticleMedia(article.id, signal),
+  });
   const [lightbox, setLightbox] = useState<ImageLightboxState | null>(null);
-  const requestController = useRef<AbortController | null>(null);
-
-  const loadMedia = useCallback(() => {
-    requestController.current?.abort();
-    const controller = new AbortController();
-    requestController.current = controller;
-    setState({ status: "loading" });
-    void api
-      .telegramArticleMedia(article.id, controller.signal)
-      .then((media) => setState({ status: "ready", media }))
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "error", message: errorMessage(error) });
-        }
-      });
-  }, [article.id]);
-
-  useEffect(() => {
-    loadMedia();
-    return () => requestController.current?.abort();
-  }, [loadMedia]);
-
-  if (state.status === "loading") return null;
-  if (state.status === "error") {
+  if (mediaQuery.isPending) return null;
+  if (mediaQuery.isError) {
     return (
       <div className="telegram-media-state telegram-media-error" role="alert">
         <AlertTriangle aria-hidden="true" size={16} />
-        <span>{state.message}</span>
-        <button className="secondary-button" type="button" onClick={loadMedia}>
+        <span>{errorMessage(mediaQuery.error)}</span>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => void mediaQuery.refetch()}
+        >
           Try again
         </button>
       </div>
     );
   }
-  if (state.media.items.length === 0) return null;
+  if (mediaQuery.data.items.length === 0) return null;
 
-  const multiple = state.media.items.length > 1;
-  const galleryImages: ImageLightboxItem[] = state.media.items
+  const multiple = mediaQuery.data.items.length > 1;
+  const galleryImages: ImageLightboxItem[] = mediaQuery.data.items
     .filter((item) => item.kind === "image")
     .map((item, index, images) => ({
       src: articleImageUrl(item.sourceUrl),
@@ -144,11 +105,11 @@ export function TelegramPostMedia({ article }: { article: Article }) {
         className={`telegram-media-gallery${multiple ? " is-grouped" : ""}`}
         aria-label="Telegram post media"
       >
-        {state.media.items.map((item, index) => {
-          const label = `Telegram post ${item.kind} ${index + 1} of ${state.media.items.length}`;
+        {mediaQuery.data.items.map((item, index) => {
+          const label = `Telegram post ${item.kind} ${index + 1} of ${mediaQuery.data.items.length}`;
           const style = item.aspectRatio ? { aspectRatio: item.aspectRatio } : undefined;
           if (item.kind === "image") {
-            const galleryIndex = state.media.items
+            const galleryIndex = mediaQuery.data.items
               .slice(0, index)
               .filter((candidate) => candidate.kind === "image").length;
             return (

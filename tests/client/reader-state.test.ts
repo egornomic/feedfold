@@ -6,8 +6,6 @@ import {
   articlesWithUpdatedState,
   filterRuleName,
   firstUnseenArticlePage,
-  fullContentIdsAfterReload,
-  hasReadingModeContent,
   invalidateArticleSummaries,
   readerRouteForSelection,
   readerScopeLabel,
@@ -163,30 +161,6 @@ describe("reader state", () => {
     expect(refreshFeedIds(data, 12, 1)).toEqual([12]);
     expect(refreshFeedIds(data, null, 1)).toEqual([10, 11]);
     expect(refreshFeedIds(data, null, null)).toBeUndefined();
-  });
-
-  it("reuses previews for magazine but waits for every article body before expanding", () => {
-    const articles = [
-      { ...article, id: 1 },
-      { ...article, id: 2 },
-    ];
-
-    expect(hasReadingModeContent("magazine", articles, new Set())).toBe(true);
-    expect(hasReadingModeContent("expanded", articles, new Set())).toBe(false);
-    expect(hasReadingModeContent("expanded", articles, new Set([1, 3]))).toBe(false);
-    expect(hasReadingModeContent("expanded", articles, new Set([1, 2]))).toBe(true);
-    expect(hasReadingModeContent("expanded", [], new Set())).toBe(true);
-  });
-
-  it("tracks which replacement records still have full article content", () => {
-    const articles = [
-      { ...article, id: 1 },
-      { ...article, id: 2 },
-    ];
-
-    expect(fullContentIdsAfterReload("magazine", articles, null)).toEqual(new Set());
-    expect(fullContentIdsAfterReload("magazine", articles, 2)).toEqual(new Set([2]));
-    expect(fullContentIdsAfterReload("expanded", articles, null)).toEqual(new Set([1, 2]));
   });
 
   it("adds newly delivered articles after the current reading sequence", () => {

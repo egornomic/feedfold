@@ -21,8 +21,9 @@ import type {
   WebPageFeedDiscovery,
 } from "../../../shared/types";
 import { api, errorMessage } from "../../api/api";
+import { useRequestMutation } from "../../api/use-request-mutation";
 import { DropdownSelect } from "../../ui/dropdown";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 import { FeedEntriesPreview } from "./feed-entries-preview";
 import { feedHost } from "./feed-format";
 import {
@@ -244,6 +245,7 @@ export function AddFeedForm({
   onCancel: () => void;
   onSaved: (feed: Feed) => Promise<void> | void;
 }) {
+  const { run: mutateRequest } = useRequestMutation();
   const [sourceType, setSourceType] = useState<AddFeedSourceType | null>(
     initialSourceType ?? (initialSourceUrl ? "rss" : null),
   );
@@ -339,37 +341,40 @@ export function AddFeedForm({
     window.requestAnimationFrame(() => addressInputRef.current?.focus());
   };
 
-  const discover = useCallback(async (url: string, requestedSourceType: AddFeedSourceType) => {
-    if (previewFocusFrame.current !== null) {
-      window.cancelAnimationFrame(previewFocusFrame.current);
-      previewFocusFrame.current = null;
-    }
-    setDiscovering(true);
-    setError(null);
-    setPreview(null);
-    setWebPage(null);
-    setWebAnalysis(null);
-    setSelectedCandidateId(null);
-    try {
-      const result = await api.discoverFeed(url);
-      if (result.kind === "published") {
-        setPreview(result.preview);
-        setPreviewSourceType(requestedSourceType);
-        setTitle(result.preview.title);
-      } else {
-        setWebPage(result);
-        setTitle(result.title);
-      }
-      previewFocusFrame.current = window.requestAnimationFrame(() => {
+  const discover = useCallback(
+    async (url: string, requestedSourceType: AddFeedSourceType) => {
+      if (previewFocusFrame.current !== null) {
+        window.cancelAnimationFrame(previewFocusFrame.current);
         previewFocusFrame.current = null;
-        previewHeadingRef.current?.focus({ preventScroll: true });
-      });
-    } catch (error) {
-      setError(errorMessage(error));
-    } finally {
-      setDiscovering(false);
-    }
-  }, []);
+      }
+      setDiscovering(true);
+      setError(null);
+      setPreview(null);
+      setWebPage(null);
+      setWebAnalysis(null);
+      setSelectedCandidateId(null);
+      try {
+        const result = await mutateRequest(() => api.discoverFeed(url));
+        if (result.kind === "published") {
+          setPreview(result.preview);
+          setPreviewSourceType(requestedSourceType);
+          setTitle(result.preview.title);
+        } else {
+          setWebPage(result);
+          setTitle(result.title);
+        }
+        previewFocusFrame.current = window.requestAnimationFrame(() => {
+          previewFocusFrame.current = null;
+          previewHeadingRef.current?.focus({ preventScroll: true });
+        });
+      } catch (error) {
+        setError(errorMessage(error));
+      } finally {
+        setDiscovering(false);
+      }
+    },
+    [mutateRequest],
+  );
 
   useEffect(() => {
     if (!initialSourceUrl || autoDiscoveryStarted.current) return;
@@ -385,7 +390,7 @@ export function AddFeedForm({
     setWebAnalysis(null);
     setSelectedCandidateId(null);
     try {
-      const result = await api.analyzeWebPage(url);
+      const result = await mutateRequest(() => api.analyzeWebPage(url));
       setWebAnalysis(result);
       setSelectedCandidateId(result.selectedCandidateId);
       setTitle(result.title);

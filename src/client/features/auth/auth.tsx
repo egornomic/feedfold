@@ -3,6 +3,7 @@ import {
   startAuthentication,
   startRegistration,
 } from "@simplewebauthn/browser";
+import { useQuery } from "@tanstack/react-query";
 import { KeyRound, LoaderCircle, LogIn, UserPlus, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import {
@@ -14,8 +15,9 @@ import {
   USERNAME_MIN_LENGTH,
   USERNAME_PATTERN_SOURCE,
 } from "../../../shared/auth.js";
-import type { RegistrationMode, SessionUser } from "../../../shared/types.js";
+import type { SessionUser } from "../../../shared/types.js";
 import { AUTH_REQUIRED_EVENT, api, appUrl, errorMessage } from "../../api/api.js";
+import { useRequestMutation } from "../../api/use-request-mutation.js";
 import { BrandIdentity } from "../../ui/brand.js";
 import { Modal, useDialog } from "../../ui/dialog.js";
 import { Onboarding } from "./onboarding.js";
@@ -51,6 +53,7 @@ export function LoginDialog({
   onReady: () => void;
   initialOnboardingUser?: SessionUser | undefined;
 }) {
+  const { run: mutateRequest } = useRequestMutation();
   const [setupUser, setSetupUser] = useState(initialOnboardingUser ?? null);
   const [inviteCode, setInviteCode] = useState(() =>
     window.location.pathname.replace(/\/$/, "").endsWith("/join")
@@ -60,15 +63,16 @@ export function LoginDialog({
   const [mode, setMode] = useState<"login" | "register">(
     window.location.pathname.replace(/\/$/, "").endsWith("/join") ? "register" : "login",
   );
-  const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("closed");
-  const [configLoaded, setConfigLoaded] = useState(!!initialOnboardingUser);
+  const config = useQuery({ queryKey: ["auth-config"], queryFn: api.authConfig });
+  const registrationMode = config.data?.registrationMode ?? "closed";
+  const configLoaded = !!initialOnboardingUser || !config.isPending;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [usingPasskey, setUsingPasskey] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [registrationAvailable, setRegistrationAvailable] = useState(false);
-  const [passkeysAvailable, setPasskeysAvailable] = useState(false);
+  const registrationAvailable = config.data?.registrationAvailable ?? false;
+  const passkeysAvailable = !!config.data?.passkeysAvailable && browserSupportsWebAuthn();
   const dialog = useDialog(
     () => {
       if (setupUser) {
@@ -96,27 +100,9 @@ export function LoginDialog({
   }, []);
 
   useEffect(() => {
-    let active = true;
-    void api
-      .authConfig()
-      .then((config) => {
-        if (!active) return;
-        setRegistrationAvailable(config.registrationAvailable);
-        setRegistrationMode(config.registrationMode);
-        setConfigLoaded(true);
-        if (!config.registrationAvailable) setMode("login");
-        setPasskeysAvailable(config.passkeysAvailable && browserSupportsWebAuthn());
-      })
-      .catch((caught) => {
-        if (active) {
-          setError(errorMessage(caught));
-          setConfigLoaded(true);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (config.data && !config.data.registrationAvailable) setMode("login");
+    if (config.error) setError(errorMessage(config.error));
+  }, [config.data, config.error]);
 
   useEffect(() => {
     if (configLoaded) onReady();
@@ -140,8 +126,8 @@ export function LoginDialog({
     try {
       authenticated(
         mode === "login"
-          ? await api.login(username, password)
-          : await api.register(username, password, inviteCode),
+          ? await mutateRequest(() => api.login(username, password))
+          : await mutateRequest(() => api.register(username, password, inviteCode)),
         mode === "register",
       );
     } catch (caught) {
@@ -161,9 +147,9 @@ export function LoginDialog({
     setUsingPasskey(true);
     setError(null);
     try {
-      const { ceremonyId, options } = await api.passkeyAuthenticationOptions();
+      const { ceremonyId, options } = await mutateRequest(() => api.passkeyAuthenticationOptions());
       const response = await startAuthentication({ optionsJSON: options });
-      authenticated(await api.passkeyLogin(ceremonyId, response));
+      authenticated(await mutateRequest(() => api.passkeyLogin(ceremonyId, response)));
     } catch (caught) {
       setError(
         caught instanceof DOMException && caught.name === "NotAllowedError"
@@ -179,9 +165,14 @@ export function LoginDialog({
     setUsingPasskey(true);
     setError(null);
     try {
-      const { registrationId, options } = await api.passkeySignupOptions(username, inviteCode);
+      const { registrationId, options } = await mutateRequest(() =>
+        api.passkeySignupOptions(username, inviteCode),
+      );
       const response = await startRegistration({ optionsJSON: options });
-      authenticated(await api.completePasskeySignup(registrationId, response), true);
+      authenticated(
+        await mutateRequest(() => api.completePasskeySignup(registrationId, response)),
+        true,
+      );
     } catch (caught) {
       setError(
         caught instanceof DOMException && caught.name === "NotAllowedError"

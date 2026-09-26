@@ -5,7 +5,7 @@ import { isYouTubeChannelFeed, type YouTubeStatus } from "../../../shared/youtub
 import { httpRequest } from "../../api/http-request";
 import { AddFeedForm } from "../feeds/add-feed-form";
 import type { AddFeedSourceType } from "../feeds/feed-source";
-import type { ReaderDataMutations } from "../reader/data-resource";
+import type { ReaderDataMutations } from "../reader/reader-data";
 import { PageHeader } from "./shared";
 import "./add-feed.css";
 

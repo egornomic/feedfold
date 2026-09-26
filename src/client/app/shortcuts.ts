@@ -124,15 +124,23 @@ export function useAppShortcuts({
         u: () => {
           if (!activeArticle) return;
           const nextRead = !activeArticle.isRead;
-          void articleActions.changeArticleState(activeArticle, { isRead: nextRead });
-          showToast(nextRead ? "Article marked as read" : "Article marked as unread");
+          void articleActions
+            .changeArticleState(activeArticle, { isRead: nextRead })
+            .then((saved) => {
+              if (saved)
+                showToast(nextRead ? "Article marked as read" : "Article marked as unread");
+            });
         },
         s: () => {
           if (!activeArticle) return;
-          void articleActions.changeArticleState(activeArticle, {
-            isStarred: !activeArticle.isStarred,
-          });
-          showToast(activeArticle.isStarred ? "Removed from Saved" : "Article saved");
+          void articleActions
+            .changeArticleState(activeArticle, {
+              isStarred: !activeArticle.isStarred,
+            })
+            .then((saved) => {
+              if (saved)
+                showToast(activeArticle.isStarred ? "Removed from Saved" : "Article saved");
+            });
         },
         c: () => void articleActions.copyArticleUrl(activeArticle),
         o: () => articleActions.openArticleSource(activeArticle),

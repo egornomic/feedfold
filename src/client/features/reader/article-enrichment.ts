@@ -1,3 +1,4 @@
+import { isCancelledError, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AiSettings,
@@ -7,6 +8,8 @@ import type {
   ReadingMode,
 } from "../../../shared/types";
 import { ApiError, api, errorMessage } from "../../api/api";
+import { articleQuery } from "../../api/query";
+import { useRequestMutation } from "../../api/use-request-mutation";
 import type { AppRouteController } from "../../app/route";
 import {
   type ArticleSummaryViewState,
@@ -16,55 +19,14 @@ import {
 } from "./article/article-ai-state";
 import { articleTranslationSourceKind, fullContentToggleAction } from "./article/article-content";
 import type { ArticleQueueController } from "./article-queue";
-import type { ReaderDataResource } from "./data-resource";
+import type { ReaderData } from "./reader-data";
 import { articleSettingsInvalidation, invalidateArticleSummaries } from "./reader-state";
-
-type ArticleAiRequestKind = "summary" | "translation";
-
-function useArticleAiRequestLifecycle() {
-  const activeRequests = useRef<Record<ArticleAiRequestKind, Map<number, number>>>({
-    summary: new Map(),
-    translation: new Map(),
-  });
-  const nextRequestId = useRef(0);
-
-  const start = useCallback((kind: ArticleAiRequestKind, articleId: number): number | null => {
-    const requests = activeRequests.current[kind];
-    if (requests.has(articleId)) return null;
-    const requestId = nextRequestId.current + 1;
-    nextRequestId.current = requestId;
-    requests.set(articleId, requestId);
-    return requestId;
-  }, []);
-
-  const isCurrent = useCallback(
-    (kind: ArticleAiRequestKind, articleId: number, requestId: number): boolean =>
-      activeRequests.current[kind].get(articleId) === requestId,
-    [],
-  );
-
-  const finish = useCallback(
-    (kind: ArticleAiRequestKind, articleId: number, requestId: number): void => {
-      const requests = activeRequests.current[kind];
-      if (requests.get(articleId) === requestId) requests.delete(articleId);
-    },
-    [],
-  );
-
-  const invalidate = useCallback((kind: ArticleAiRequestKind, articleId?: number): void => {
-    const requests = activeRequests.current[kind];
-    if (articleId === undefined) requests.clear();
-    else requests.delete(articleId);
-  }, []);
-
-  return { start, isCurrent, finish, invalidate };
-}
 
 interface ArticleEnrichmentOptions {
   bootstrap: BootstrapData | null;
   queue: ArticleQueueController;
   route: AppRouteController;
-  dataResource: ReaderDataResource;
+  dataResource: ReaderData;
   readingMode: ReadingMode;
   showToast: (message: string) => void;
 }
@@ -77,6 +39,8 @@ export function useArticleEnrichment({
   readingMode,
   showToast,
 }: ArticleEnrichmentOptions) {
+  const client = useQueryClient();
+  const { run: mutateRequest } = useRequestMutation();
   const [fullContentVisibleIds, setFullContentVisibleIds] = useState<Set<number>>(() => new Set());
   const [articleSummaryStates, setArticleSummaryStates] = useState<
     Map<number, ArticleSummaryViewState>
@@ -88,8 +52,15 @@ export function useArticleEnrichment({
     () => new Map(),
   );
   const fullContentVisibleIdsRef = useRef(new Set<number>());
-  const fullContentLoadingIds = useRef(new Set<number>());
-  const { start, isCurrent, finish, invalidate } = useArticleAiRequestLifecycle();
+  const invalidate = useCallback(
+    (kind: "summary" | "translation", articleId?: number) => {
+      const queryKey =
+        articleId === undefined ? ["enrichment", kind] : ["enrichment", kind, articleId];
+      void client.cancelQueries({ queryKey });
+      client.removeQueries({ queryKey });
+    },
+    [client],
+  );
   const translationLanguageRef = useRef(bootstrap?.settings.translationLanguage);
   const previousQueryRevision = useRef(queue.queryRevision);
   translationLanguageRef.current = bootstrap?.settings.translationLanguage;
@@ -98,7 +69,6 @@ export function useArticleEnrichment({
     if (previousQueryRevision.current === queue.queryRevision) return;
     previousQueryRevision.current = queue.queryRevision;
     fullContentVisibleIdsRef.current = new Set();
-    fullContentLoadingIds.current.clear();
     setArticleContentErrors(new Map());
     invalidate("translation");
     setFullContentVisibleIds(new Set());
@@ -116,10 +86,8 @@ export function useArticleEnrichment({
   const loadFullArticle = useCallback(
     async (article: Article, retry = false) => {
       if (queue.fullContentLoadedIds.current.has(article.id)) return;
-      if (fullContentLoadingIds.current.has(article.id)) return;
       if (!retry && articleContentErrors.has(article.id)) return;
 
-      fullContentLoadingIds.current.add(article.id);
       if (retry) {
         setArticleContentErrors((current) => {
           if (!current.has(article.id)) return current;
@@ -129,17 +97,15 @@ export function useArticleEnrichment({
         });
       }
       try {
-        const fullArticle = await api.article(article.id);
+        const fullArticle = await client.fetchQuery(articleQuery(article.id));
         if (!fullContentVisibleIdsRef.current.has(article.id)) queue.mergeArticle(fullArticle);
       } catch (caught) {
         setArticleContentErrors((current) =>
           new Map(current).set(article.id, errorMessage(caught)),
         );
-      } finally {
-        fullContentLoadingIds.current.delete(article.id);
       }
     },
-    [articleContentErrors, queue],
+    [articleContentErrors, client, queue],
   );
 
   useEffect(() => {
@@ -152,33 +118,20 @@ export function useArticleEnrichment({
     }
   }, [loadFullArticle, queue, readingMode]);
 
+  const extractingArticle = queue.activeArticle;
+  const extraction = useQuery({
+    ...articleQuery(extractingArticle?.id ?? 0),
+    enabled:
+      extractingArticle !== null &&
+      fullContentVisibleIds.has(extractingArticle.id) &&
+      (extractingArticle.extractionStatus === "pending" ||
+        extractingArticle.extractionStatus === "processing"),
+    refetchInterval: 2_000,
+  });
   useEffect(() => {
-    if (
-      (readingMode === "magazine" && route.routedArticleId === null) ||
-      !queue.activeArticle ||
-      !fullContentVisibleIds.has(queue.activeArticle.id) ||
-      (queue.activeArticle.extractionStatus !== "pending" &&
-        queue.activeArticle.extractionStatus !== "processing")
-    ) {
-      return;
-    }
-    const articleId = queue.activeArticle.id;
-    const poll = window.setInterval(() => {
-      void api
-        .article(articleId)
-        .then(queue.mergeArticle)
-        .catch(() => {
-          // A transient poll error should not replace readable feed content with an error screen.
-        });
-    }, 2000);
-    return () => window.clearInterval(poll);
-  }, [
-    fullContentVisibleIds,
-    queue.activeArticle,
-    queue.mergeArticle,
-    readingMode,
-    route.routedArticleId,
-  ]);
+    if (extraction.data && fullContentVisibleIds.has(extraction.data.id))
+      queue.mergeArticle(extraction.data);
+  }, [extraction.data, fullContentVisibleIds, queue.mergeArticle]);
 
   useEffect(() => {
     if (route.routedArticleId !== null && queue.activeArticle?.id === route.routedArticleId) {
@@ -223,7 +176,7 @@ export function useArticleEnrichment({
       setFullContentVisibleIds((current) => new Set(current).add(article.id));
       if (action === "show") return;
       try {
-        queue.mergeArticle(await api.loadFullContent(article.id));
+        queue.mergeArticle(await mutateRequest(() => api.loadFullContent(article.id)));
       } catch (caught) {
         fullContentVisibleIdsRef.current.delete(article.id);
         setFullContentVisibleIds((current) => {
@@ -235,7 +188,7 @@ export function useArticleEnrichment({
         void loadFullArticle(article);
       }
     },
-    [invalidate, loadFullArticle, patchArticleTranslationState, queue, showToast],
+    [invalidate, loadFullArticle, mutateRequest, patchArticleTranslationState, queue, showToast],
   );
 
   const patchArticleSummaryState = useCallback(
@@ -273,8 +226,6 @@ export function useArticleEnrichment({
         return;
       }
 
-      const requestId = start("summary", article.id);
-      if (requestId === null) return;
       patchArticleSummaryState(article.id, {
         visible: true,
         loading: true,
@@ -283,25 +234,43 @@ export function useArticleEnrichment({
         promptId,
       });
       try {
-        const summary = await api.summarizeArticle(
-          article.id,
-          promptId,
-          regenerate,
-          isYouTubeVideo ? "gemini" : feature?.provider,
-        );
-        if (!isCurrent("summary", article.id, requestId)) return;
+        const summary = await client.fetchQuery({
+          queryKey: [
+            "enrichment",
+            "summary",
+            article.id,
+            promptId,
+            bootstrap?.settings.customPrompts,
+          ],
+          queryFn: () =>
+            mutateRequest(() =>
+              api.summarizeArticle(
+                article.id,
+                promptId,
+                regenerate,
+                isYouTubeVideo ? "gemini" : feature?.provider,
+              ),
+            ),
+          staleTime: regenerate ? 0 : Infinity,
+          retry: false,
+        });
         queue.setArticles((current) =>
           current.map((item) => (item.id === article.id ? { ...item, aiSummary: summary } : item)),
         );
         patchArticleSummaryState(article.id, { loading: false });
       } catch (caught) {
-        if (!isCurrent("summary", article.id, requestId)) return;
+        if (isCancelledError(caught)) return;
         patchArticleSummaryState(article.id, { loading: false, error: errorMessage(caught) });
-      } finally {
-        finish("summary", article.id, requestId);
       }
     },
-    [bootstrap?.aiSettings, finish, isCurrent, patchArticleSummaryState, queue, start],
+    [
+      bootstrap?.aiSettings,
+      bootstrap?.settings.customPrompts,
+      client,
+      mutateRequest,
+      patchArticleSummaryState,
+      queue,
+    ],
   );
 
   const toggleArticleSummary = useCallback(
@@ -359,8 +328,7 @@ export function useArticleEnrichment({
         article,
         fullContentVisibleIdsRef.current.has(article.id),
       );
-      const requestId = start("translation", article.id);
-      if (requestId === null) return;
+
       patchArticleTranslationState(article.id, {
         visible: false,
         loading: true,
@@ -368,12 +336,25 @@ export function useArticleEnrichment({
         configurationMissing: false,
       });
       try {
-        const translation = await api.translateArticle(
-          article.id,
-          sourceKind,
-          bootstrap?.aiSettings.features.articleSummary?.provider,
-        );
-        if (!isCurrent("translation", article.id, requestId)) return;
+        const translation = await client.fetchQuery({
+          queryKey: [
+            "enrichment",
+            "translation",
+            article.id,
+            sourceKind,
+            bootstrap?.settings.translationLanguage,
+          ],
+          queryFn: () =>
+            mutateRequest(() =>
+              api.translateArticle(
+                article.id,
+                sourceKind,
+                bootstrap?.aiSettings.features.articleSummary?.provider,
+              ),
+            ),
+          staleTime: Infinity,
+          retry: false,
+        });
         const currentArticle = queue.articlesRef.current.find((item) => item.id === article.id);
         const currentSourceKind = currentArticle
           ? articleTranslationSourceKind(
@@ -389,7 +370,7 @@ export function useArticleEnrichment({
           translation,
         });
       } catch (caught) {
-        if (!isCurrent("translation", article.id, requestId)) return;
+        if (isCancelledError(caught)) return;
         const configurationMissing =
           caught instanceof ApiError &&
           ["AI_NOT_CONFIGURED", "AI_KEY_MISSING", "AI_CREDENTIAL_STORAGE_UNAVAILABLE"].includes(
@@ -401,17 +382,15 @@ export function useArticleEnrichment({
           error: configurationMissing ? null : errorMessage(caught),
           configurationMissing,
         });
-      } finally {
-        finish("translation", article.id, requestId);
       }
     },
     [
       bootstrap?.aiSettings,
-      finish,
-      isCurrent,
+      bootstrap?.settings.translationLanguage,
+      client,
+      mutateRequest,
       patchArticleTranslationState,
       queue.articlesRef,
-      start,
     ],
   );
 
