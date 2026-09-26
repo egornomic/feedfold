@@ -245,7 +245,7 @@
   padding-left: 5px;
 }
 
-.feed-nav-item[draggable="true"] {
+.feed-nav-item {
   cursor: grab;
 }
 

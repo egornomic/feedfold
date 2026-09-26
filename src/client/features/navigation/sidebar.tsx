@@ -28,7 +28,13 @@ import type { AppView } from "../../app/routes";
 import { BrandIdentity } from "../../ui/brand";
 import { IconButton, Kbd } from "../../ui/controls";
 import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
-import { type FeedDragState, useFeedDrag } from "../feeds/feed-drag";
+import {
+  FeedDragProvider,
+  type FeedDragState,
+  useFeedDrag,
+  useFeedDraggable,
+  useFeedDropTarget,
+} from "../feeds/feed-drag";
 import {
   FeedActionMenuItems,
   type FeedManagementAction,
@@ -111,7 +117,15 @@ type SidebarContextMenuState =
       top: number;
     };
 
-export function Sidebar({
+export function Sidebar(props: SidebarProps) {
+  return (
+    <FeedDragProvider onMoveFeed={props.onMoveFeed}>
+      <SidebarContent {...props} />
+    </FeedDragProvider>
+  );
+}
+
+function SidebarContent({
   bootstrap,
   user,
   localApp = false,
@@ -132,7 +146,6 @@ export function Sidebar({
   onNavigate,
   onFeedAction,
   onFolderAction,
-  onMoveFeed,
   onRefresh,
   onLogout,
 }: SidebarProps) {
@@ -149,8 +162,8 @@ export function Sidebar({
 
   const rootFolders = bootstrap.folders.filter((folder) => folder.parentId === null);
   const uncategorized = bootstrap.feeds.filter((feed) => feed.folderId === null);
-  const feedDrag = useFeedDrag(bootstrap.feeds, onMoveFeed);
-  const { draggedFeed, dropTarget } = feedDrag;
+  const feedDrag = useFeedDrag();
+  const { draggedFeed } = feedDrag;
   const hasFeedErrors = bootstrap.feeds.some((feed) => feed.lastError);
   const refreshing = bootstrap.feeds.some((feed) => feed.refreshing);
   const selectedFolderPathIds = selectedFolderPath(
@@ -181,8 +194,11 @@ export function Sidebar({
     [],
   );
 
-  const topLevelDropAvailable = draggedFeed !== null && draggedFeed.folderId !== null;
-  const topLevelDropActive = dropTarget === "top-level";
+  const {
+    ref: topLevelRef,
+    available: topLevelDropAvailable,
+    isDropTarget: topLevelDropActive,
+  } = useFeedDropTarget(null, "Top level");
 
   return (
     <aside
@@ -256,10 +272,7 @@ export function Sidebar({
           <fieldset
             className={`sidebar-section-heading sidebar-top-level-drop${topLevelDropAvailable ? " is-feed-drop-available" : ""}${topLevelDropActive ? " is-feed-drop-target" : ""}`}
             aria-label={topLevelDropAvailable ? "Move feed to top level" : "Subscription actions"}
-            onDragEnter={(event) => feedDrag.enterTarget(null, event)}
-            onDragOver={(event) => feedDrag.enterTarget(null, event)}
-            onDragLeave={(event) => feedDrag.leaveTarget(null, event)}
-            onDrop={(event) => void feedDrag.dropOnTarget(null, event)}
+            ref={topLevelRef}
           >
             <span>
               {topLevelDropActive
@@ -549,9 +562,11 @@ function SidebarFolder({
       : selectedFolderId !== null
         ? `folder:${selectedFolderId}`
         : null;
-  const dropAvailable =
-    feedDrag.draggedFeed !== null && feedDrag.draggedFeed.folderId !== folder.id;
-  const dropActive = feedDrag.dropTarget === folder.id;
+  const {
+    ref: dropRef,
+    available: dropAvailable,
+    isDropTarget: dropActive,
+  } = useFeedDropTarget(folder.id, folder.name, () => setExpanded(true));
 
   useEffect(() => {
     if (revealsSelection && selectedScope) setExpanded(true);
@@ -585,14 +600,7 @@ function SidebarFolder({
               : undefined
           }
           type="button"
-          onDragEnter={(event) => feedDrag.enterTarget(folder.id, event)}
-          onDragOver={(event) => feedDrag.enterTarget(folder.id, event)}
-          onDragLeave={(event) => feedDrag.leaveTarget(folder.id, event)}
-          onDrop={(event) => {
-            void feedDrag.dropOnTarget(folder.id, event).then((moved) => {
-              if (moved) setExpanded(true);
-            });
-          }}
+          ref={dropRef}
           onClick={() => onSelectScope(null, folder.id)}
           onContextMenu={(event) => {
             event.preventDefault();
@@ -677,7 +685,7 @@ function SidebarFeed({
     feed.healthStatus !== "healthy" ? "failed" : feed.paused ? "paused" : "healthy";
   const healthLabel =
     feed.healthStatus !== "healthy" ? "Needs attention" : feed.paused ? "Paused" : "Healthy";
-  const dragging = feedDrag.draggedFeed?.id === feed.id;
+  const { ref: dragRef, isDragging: dragging } = useFeedDraggable(feed);
   const moving = feedDrag.movingFeedId === feed.id;
 
   return (
@@ -691,10 +699,8 @@ function SidebarFeed({
           aria-current={selected ? "page" : undefined}
           aria-haspopup="menu"
           aria-busy={moving || undefined}
-          draggable={feedDrag.movingFeedId === null}
+          ref={dragRef}
           type="button"
-          onDragStart={(event) => feedDrag.start(feed, event)}
-          onDragEnd={feedDrag.end}
           onClick={onSelect}
           onContextMenu={(event) => {
             event.preventDefault();
