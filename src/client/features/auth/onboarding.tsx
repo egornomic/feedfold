@@ -146,8 +146,11 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
   const fileRef = useRef<HTMLInputElement>(null);
   const headers = { "X-Feedfold-Account": user.id };
 
-  const load = () =>
-    Promise.all([bootstrapResult.refetch(), rulesResult.refetch(), youtubeResult.refetch()]);
+  const load = async () => {
+    setError(null);
+    await Promise.all([bootstrapResult.refetch(), rulesResult.refetch(), youtubeResult.refetch()]);
+    if (defaultRule.isError) defaultRule.reset();
+  };
   useEffect(() => {
     if (
       rulesResult.data &&
@@ -550,7 +553,7 @@ export function Onboarding({ user, onFinish }: { user: SessionUser; onFinish: ()
         {error ? (
           <div className="login-error" role="alert">
             {error}
-            {!loaded ? (
+            {!loaded || defaultRule.isError ? (
               <button className="quiet-button" type="button" onClick={() => void load()}>
                 Retry
               </button>

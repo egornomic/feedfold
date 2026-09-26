@@ -53,13 +53,12 @@ export function useReaderData() {
     scope: { id: "article-state" },
     mutationFn: (request: () => Promise<unknown>) => request(),
     onMutate: async () => {
-      const interrupted = client
-        .getQueryCache()
-        .findAll({ queryKey: readerKeys.lists, fetchStatus: "fetching" });
-      await client.cancelQueries({
+      const interrupted = client.getQueryCache().findAll({
         queryKey: readerKeys.all,
-        predicate: (query) => query.queryKey[1] !== "article",
+        fetchStatus: "fetching",
+        predicate: (query) => query.queryKey[1] === "articles" || query.queryKey[1] === "article",
       });
+      await client.cancelQueries({ queryKey: readerKeys.all });
       return interrupted.map((query) => query.queryKey);
     },
     onSettled: (_data, _error, _request, interrupted) => {

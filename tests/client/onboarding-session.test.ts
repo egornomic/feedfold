@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /// <reference types="vite/client" />
+import { transferableAbortController } from "node:util";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
@@ -16,9 +17,9 @@ import { createApplicationRuntime } from "../../src/server/runtime/application-r
 import { runtimeConfiguration } from "../../src/server/runtime/configuration.js";
 import { exposeBrowserGlobals, waitFor } from "./react-harness.js";
 
-it.each(["logout", "account switch"])(
-  "returns onboarding to a dismissible sign-in dialog after %s",
-  async (revocation) => {
+it.each(["logout", "account switch", "a failed default Shorts rule"])(
+  "allows recovery from %s in onboarding without restarting the app",
+  async (scenario) => {
     const runtime = createApplicationRuntime({
       databasePath: ":memory:",
       configuration: runtimeConfiguration({}),
@@ -52,7 +53,15 @@ it.each(["logout", "account switch"])(
     globalThis.fetch = async (input, init) => {
       const headers = new Headers(init?.headers);
       if (cookie) headers.set("cookie", cookie);
-      const response = await nativeFetch(new URL(String(input), origin), { ...init, headers });
+      const controller = transferableAbortController();
+      const abort = () => controller.abort();
+      if (init?.signal?.aborted) abort();
+      init?.signal?.addEventListener("abort", abort, { once: true });
+      const response = await nativeFetch(new URL(String(input), origin), {
+        ...init,
+        headers,
+        signal: controller.signal,
+      }).finally(() => init?.signal?.removeEventListener("abort", abort));
       const setCookie = response.headers.get("set-cookie");
       if (setCookie) cookie = setCookie.split(";", 1)[0] ?? "";
       return response;
@@ -66,6 +75,12 @@ it.each(["logout", "account switch"])(
     let authenticated = false;
     try {
       const user = await api.register("onboarding-revoked", "reader-password");
+      if (scenario === "a failed default Shorts rule") {
+        runtime.services.database.connection.exec(`
+          CREATE TRIGGER reject_default_rule BEFORE INSERT ON rules
+          BEGIN SELECT RAISE(ABORT, 'default rule write rejected'); END;
+        `);
+      }
       await act(async () => {
         root.render(
           createElement(
@@ -90,7 +105,33 @@ it.each(["logout", "account switch"])(
       );
       expect((await api.bootstrap()).feeds).toEqual([]);
 
-      if (revocation === "logout") await api.logout();
+      if (scenario === "a failed default Shorts rule") {
+        await waitFor(
+          "the failed rule error",
+          () => browser.window.document.querySelector('[role="alert"]') !== null,
+        );
+        expect(await api.rules()).toEqual([]);
+        runtime.services.database.connection.exec("DROP TRIGGER reject_default_rule");
+        const retry = [...browser.window.document.querySelectorAll("button")].find(
+          (button) => button.textContent === "Retry",
+        );
+        assert(retry, "The failed default rule must offer Retry");
+        await act(async () => retry.click());
+        const account = runtime.services.database.auth.findEnabledUser(user.username);
+        assert(account);
+        await waitFor("the default rule to persist", () =>
+          runtime.services.database.rules
+            .listRules(account.id)
+            .some((rule) => rule.name === "Hide YouTube Shorts"),
+        );
+        const rules = await api.rules();
+        expect(rules).toHaveLength(1);
+        expect(rules[0]).toMatchObject({ name: "Hide YouTube Shorts", enabled: true });
+        expect(browser.window.document.querySelector('[role="alert"]')).toBeNull();
+        return;
+      }
+
+      if (scenario === "logout") await api.logout();
       else await api.register("another-reader", "reader-password");
       await act(async () => {
         await expect(

@@ -282,7 +282,8 @@ describe("live article delivery", () => {
       const readerContent = () => container.querySelector(".article-swipe-layer.is-active");
       expect(readerContent()?.textContent).not.toContain("Starting article summary");
       expect(readerContent()?.querySelector('[aria-label="Loading article"]')).not.toBeNull();
-      expect(initialContentRequests).toBe(1);
+      // Opening marks the article read, replacing the older content request with a fresh one.
+      await waitFor("content fetched after marking read", () => initialContentRequests === 2);
       await act(async () => releaseInitialContent());
       await waitFor(
         "formatted article content",

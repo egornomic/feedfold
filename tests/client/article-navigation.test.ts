@@ -245,6 +245,49 @@ describe("reader navigation", () => {
     }
   });
 
+  it.each(["read", "saved"] as const)(
+    "keeps an explicit %s change when an older background detail response arrives",
+    async (state) => {
+      const fixture = readerFixture("/articles/all");
+      try {
+        await fixture.mount();
+        await waitFor("articles", () => !!fixture.container.querySelector(".article-open-button"));
+        await act(async () =>
+          fixture.container.querySelector<HTMLButtonElement>(".article-open-button")?.click(),
+        );
+        await waitFor(
+          "the read article and full content",
+          () =>
+            !!fixture.container.querySelector('[aria-label="Mark as unread (U)"]') &&
+            fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
+              ?.textContent === "Full content 1",
+        );
+        const detail = fixture.hold("article");
+        await act(async () =>
+          fixture.dom.window.dispatchEvent(new fixture.dom.window.Event("online")),
+        );
+        await waitFor("the delayed background detail", () => detail.held > 0);
+        const label = state === "read" ? "Mark as unread (U)" : "Save article (S)";
+        await act(async () =>
+          fixture.container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.click(),
+        );
+        await waitFor("persisted state change", () => {
+          const counts = fixture.database.bootstrap.getBootstrap(1).counts;
+          return state === "read" ? counts.unread === 10 : counts.starred === 1;
+        });
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+        await act(async () => detail.release());
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+        const expectedLabel = state === "read" ? "Mark as read (U)" : "Remove from Saved (S)";
+        expect(fixture.container.querySelector(`[aria-label="${expectedLabel}"]`)).not.toBeNull();
+        const counts = fixture.database.bootstrap.getBootstrap(1).counts;
+        expect(state === "read" ? counts.unread : counts.starred).toBe(state === "read" ? 10 : 1);
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
+
   it("shows a bookmarked article before its neighbors and preserves changes made while they load", async () => {
     const fixture = readerFixture();
     const articles = fixture.hold("articles");

@@ -1,4 +1,4 @@
-import { isCancelledError, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isCancelledError, useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AiSettings,
@@ -8,7 +8,7 @@ import type {
   ReadingMode,
 } from "../../../shared/types";
 import { ApiError, api, errorMessage } from "../../api/api";
-import { articleQuery } from "../../api/query";
+import { articleQuery, counterMutationKey } from "../../api/query";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import type { AppRouteController } from "../../app/route";
 import {
@@ -40,6 +40,7 @@ export function useArticleEnrichment({
   showToast,
 }: ArticleEnrichmentOptions) {
   const client = useQueryClient();
+  const changingCounters = useIsMutating({ mutationKey: counterMutationKey }) > 0;
   const { run: mutateRequest } = useRequestMutation();
   const [fullContentVisibleIds, setFullContentVisibleIds] = useState<Set<number>>(() => new Set());
   const [articleSummaryStates, setArticleSummaryStates] = useState<
@@ -85,6 +86,7 @@ export function useArticleEnrichment({
 
   const loadFullArticle = useCallback(
     async (article: Article, retry = false) => {
+      if (changingCounters) return;
       if (queue.fullContentLoadedIds.current.has(article.id)) return;
       if (!retry && articleContentErrors.has(article.id)) return;
 
@@ -100,12 +102,13 @@ export function useArticleEnrichment({
         const fullArticle = await client.fetchQuery(articleQuery(article.id));
         if (!fullContentVisibleIdsRef.current.has(article.id)) queue.mergeArticle(fullArticle);
       } catch (caught) {
+        if (isCancelledError(caught)) return;
         setArticleContentErrors((current) =>
           new Map(current).set(article.id, errorMessage(caught)),
         );
       }
     },
-    [articleContentErrors, client, queue],
+    [articleContentErrors, changingCounters, client, queue],
   );
 
   useEffect(() => {
@@ -122,6 +125,7 @@ export function useArticleEnrichment({
   const extraction = useQuery({
     ...articleQuery(extractingArticle?.id ?? 0),
     enabled:
+      !changingCounters &&
       extractingArticle !== null &&
       fullContentVisibleIds.has(extractingArticle.id) &&
       (extractingArticle.extractionStatus === "pending" ||
