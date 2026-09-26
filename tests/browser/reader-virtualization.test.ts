@@ -187,6 +187,64 @@ async function settle(page: Page) {
 }
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it("removes older articles from the unread queue after a bulk read without reloading", async () => {
+    const sample = seedReaderBacklog(database, "Bulk read queue", 3);
+    database.feeds.completeSourceRefresh(sample.sourceId, {
+      ...sample.refresh,
+      parsed: {
+        title: sample.feed.title,
+        siteUrl: null,
+        articles: sample.articles.map((article, index) => ({
+          ...article,
+          publishedAt: new Date(Date.now() - (index + 2) * 86_400_000).toISOString(),
+        })),
+      },
+    });
+    const page = await open("magazine");
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+      await page
+        .getByRole("button", { name: `Open ${sample.articles[0]?.title}`, exact: true })
+        .waitFor();
+      await page.getByRole("button", { name: "Mark older articles as read", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Older than a day", exact: true }).click();
+      await expect.poll(() => database.feeds.getFeed(1, sample.feed.id)?.unreadCount).toBe(0);
+      await page.getByText("No unread articles", { exact: true }).waitFor();
+      expect(await page.locator(".virtual-article-row").count()).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("applies a saved folder order to its visible articles without reloading", async () => {
+    const sample = seedReaderBacklog(database, "Sorted queue", 3);
+    const folder = database.folders.createFolder(1, {
+      name: "Sort review",
+      sortDirection: "oldest",
+    });
+    database.feeds.updateFeed(1, sample.feed.id, { folderId: folder.id });
+    const page = await open("magazine");
+    const firstTitle = () => page.locator(".virtual-article-row").first().textContent();
+    try {
+      await page.goto(`${origin}folders/${folder.id}/all`);
+      await expect.poll(firstTitle).toContain(sample.articles[2]?.title);
+      await page.getByRole("button", { name: `Manage ${folder.name}`, exact: true }).click();
+      await page.getByRole("menuitem", { name: "Folder settings", exact: true }).click();
+      await page.getByRole("combobox", { name: "Article order", exact: true }).click();
+      await page.getByRole("option", { name: "Newest first", exact: true }).click();
+      await page.getByRole("button", { name: "Save folder", exact: true }).click();
+      await expect
+        .poll(() => database.folders.getFolder(1, folder.id)?.sortDirection)
+        .toBe("newest");
+      await page
+        .getByRole("dialog", { name: "Folder settings", exact: true })
+        .waitFor({ state: "hidden" });
+      await expect.poll(firstTitle).toContain(sample.articles[0]?.title);
+    } finally {
+      await page.close();
+    }
+  });
+
   for (const mode of ["magazine", "expanded"] as const) {
     it(`${mode}: loads pages with bounded DOM, retries failure, and searches unmounted article bodies`, async () => {
       const page = await open(mode);

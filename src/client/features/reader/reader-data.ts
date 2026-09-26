@@ -1,5 +1,5 @@
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BootstrapData } from "../../../shared/types.js";
 import { api } from "../../api/api.js";
 import {
@@ -27,6 +27,7 @@ export type ReaderDataMutations = Pick<
 
 export function useReaderData() {
   const client = useQueryClient();
+  const [mutationRevision, setMutationRevision] = useState(0);
   const changingCounters = useIsMutating({ mutationKey: counterMutationKey }) > 0;
   const bootstrap = useQuery({
     ...bootstrapQuery(),
@@ -45,8 +46,11 @@ export function useReaderData() {
   );
 
   const { mutateAsync: mutate } = useMutation({
-    mutationFn: (request: () => Promise<unknown>) => request(),
-    onSuccess: () => invalidateReader(client),
+    mutationFn: ({ request }: { request: () => Promise<unknown>; reconcile: boolean }) => request(),
+    onSuccess: async (_result, { reconcile }) => {
+      await invalidateReader(client);
+      if (reconcile) setMutationRevision((revision) => revision + 1);
+    },
   });
   const { mutateAsync: counterMutation } = useMutation({
     mutationKey: counterMutationKey,
@@ -71,7 +75,8 @@ export function useReaderData() {
   });
 
   const data = useMemo(() => {
-    const run = async <T>(request: () => Promise<T>): Promise<T> => (await mutate(request)) as T;
+    const run = async <T>(request: () => Promise<T>, reconcile = true): Promise<T> =>
+      (await mutate({ request, reconcile })) as T;
     const mutations: ReaderDataMutations = {
       createFeed: (...args) => run(() => api.createFeed(...args)),
       importOpml: (...args) => run(() => api.importOpml(...args)),
@@ -98,7 +103,7 @@ export function useReaderData() {
       runCounterMutation: async <T>(request: () => Promise<T>): Promise<T> =>
         (await counterMutation(request)) as T,
       beginRefresh: async (feedIds: number[] | undefined, trackedIds: number[]) => {
-        const result = await run(() => api.refresh(feedIds));
+        const result = await run(() => api.refresh(feedIds), false);
         const ids = new Set([...trackedIds, ...result.refreshingFeedIds]);
         const settled = new Promise<void>((resolve) => {
           const done = () => {
@@ -127,7 +132,7 @@ export function useReaderData() {
     };
   }, [client, mutate, counterMutation]);
 
-  return { data, bootstrap, rules };
+  return { data, bootstrap, rules, mutationRevision };
 }
 
 export type ReaderData = ReturnType<typeof useReaderData>["data"];

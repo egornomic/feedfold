@@ -80,7 +80,12 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
   const setShortcutHelpOpen = useInterfaceState((state) => state.setShortcutHelpOpen);
   const setManagementRequest = useInterfaceState((state) => state.setManagementRequest);
   const openFeedManagement = useInterfaceState((state) => state.openFeedManagement);
-  const { data: dataResource, bootstrap: bootstrapResult, rules: rulesResult } = useReaderData();
+  const {
+    data: dataResource,
+    bootstrap: bootstrapResult,
+    rules: rulesResult,
+    mutationRevision,
+  } = useReaderData();
   const bootstrap = bootstrapResult.data ?? null;
   const bootstrapError = bootstrapResult.error ? errorMessage(bootstrapResult.error) : null;
   const rules = rulesResult.data ?? null;
@@ -95,6 +100,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
 
   const queue = useArticleQueue({
     route,
+    mutationRevision,
     enabled: true,
     readingMode,
     onReadingModeChange: setReadingMode,
