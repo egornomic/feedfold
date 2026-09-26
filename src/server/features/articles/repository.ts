@@ -1,4 +1,5 @@
 import type Sqlite from "better-sqlite3";
+import { articleSearchText, normalizeSearchText } from "../../../shared/article-search.js";
 import type {
   Article,
   ArticlePage,
@@ -55,7 +56,9 @@ function initialArticles(
 }
 
 export class ArticleRepository {
-  constructor(private readonly sqlite: Sqlite.Database) {}
+  constructor(private readonly sqlite: Sqlite.Database) {
+    sqlite.function("article_text", { deterministic: true }, articleSearchText);
+  }
 
   getStarredCount(userId: number): number {
     return Number(
@@ -105,10 +108,12 @@ export class ArticleRepository {
       queueWhere.push(
         `(articles.title LIKE ? ESCAPE '\\' COLLATE NOCASE
           OR COALESCE(articles.author, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-          OR articles.summary LIKE ? ESCAPE '\\' COLLATE NOCASE)`,
+          OR articles.summary LIKE ? ESCAPE '\\' COLLATE NOCASE
+          OR article_text(articles.feed_content_html) LIKE ? ESCAPE '\\' COLLATE NOCASE
+          OR article_text(articles.content_html) LIKE ? ESCAPE '\\' COLLATE NOCASE)`,
       );
-      const escaped = query.search.replace(/[\\%_]/g, "\\$&");
-      queueValues.push(`%${escaped}%`, `%${escaped}%`, `%${escaped}%`);
+      const escaped = normalizeSearchText(query.search).replace(/[\\%_]/g, "\\$&");
+      queueValues.push(...Array<string>(5).fill(`%${escaped}%`));
     }
     if (query.anchorId === undefined) {
       where.push(...queueWhere);

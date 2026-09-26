@@ -134,13 +134,6 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
     route.route.kind === "reader" && !queue.showLoading && !queue.error
       ? (queue.loadedReaderRoute ?? route.readerRoute)
       : route.readerRoute;
-  const readerPath = appRoutePath(displayedReaderRoute);
-
-  useLayoutEffect(() => {
-    if (readerPath && readingWorkspaceRef.current) {
-      readingWorkspaceRef.current.scrollTop = 0;
-    }
-  }, [readerPath]);
 
   useEffect(() => {
     if (route.route) setNavOpen(false);
@@ -303,7 +296,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
       if (!workspace || route.view !== "reader") return false;
       const scrollContainer =
         queue.readingMode === "expanded"
-          ? workspace
+          ? workspace.querySelector<HTMLElement>(".expanded-stream")
           : route.routedArticleId !== null
             ? workspace.querySelector<HTMLElement>(".article-swipe-layer.is-active")
             : null;

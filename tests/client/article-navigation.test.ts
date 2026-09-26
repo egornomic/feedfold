@@ -4,6 +4,33 @@ import { waitFor } from "./react-harness.js";
 import { readerFixture } from "./reader-fixture.js";
 
 describe("reader navigation", () => {
+  it("follows rapid next and previous keys while an article is opening", async () => {
+    const fixture = readerFixture("/articles/all", 4);
+    fixture.database.settings.updateSettings(1, { singleKeyShortcuts: true });
+    try {
+      await fixture.mount();
+      await waitFor(
+        "article previews",
+        () => !!fixture.container.querySelector(".article-open-button"),
+      );
+      await act(async () => {
+        fixture.container.querySelector<HTMLButtonElement>(".article-open-button")?.click();
+        for (const key of ["j", "j", "k"])
+          fixture.dom.window.dispatchEvent(
+            new fixture.dom.window.KeyboardEvent("keydown", { key, bubbles: true }),
+          );
+      });
+      await waitFor(
+        "the second article",
+        () =>
+          fixture.container.querySelector(".article-swipe-layer.is-active h2")?.textContent ===
+          "Article 2",
+      );
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("loads the reading queue while sidebar settings are still arriving", async () => {
     const fixture = readerFixture();
     const bootstrap = fixture.hold("bootstrap");
@@ -33,7 +60,7 @@ describe("reader navigation", () => {
   it.each(["all", "unread", "saved"] as const)(
     "returns to the loaded %s queue without waiting for another download",
     async (state) => {
-      const fixture = readerFixture(`/articles/${state}`, 250);
+      const fixture = readerFixture(`/articles/${state}`, 200);
       try {
         if (state === "saved") {
           for (const article of fixture.database.articles.listArticlePage(1, {
@@ -49,7 +76,11 @@ describe("reader navigation", () => {
         await fixture.mount();
         const rows = () => fixture.container.querySelectorAll(".article-open-button");
         await waitFor("the first page", () => rows().length === 100);
-        await fixture.reachListEnd();
+        await act(async () =>
+          fixture.container
+            .querySelector<HTMLButtonElement>(".virtual-article-footer button")
+            ?.click(),
+        );
         await waitFor("the second page", () => rows().length === 200);
         const selected = [...rows()].find((row) => row.textContent === "Open Article 151");
         expect(selected).toBeDefined();

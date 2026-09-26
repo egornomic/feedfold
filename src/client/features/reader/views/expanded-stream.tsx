@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
 import type { FeedManagementAction } from "../../feeds/feed-management";
 import { ArticleActions } from "../article/article-action-bar";
@@ -9,75 +8,14 @@ import {
   EMPTY_ARTICLE_TRANSLATION_STATE,
 } from "../article/article-ai-state";
 import { ArticleDocument } from "../article/article-document";
-import { useMarkReadOnScroll } from "../interaction/mark-read-on-scroll";
-import { ArticleLoadSentinel } from "./article-load-sentinel";
-
-function useExpandedActionDocking(
-  streamRef: React.RefObject<HTMLElement | null>,
-  articleIds: string,
-) {
-  useLayoutEffect(() => {
-    const stream = streamRef.current;
-    const container = stream?.parentElement;
-    if (!stream || !container || !articleIds) return;
-
-    const dockingTargets: Array<{ actions: HTMLElement; article: HTMLElement }> = [];
-    for (const article of stream.querySelectorAll<HTMLElement>(".expanded-article")) {
-      const actions = article.querySelector<HTMLElement>(".expanded-actions");
-      if (actions) dockingTargets.push({ actions, article });
-    }
-    const dockingLead = dockingTargets[0]
-      ? Number.parseFloat(
-          window.getComputedStyle(dockingTargets[0].article).borderBottomRightRadius,
-        )
-      : 0;
-    const dockedRadius = dockingTargets[0]
-      ? Number.parseFloat(window.getComputedStyle(dockingTargets[0].actions).borderTopRightRadius)
-      : 0;
-    const actionHeight = dockingTargets[0]?.actions.getBoundingClientRect().height ?? 0;
-    const currentRadii = new WeakMap<HTMLElement, number>();
-    let frameHandle: number | null = null;
-    const updateDockingState = () => {
-      frameHandle = null;
-      const containerTop = container.getBoundingClientRect().top;
-      const nextRadii = dockingTargets.map(({ article }) => {
-        if (dockingLead === 0) return 0;
-        const articleBottom = article.getBoundingClientRect().bottom;
-        const progress = Math.min(
-          1,
-          Math.max(0, (containerTop + actionHeight + dockingLead - articleBottom) / dockingLead),
-        );
-        return Math.round(dockedRadius * progress * 100) / 100;
-      });
-      for (const [index, { actions }] of dockingTargets.entries()) {
-        const radius = nextRadii[index] ?? 0;
-        if (currentRadii.get(actions) === radius) continue;
-        currentRadii.set(actions, radius);
-        actions.style.borderBottomRightRadius = `${radius}px`;
-        actions.style.borderBottomLeftRadius = `${radius}px`;
-      }
-    };
-    const scheduleDockingUpdate = () => {
-      if (frameHandle !== null) return;
-      frameHandle = window.requestAnimationFrame(updateDockingState);
-    };
-
-    updateDockingState();
-    container.addEventListener("scroll", scheduleDockingUpdate, { passive: true });
-    window.addEventListener("resize", scheduleDockingUpdate);
-    return () => {
-      container.removeEventListener("scroll", scheduleDockingUpdate);
-      window.removeEventListener("resize", scheduleDockingUpdate);
-      if (frameHandle !== null) window.cancelAnimationFrame(frameHandle);
-      for (const { actions } of dockingTargets) {
-        actions.style.removeProperty("border-bottom-right-radius");
-        actions.style.removeProperty("border-bottom-left-radius");
-      }
-    };
-  }, [articleIds, streamRef]);
-}
+import type { ReadingPosition } from "../interaction/reading-position";
+import { VirtualArticles } from "./virtual-articles";
 
 export function ExpandedStream({
+  enabled,
+  positions,
+  positionKey,
+  loadMoreError,
   articles,
   activeId,
   topAlignedId,
@@ -105,6 +43,10 @@ export function ExpandedStream({
   onOpenAiSettings,
   onFilterSelection,
 }: {
+  enabled: boolean;
+  positions: Map<string, ReadingPosition>;
+  positionKey: string;
+  loadMoreError: boolean;
   articles: Article[];
   activeId: number | null;
   topAlignedId: number | null;
@@ -132,23 +74,24 @@ export function ExpandedStream({
   onOpenAiSettings: () => void;
   onFilterSelection: (article: Article, text: string) => void;
 }) {
-  const streamRef = useRef<HTMLElement>(null);
-  useExpandedActionDocking(streamRef, articles.map((article) => article.id).join(","));
-  const registerItem = useMarkReadOnScroll({
-    articles,
-    activeId,
-    enabled: markReadOnScroll,
-    onMarkPassedRead,
-    rootRef: streamRef,
-    useParent: true,
-    topAlignedId,
-  });
-
   return (
-    <section ref={streamRef} className="expanded-stream" aria-label="Expanded articles">
-      {articles.map((article) => (
+    <VirtualArticles
+      expanded
+      articles={articles}
+      activeId={activeId}
+      topAlignedId={topAlignedId}
+      enabled={enabled}
+      positions={positions}
+      positionKey={positionKey}
+      loadMoreError={loadMoreError}
+      markReadOnScroll={markReadOnScroll}
+      onMarkPassedRead={onMarkPassedRead}
+      hasMore={hasMore}
+      loadingMore={loadingMore}
+      onLoadMore={onLoadMore}
+    >
+      {(article) => (
         <article
-          ref={(element) => registerItem(article.id, element)}
           className={`expanded-article${article.id === activeId ? " is-active" : ""}${article.isRead ? " is-read" : ""}`}
           key={article.id}
           aria-labelledby={`expanded-${article.id}-title`}
@@ -189,14 +132,7 @@ export function ExpandedStream({
             onFilterSelection={onFilterSelection}
           />
         </article>
-      ))}
-      <ArticleLoadSentinel
-        rootRef={streamRef}
-        useParent
-        hasMore={hasMore}
-        loadingMore={loadingMore}
-        onLoadMore={onLoadMore}
-      />
-    </section>
+      )}
+    </VirtualArticles>
   );
 }
