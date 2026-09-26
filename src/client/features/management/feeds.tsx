@@ -14,15 +14,18 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ComponentProps, type ReactNode, useState } from "react";
 import type { BootstrapData, Feed, Folder } from "../../../shared/types";
 import { DropdownSelect } from "../../ui/dropdown";
 import { Menu, MenuPopup } from "../../ui/menu";
 import {
+  FeedDragProvider,
   type FeedDragState,
   type FeedDropTarget,
   feedDropTarget,
   useFeedDrag,
+  useFeedDraggable,
+  useFeedDropTarget,
 } from "../feeds/feed-drag";
 import {
   type FeedStatusFilter,
@@ -125,7 +128,15 @@ function FeedTransferMenu({
   );
 }
 
-function FeedsPage({
+function FeedsPage(props: ComponentProps<typeof FeedsPageContent>) {
+  return (
+    <FeedDragProvider onMoveFeed={props.onMoveFeed}>
+      <FeedsPageContent {...props} />
+    </FeedDragProvider>
+  );
+}
+
+function FeedsPageContent({
   bootstrap,
   mutations,
   onMenu,
@@ -134,7 +145,6 @@ function FeedsPage({
   onRefresh,
   onFeedAction,
   onFolderAction,
-  onMoveFeed,
   showToast,
 }: {
   bootstrap: BootstrapData;
@@ -167,7 +177,7 @@ function FeedsPage({
   const webFeedCount = bootstrap.feeds.length - publishedFeedCount;
   const orderedFolders = folderHierarchy(bootstrap.folders);
   const rootFolders = orderedFolders.filter(({ depth }) => depth === 0).map(({ folder }) => folder);
-  const feedDrag = useFeedDrag(bootstrap.feeds, onMoveFeed);
+  const feedDrag = useFeedDrag();
   const [expandedLocations, setExpandedLocations] = useState<Set<FeedDropTarget>>(() => new Set());
   const statusCounts: Record<Exclude<FeedStatusFilter, "all">, number> = {
     healthy: 0,
@@ -667,7 +677,7 @@ function FolderFeedRow({
   const status = visibleFeedStatus(feed);
   const statusLabel = feedStatusLabel(feed, status);
   const sourceUrl = feed.siteUrl ?? feed.feedUrl;
-  const dragging = feedDrag.draggedFeed?.id === feed.id;
+  const { ref: dragRef, isDragging: dragging } = useFeedDraggable(feed);
   const moving = feedDrag.movingFeedId === feed.id;
 
   return (
@@ -680,10 +690,8 @@ function FolderFeedRow({
         className="folder-feed-drag-region"
         type="button"
         aria-label={`Move ${feed.title} to another folder`}
-        draggable={feedDrag.movingFeedId === null}
+        ref={dragRef}
         title={`Drag ${feed.title} to another folder`}
-        onDragStart={(event) => feedDrag.start(feed, event)}
-        onDragEnd={feedDrag.end}
         onClick={() => onAction("move")}
       >
         <GripVertical className="folder-feed-grip" aria-hidden="true" size={15} />
@@ -745,8 +753,11 @@ function FolderBranch({
   const feedCount = folder ? folderBranchFeedCount(folder.id, folders, feeds) : childFeeds.length;
   const hasChildren = childFolders.length > 0 || childFeeds.length > 0;
   const expanded = expandedLocations.has(target);
-  const dropAvailable = feedDrag.draggedFeed !== null && feedDrag.draggedFeed.folderId !== folderId;
-  const dropActive = feedDrag.dropTarget === target;
+  const {
+    ref: dropRef,
+    available: dropAvailable,
+    isDropTarget: dropActive,
+  } = useFeedDropTarget(folderId, path, () => onReveal(target));
   const branchId = `folder-branch-${target}`;
 
   return (
@@ -754,14 +765,7 @@ function FolderBranch({
       <fieldset
         className={`folder-management-row${topLevel ? " is-top-level" : ""}${dropAvailable ? " is-feed-drop-available" : ""}${dropActive ? " is-feed-drop-target" : ""}`}
         aria-label={`${path} folder`}
-        onDragEnter={(event) => feedDrag.enterTarget(folderId, event)}
-        onDragOver={(event) => feedDrag.enterTarget(folderId, event)}
-        onDragLeave={(event) => feedDrag.leaveTarget(folderId, event)}
-        onDrop={(event) => {
-          void feedDrag.dropOnTarget(folderId, event).then((moved) => {
-            if (moved) onReveal(target);
-          });
-        }}
+        ref={dropRef}
       >
         <button
           className="folder-disclosure"

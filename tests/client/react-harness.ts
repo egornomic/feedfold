@@ -29,6 +29,22 @@ export function exposeBrowserGlobals(window: JSDOM["window"]): () => void {
   expose("MouseEvent", window.MouseEvent);
   expose("KeyboardEvent", window.KeyboardEvent);
   expose("DOMException", window.DOMException);
+  expose("MutationObserver", window.MutationObserver);
+  expose("AbortController", window.AbortController);
+  expose("AbortSignal", window.AbortSignal);
+  if (window.requestAnimationFrame) {
+    expose("requestAnimationFrame", window.requestAnimationFrame.bind(window));
+    expose("cancelAnimationFrame", window.cancelAnimationFrame.bind(window));
+  }
+  // JSDOM has no layout; drag geometry and resize behavior are covered in browser tests.
+  expose(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
 
   return () => {
     for (const [key, descriptor] of [...previous].reverse()) {
