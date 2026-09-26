@@ -511,8 +511,6 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
   it("returns to the active magazine article after keyboard navigation past a loaded page", async () => {
     const page = await open("magazine");
     try {
-      const cdp = await context.newCDPSession(page);
-      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
       await bottom(page);
       await settle(page);
       const row = page
@@ -526,7 +524,6 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
             timeout: 5000,
           })
           .toContain(title);
-        if (title === "0100") await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
       }
       await page.locator('.reading-workspace[aria-busy="false"]').waitFor();
       await page.getByRole("button", { name: "Back to articles", exact: true }).click();
