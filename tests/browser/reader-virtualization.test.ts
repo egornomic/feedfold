@@ -147,8 +147,9 @@ async function open(mode: "magazine" | "expanded") {
     });
   const page = desktop ? await desktop.firstWindow() : await context.newPage();
   // Exercise asynchronous mode changes even on a fast development machine.
-  await page.route("**/api/articles?**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 250));
+  await page.route(/\/api\/articles(?:\?|\/)/, async (route) => {
+    if (route.request().method() === "GET")
+      await new Promise((resolve) => setTimeout(resolve, 250));
     await route.continue();
   });
   page.setDefaultTimeout(5000);
@@ -510,6 +511,8 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
   it("returns to the active magazine article after keyboard navigation past a loaded page", async () => {
     const page = await open("magazine");
     try {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
       await bottom(page);
       await settle(page);
       const row = page
@@ -519,7 +522,9 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
       for (const title of ["0100", "0101", "0102"]) {
         await page.keyboard.press("j");
         await expect
-          .poll(() => page.locator(".article-swipe-layer.is-active h2").textContent())
+          .poll(() => page.locator(".article-swipe-layer.is-active h2").textContent(), {
+            timeout: 5000,
+          })
           .toContain(title);
       }
       await page.getByRole("button", { name: "Back to articles", exact: true }).click();
@@ -536,7 +541,7 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
     } finally {
       await page.close();
     }
-  });
+  }, 30_000);
 
   it("keeps native and embedded players alive while scrolling away and back", async () => {
     const page = await open("expanded");

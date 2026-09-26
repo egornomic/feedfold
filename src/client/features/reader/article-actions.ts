@@ -134,12 +134,13 @@ export function useArticleActions({
   const moveArticle = useCallback(
     async (direction: 1 | -1): Promise<boolean> => {
       if (queue.articles.length === 0) return false;
-      const openReader = readingMode === "magazine" || route.routedArticleId !== null;
-      if (openReader && route.routedArticleId === null && queue.activeArticle) {
+      const currentRoute = route.current();
+      const routed = currentRoute.kind === "article";
+      const openReader = readingMode === "magazine" || routed;
+      if (openReader && !routed && queue.activeArticle) {
         openArticle(queue.activeArticle, true);
         return true;
       }
-      const currentRoute = route.current();
       const currentId =
         currentRoute.kind === "article" ? currentRoute.articleId : queue.activeArticleId;
       const currentIndex = queue.articles.findIndex((article) => article.id === currentId);
@@ -147,7 +148,7 @@ export function useArticleActions({
         const appended = await queue.loadOlderArticles();
         const next = appended[0];
         if (!next) return false;
-        openArticle(next, openReader, route.routedArticleId !== null ? "replace" : "push");
+        openArticle(next, openReader, routed ? "replace" : "push");
         return true;
       }
       const nextIndex = Math.min(
@@ -155,13 +156,13 @@ export function useArticleActions({
         Math.max(0, (currentIndex < 0 ? 0 : currentIndex) + direction),
       );
       const next = queue.articles[nextIndex];
-      if (next && next.id !== queue.activeArticleId) {
-        openArticle(next, openReader, route.routedArticleId !== null ? "replace" : "push");
+      if (next && next.id !== currentId) {
+        openArticle(next, openReader, routed ? "replace" : "push");
         return true;
       }
       return false;
     },
-    [openArticle, queue, readingMode, route.routedArticleId, route.current],
+    [openArticle, queue, readingMode, route.current],
   );
 
   const copyArticleUrl = useCallback(

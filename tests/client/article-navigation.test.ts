@@ -4,6 +4,33 @@ import { waitFor } from "./react-harness.js";
 import { readerFixture } from "./reader-fixture.js";
 
 describe("reader navigation", () => {
+  it("follows rapid next and previous keys while an article is opening", async () => {
+    const fixture = readerFixture("/articles/all", 4);
+    fixture.database.settings.updateSettings(1, { singleKeyShortcuts: true });
+    try {
+      await fixture.mount();
+      await waitFor(
+        "article previews",
+        () => !!fixture.container.querySelector(".article-open-button"),
+      );
+      await act(async () => {
+        fixture.container.querySelector<HTMLButtonElement>(".article-open-button")?.click();
+        for (const key of ["j", "j", "k"])
+          fixture.dom.window.dispatchEvent(
+            new fixture.dom.window.KeyboardEvent("keydown", { key, bubbles: true }),
+          );
+      });
+      await waitFor(
+        "the second article",
+        () =>
+          fixture.container.querySelector(".article-swipe-layer.is-active h2")?.textContent ===
+          "Article 2",
+      );
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("loads the reading queue while sidebar settings are still arriving", async () => {
     const fixture = readerFixture();
     const bootstrap = fixture.hold("bootstrap");
