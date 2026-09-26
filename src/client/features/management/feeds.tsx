@@ -14,10 +14,10 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { type ReactNode, useId, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { BootstrapData, Feed, Folder } from "../../../shared/types";
-import { handleActionMenuKeyDown } from "../../ui/action-menu";
 import { DropdownSelect } from "../../ui/dropdown";
+import { Menu, MenuPopup } from "../../ui/menu";
 import {
   type FeedDragState,
   type FeedDropTarget,
@@ -75,83 +75,28 @@ function AnchoredPopover({
   managementTarget?: { kind: "feed" | "folder"; id: number };
   children: ReactNode;
 }) {
-  const id = useId().replace(/:/g, "");
-  const menuId = `management-actions-${id}`;
-  const anchorName = `--management-actions-${id}`;
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-
-  const close = () => {
-    const menu = menuRef.current;
-    if (menu?.matches(":popover-open")) menu.hidePopover();
-  };
-
-  const openAndFocus = () => {
-    const menu = menuRef.current;
-    if (menu && !menu.matches(":popover-open")) menu.showPopover();
-    window.requestAnimationFrame(() => {
-      menuRef.current
-        ?.querySelector<HTMLElement>('[role="menuitem"]')
-        ?.focus({ preventScroll: true });
-    });
-  };
-
   return (
-    <>
-      <button
+    <Menu.Root modal={false}>
+      <Menu.Trigger
         className={triggerClassName}
-        type="button"
         aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={menuId}
-        popoverTarget={menuId}
         data-management-feed-id={
           managementTarget?.kind === "feed" ? managementTarget.id : undefined
         }
         data-management-folder-id={
           managementTarget?.kind === "folder" ? managementTarget.id : undefined
         }
-        style={{ anchorName }}
-        onKeyDown={(event) => {
-          if (event.key !== "ArrowDown") return;
-          event.preventDefault();
-          openAndFocus();
-        }}
       >
         {triggerContent}
-      </button>
-      <div
-        ref={menuRef}
-        id={menuId}
-        className={`management-actions-popover dropdown-menu-surface${
-          variant === "actions" ? " context-action-menu" : " feed-transfer-popover"
-        }`}
-        popover="auto"
-        role="menu"
+      </Menu.Trigger>
+      <MenuPopup
+        className={`management-actions-popover dropdown-menu-surface${variant === "actions" ? " context-action-menu" : " feed-transfer-popover"}`}
         aria-label={label}
-        style={{ positionAnchor: anchorName }}
-        onToggle={(event) => {
-          const nextOpen = event.currentTarget.matches(":popover-open");
-          setOpen(nextOpen);
-          if (nextOpen) {
-            window.requestAnimationFrame(() => {
-              menuRef.current
-                ?.querySelector<HTMLElement>('[role="menuitem"]')
-                ?.focus({ preventScroll: true });
-            });
-          }
-        }}
-        onKeyDown={(event) => {
-          handleActionMenuKeyDown(event, close);
-        }}
-        onClickCapture={(event) => {
-          if ((event.target as Element).closest("button, a")) close();
-        }}
+        keepMounted={variant === "transfer"}
       >
         {children}
-      </div>
-    </>
+      </MenuPopup>
+    </Menu.Root>
   );
 }
 

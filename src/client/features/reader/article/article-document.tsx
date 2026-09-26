@@ -1,6 +1,6 @@
+import { Popover } from "@base-ui/react/popover";
 import { ListFilter } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
 import { interactionMotionIsInstant, useMotionPresence } from "../../../ui/motion";
 import type { FeedManagementAction } from "../../feeds/feed-management";
@@ -61,7 +61,6 @@ export function ArticleDocument({
   const previousSummaryPresence = useRef(summaryPresence.present);
   const menuRef = useRef<HTMLDivElement>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
-  const selectionMenuPresence = useMotionPresence(selectionMenu !== null);
   const retainedSelectionMenu = useRef<SelectionMenuState | null>(selectionMenu);
   if (selectionMenu) retainedSelectionMenu.current = selectionMenu;
   const displayedSelectionMenu = selectionMenu ?? retainedSelectionMenu.current;
@@ -168,27 +167,10 @@ export function ArticleDocument({
 
   useEffect(() => {
     if (!selectionMenu) return;
-
     const dismiss = () => setSelectionMenu(null);
-    const dismissOnPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
-      dismiss();
-    };
-    const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      window.getSelection()?.removeAllRanges();
-      dismiss();
-    };
-
-    document.addEventListener("pointerdown", dismissOnPointerDown, true);
-    document.addEventListener("keydown", dismissOnEscape);
     window.addEventListener("resize", dismiss);
     window.addEventListener("scroll", dismiss, true);
     return () => {
-      document.removeEventListener("pointerdown", dismissOnPointerDown, true);
-      document.removeEventListener("keydown", dismissOnEscape);
       window.removeEventListener("resize", dismiss);
       window.removeEventListener("scroll", dismiss, true);
     };
@@ -227,36 +209,54 @@ export function ArticleDocument({
           )}
         </div>
       </div>
-      {selectionMenuPresence.present && displayedSelectionMenu
-        ? createPortal(
-            <div
-              ref={menuRef}
-              className="article-selection-menu"
-              role="menu"
-              aria-label="Selected text actions"
-              data-placement={displayedSelectionMenu.placement}
-              data-state={selectionMenuPresence.state}
-              inert={selectionMenuPresence.state === "closed"}
-              style={{ left: displayedSelectionMenu.left, top: displayedSelectionMenu.top }}
+      {displayedSelectionMenu ? (
+        <Popover.Root
+          open={selectionMenu !== null}
+          onOpenChange={(open, details) => {
+            if (!open) {
+              if (details.reason === "escape-key") window.getSelection()?.removeAllRanges();
+              setSelectionMenu(null);
+            }
+          }}
+        >
+          <Popover.Portal>
+            <Popover.Positioner
+              className="overlay-positioner"
+              anchor={{
+                getBoundingClientRect: () =>
+                  new DOMRect(displayedSelectionMenu.left, displayedSelectionMenu.top, 0, 0),
+              }}
+              side={displayedSelectionMenu.placement === "above" ? "top" : "bottom"}
+              align="center"
+              sideOffset={8}
+              collisionPadding={8}
             >
-              <button
-                type="button"
-                role="menuitem"
-                aria-label="Filter selected text"
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  const { text } = displayedSelectionMenu;
-                  setSelectionMenu(null);
-                  onFilterSelection(article, text);
-                }}
+              <Popover.Popup
+                ref={menuRef}
+                className="overlay-menu article-selection-menu"
+                role="toolbar"
+                aria-label="Selected text actions"
+                initialFocus={false}
+                finalFocus={false}
               >
-                <ListFilter aria-hidden="true" size={15} />
-                Filter
-              </button>
-            </div>,
-            document.body,
-          )
-        : null}
+                <button
+                  type="button"
+                  aria-label="Filter selected text"
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    const { text } = displayedSelectionMenu;
+                    setSelectionMenu(null);
+                    onFilterSelection(article, text);
+                  }}
+                >
+                  <ListFilter aria-hidden="true" size={15} />
+                  Filter
+                </button>
+              </Popover.Popup>
+            </Popover.Positioner>
+          </Popover.Portal>
+        </Popover.Root>
+      ) : null}
     </>
   );
 }

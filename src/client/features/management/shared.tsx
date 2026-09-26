@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { api, errorMessage } from "../../api/api";
+import { Menu as BaseMenu } from "../../ui/menu";
 import type { ReaderDataMutations } from "../reader/data-resource";
 
 export function formatDate(value: string | null): string {
@@ -99,6 +100,7 @@ export function ImportOpmlButton({
 }) {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const Button = menuItem ? MenuButton : "button";
 
   const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -126,10 +128,9 @@ export function ImportOpmlButton({
         accept=".opml,.xml,text/xml,application/xml"
         onChange={(event) => void importFile(event)}
       />
-      <button
+      <Button
         className="secondary-button"
         type="button"
-        role={menuItem ? "menuitem" : undefined}
         disabled={busy}
         onClick={() => inputRef.current?.click()}
       >
@@ -139,12 +140,13 @@ export function ImportOpmlButton({
           <Upload aria-hidden="true" size={16} />
         )}
         {busy ? "Importing OPML" : "Import OPML"}
-      </button>
+      </Button>
     </>
   );
 }
 
 export function ExportOpmlLink({ menuItem = false }: { menuItem?: boolean } = {}) {
+  const Button = menuItem ? MenuButton : "button";
   const [busy, setBusy] = useState(false);
   const exportOpml = async () => {
     setBusy(true);
@@ -157,10 +159,9 @@ export function ExportOpmlLink({ menuItem = false }: { menuItem?: boolean } = {}
     }
   };
   return (
-    <button
+    <Button
       className="secondary-button"
       type="button"
-      role={menuItem ? "menuitem" : undefined}
       disabled={busy}
       onClick={() => void exportOpml()}
     >
@@ -170,6 +171,10 @@ export function ExportOpmlLink({ menuItem = false }: { menuItem?: boolean } = {}
         <Download aria-hidden="true" size={16} />
       )}
       {busy ? "Exporting OPML" : "Export OPML"}
-    </button>
+    </Button>
   );
+}
+
+function MenuButton(props: React.ComponentProps<"button">) {
+  return <BaseMenu.Item render={<button {...props} />} nativeButton disabled={props.disabled} />;
 }

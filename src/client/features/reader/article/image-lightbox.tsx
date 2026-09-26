@@ -1,6 +1,6 @@
 import { ExternalLink, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useAnimatedDialog } from "../../../ui/motion.js";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { Modal, useDialog } from "../../../ui/dialog.js";
 
 export interface ImageLightboxItem {
   src: string;
@@ -59,7 +59,7 @@ export function ImageLightbox({
     onClose();
     window.requestAnimationFrame(() => state.returnFocus?.focus());
   }, [onClose, state.returnFocus]);
-  const dialog = useAnimatedDialog(finishClose);
+  const dialog = useDialog(finishClose);
   const image = state.images[index] ?? state.images[0];
   const multiple = state.images.length > 1;
 
@@ -110,78 +110,73 @@ export function ImageLightbox({
     stage.scrollTop += rect.top + gesture.imageY * rect.height - pinchMidpoint.y;
   }, [zoom, pinchMidpoint]);
 
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    const handleTouch = (event: TouchEvent) => {
-      const first = event.touches[0];
-      const second = event.touches[1];
-      const element = imageRef.current;
-      if (!first || !second || !element?.naturalWidth) {
-        pinch.current = null;
-        return;
-      }
-      event.preventDefault();
-      const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
-      const clientX = (first.clientX + second.clientX) / 2;
-      const clientY = (first.clientY + second.clientY) / 2;
-      if (event.type === "touchstart" || !pinch.current) {
-        const rect = element.getBoundingClientRect();
-        fittedSize.current ??= rect;
-        pinch.current = {
-          distance,
-          zoom: rect.width / fittedSize.current.width,
-          imageX: (clientX - rect.left) / rect.width,
-          imageY: (clientY - rect.top) / rect.height,
-        };
-        return;
-      }
-      setPinchMidpoint({ x: clientX, y: clientY });
-      setZoom(clampZoom((pinch.current.zoom * distance) / pinch.current.distance));
-    };
-    const endTouch = (event: TouchEvent) => {
-      if (pinch.current) event.preventDefault();
-      if (event.touches.length < 2) pinch.current = null;
-    };
-    stage.addEventListener("touchstart", handleTouch, { passive: false });
-    stage.addEventListener("touchmove", handleTouch, { passive: false });
-    stage.addEventListener("touchend", endTouch, { passive: false });
-    stage.addEventListener("touchcancel", endTouch, { passive: false });
-    return () => {
-      stage.removeEventListener("touchstart", handleTouch);
-      stage.removeEventListener("touchmove", handleTouch);
-      stage.removeEventListener("touchend", endTouch);
-      stage.removeEventListener("touchcancel", endTouch);
-    };
-  }, []);
-
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    const handleWheel = (event: WheelEvent) => {
-      if (event.deltaY === 0) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const delta =
-        event.deltaMode === WHEEL_DELTA_LINE
-          ? event.deltaY * 16
-          : event.deltaMode === WHEEL_DELTA_PAGE
-            ? event.deltaY * stage.clientHeight
-            : event.deltaY;
-      if (Math.sign(delta) !== Math.sign(wheelDelta.current)) wheelDelta.current = 0;
-      wheelDelta.current += delta;
-      if (Math.abs(wheelDelta.current) < WHEEL_ZOOM_THRESHOLD) return;
-      if (wheelDelta.current < 0) zoomIn();
-      else zoomOut();
-      wheelDelta.current = 0;
-    };
-    stage.addEventListener("wheel", handleWheel, { passive: false });
-    return () => stage.removeEventListener("wheel", handleWheel);
-  }, [zoomIn, zoomOut]);
-
-  useEffect(() => {
-    dialog.dialogRef.current?.focus({ preventScroll: true });
-  }, [dialog.dialogRef]);
+  const attachStage = useCallback(
+    (stage: HTMLDivElement | null) => {
+      stageRef.current = stage;
+      if (!stage) return;
+      const handleTouch = (event: TouchEvent) => {
+        const first = event.touches[0];
+        const second = event.touches[1];
+        const element = imageRef.current;
+        if (!first || !second || !element?.naturalWidth) {
+          pinch.current = null;
+          return;
+        }
+        event.preventDefault();
+        const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+        const clientX = (first.clientX + second.clientX) / 2;
+        const clientY = (first.clientY + second.clientY) / 2;
+        if (event.type === "touchstart" || !pinch.current) {
+          const rect = element.getBoundingClientRect();
+          fittedSize.current ??= rect;
+          pinch.current = {
+            distance,
+            zoom: rect.width / fittedSize.current.width,
+            imageX: (clientX - rect.left) / rect.width,
+            imageY: (clientY - rect.top) / rect.height,
+          };
+          return;
+        }
+        setPinchMidpoint({ x: clientX, y: clientY });
+        setZoom(clampZoom((pinch.current.zoom * distance) / pinch.current.distance));
+      };
+      const endTouch = (event: TouchEvent) => {
+        if (pinch.current) event.preventDefault();
+        if (event.touches.length < 2) pinch.current = null;
+      };
+      const handleWheel = (event: WheelEvent) => {
+        if (event.deltaY === 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const delta =
+          event.deltaMode === WHEEL_DELTA_LINE
+            ? event.deltaY * 16
+            : event.deltaMode === WHEEL_DELTA_PAGE
+              ? event.deltaY * stage.clientHeight
+              : event.deltaY;
+        if (Math.sign(delta) !== Math.sign(wheelDelta.current)) wheelDelta.current = 0;
+        wheelDelta.current += delta;
+        if (Math.abs(wheelDelta.current) < WHEEL_ZOOM_THRESHOLD) return;
+        if (wheelDelta.current < 0) zoomIn();
+        else zoomOut();
+        wheelDelta.current = 0;
+      };
+      stage.addEventListener("touchstart", handleTouch, { passive: false });
+      stage.addEventListener("touchmove", handleTouch, { passive: false });
+      stage.addEventListener("touchend", endTouch, { passive: false });
+      stage.addEventListener("touchcancel", endTouch, { passive: false });
+      stage.addEventListener("wheel", handleWheel, { passive: false });
+      return () => {
+        stageRef.current = null;
+        stage.removeEventListener("touchstart", handleTouch);
+        stage.removeEventListener("touchmove", handleTouch);
+        stage.removeEventListener("touchend", endTouch);
+        stage.removeEventListener("touchcancel", endTouch);
+        stage.removeEventListener("wheel", handleWheel);
+      };
+    },
+    [zoomIn, zoomOut],
+  );
 
   if (!image) return null;
   const imageUrl = externalHttpUrl(image.src);
@@ -195,15 +190,13 @@ export function ImageLightbox({
         }
       : undefined;
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: Escape is handled in capture so article shortcuts cannot receive it.
-    <dialog
-      ref={dialog.dialogRef}
+    <Modal
+      dialog={dialog}
+      initialFocus={dialog.dialogRef}
+      finalFocus={false}
       className="image-lightbox"
       tabIndex={-1}
-      data-state={dialog.closing ? "closing" : "open"}
       aria-label="Image preview"
-      onCancel={dialog.handleCancel}
-      onClose={dialog.handleClose}
       onKeyDownCapture={(event) => {
         const key = event.key.toLowerCase();
         if (key === "escape") {
@@ -245,7 +238,7 @@ export function ImageLightbox({
       >
         <X aria-hidden="true" size={22} />
       </button>
-      <div ref={stageRef} className="image-lightbox-stage">
+      <div ref={attachStage} className="image-lightbox-stage">
         {loadState === "loading" ? (
           <div className="sr-only" role="status">
             Loading image…
@@ -277,6 +270,6 @@ export function ImageLightbox({
           </div>
         )}
       </div>
-    </dialog>
+    </Modal>
   );
 }

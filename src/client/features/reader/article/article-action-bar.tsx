@@ -19,7 +19,7 @@ import {
   Star,
 } from "lucide-react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import { useActionMenu } from "./article-action-menu";
+import { Menu, MenuItem, MenuPopup } from "../../../ui/menu";
 import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
 
 interface ArticleActionsProps {
@@ -63,12 +63,8 @@ export function ArticleActions({
   onRunSummaryPrompt,
   onToggleTranslation,
 }: ArticleActionsProps) {
-  const summaryMenu = useActionMenu();
-  const moreMenu = useActionMenu();
   const summaryMenuId = `article-${article.id}-summary-menu`;
-  const summaryAnchorName = `--article-${article.id}-summary`;
   const moreMenuId = `article-${article.id}-more-menu`;
-  const moreAnchorName = `--article-${article.id}-more`;
   const fullContentAvailable = Boolean(article.url) && !article.media;
   const cachedFullContent = article.extractionStatus === "complete" && Boolean(article.contentHtml);
   const fullContentLoading =
@@ -147,74 +143,56 @@ export function ArticleActions({
           />
         </button>
       ) : null}
-      <button
-        ref={summaryMenu.triggerRef}
-        className="summary-action"
-        type="button"
-        disabled={summaryState.loading}
-        aria-haspopup="menu"
-        aria-expanded={summaryMenu.open}
-        aria-pressed={summaryState.visible}
-        aria-controls={summaryMenuId}
-        popoverTarget={summaryMenuId}
-        style={{ anchorName: summaryAnchorName }}
-        onPointerDown={summaryMenu.handleTriggerPointerDown}
-        onKeyDown={summaryMenu.handleTriggerKeyDown}
-        aria-label="Choose an AI action"
-        data-tooltip="Choose an AI action"
-      >
-        {summaryState.loading ? (
-          <LoaderCircle className="spin" aria-hidden="true" size={16} />
-        ) : summaryState.error && !summaryState.visible ? (
-          <RefreshCw aria-hidden="true" size={16} />
-        ) : (
-          <Sparkles
-            aria-hidden="true"
-            size={16}
-            fill={summaryState.visible ? "currentColor" : "none"}
-          />
-        )}
-        <ChevronDown className="summary-action-chevron" aria-hidden="true" size={10} />
-      </button>
-      <div
-        ref={summaryMenu.menuRef}
-        id={summaryMenuId}
-        className="summary-prompt-menu context-action-menu"
-        popover="auto"
-        role="menu"
-        aria-label="AI actions"
-        style={{ positionAnchor: summaryAnchorName }}
-        onToggle={summaryMenu.handleMenuToggle}
-        onKeyDown={summaryMenu.handleMenuKeyDown}
-      >
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            summaryMenu.closeMenu();
-            onRunSummaryPrompt(article, null);
-          }}
+      <Menu.Root modal={false}>
+        <Menu.Trigger
+          className="summary-action"
+          disabled={summaryState.loading}
+          aria-pressed={summaryState.visible}
+          aria-label="Choose an AI action"
+          data-tooltip="Choose an AI action"
         >
-          <Sparkles aria-hidden="true" size={15} />
-          <span>Summarize</span>
-          <kbd>M</kbd>
-        </button>
-        {customPrompts.length > 0 ? <hr className="context-menu-separator" /> : null}
-        {customPrompts.map((prompt) => (
-          <button
-            key={prompt.id}
-            type="button"
-            role="menuitem"
+          {summaryState.loading ? (
+            <LoaderCircle className="spin" aria-hidden="true" size={16} />
+          ) : summaryState.error && !summaryState.visible ? (
+            <RefreshCw aria-hidden="true" size={16} />
+          ) : (
+            <Sparkles
+              aria-hidden="true"
+              size={16}
+              fill={summaryState.visible ? "currentColor" : "none"}
+            />
+          )}
+          <ChevronDown className="summary-action-chevron" aria-hidden="true" size={10} />
+        </Menu.Trigger>
+        <MenuPopup
+          positioner={{ align: "start" }}
+          id={summaryMenuId}
+          className="summary-prompt-menu context-action-menu"
+          aria-label="AI actions"
+        >
+          <MenuItem
             onClick={() => {
-              summaryMenu.closeMenu();
-              onRunSummaryPrompt(article, prompt.id);
+              onRunSummaryPrompt(article, null);
             }}
           >
-            <MessageSquareText aria-hidden="true" size={15} />
-            <span>{prompt.name}</span>
-          </button>
-        ))}
-      </div>
+            <Sparkles aria-hidden="true" size={15} />
+            <span>Summarize</span>
+            <kbd>M</kbd>
+          </MenuItem>
+          {customPrompts.length > 0 ? <hr className="context-menu-separator" /> : null}
+          {customPrompts.map((prompt) => (
+            <MenuItem
+              key={prompt.id}
+              onClick={() => {
+                onRunSummaryPrompt(article, prompt.id);
+              }}
+            >
+              <MessageSquareText aria-hidden="true" size={15} />
+              <span>{prompt.name}</span>
+            </MenuItem>
+          ))}
+        </MenuPopup>
+      </Menu.Root>
       <button
         className="translation-action"
         type="button"
@@ -275,117 +253,90 @@ export function ArticleActions({
       >
         <ExternalLink aria-hidden="true" size={16} />
       </button>
-      <button
-        ref={moreMenu.triggerRef}
-        className="article-more-action"
-        type="button"
-        aria-label="More article actions"
-        aria-haspopup="menu"
-        aria-expanded={moreMenu.open}
-        aria-controls={moreMenuId}
-        popoverTarget={moreMenuId}
-        style={{ anchorName: moreAnchorName }}
-        onPointerDown={moreMenu.handleTriggerPointerDown}
-        onKeyDown={moreMenu.handleTriggerKeyDown}
-        data-tooltip="More article actions"
-      >
-        <Ellipsis aria-hidden="true" size={18} />
-      </button>
-      <div
-        ref={moreMenu.menuRef}
-        id={moreMenuId}
-        className="article-more-menu context-action-menu"
-        popover="auto"
-        role="menu"
-        aria-label="More article actions"
-        style={{ positionAnchor: moreAnchorName }}
-        onToggle={moreMenu.handleMenuToggle}
-        onKeyDown={moreMenu.handleMenuKeyDown}
-      >
-        {fullContentAvailable ? (
-          <>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={fullContentLoading}
-              onClick={() => {
-                moreMenu.closeMenu();
-                onToggleFullContent(article);
-              }}
-            >
-              <FullContentIcon
-                className={fullContentLoading ? "spin" : undefined}
-                aria-hidden="true"
-                size={15}
-              />
-              <span>{fullContentLabel}</span>
-              <kbd>W</kbd>
-            </button>
-            <hr className="context-menu-separator" />
-          </>
-        ) : null}
-        <button
-          type="button"
-          role="menuitem"
-          disabled={translationState.loading}
-          onClick={() => {
-            moreMenu.closeMenu();
-            onToggleTranslation(article);
-          }}
+      <Menu.Root modal={false}>
+        <Menu.Trigger
+          className="article-more-action"
+          aria-label="More article actions"
+          data-tooltip="More article actions"
         >
-          {translationState.loading ? (
-            <LoaderCircle className="spin" aria-hidden="true" size={15} />
-          ) : translationState.visible ? (
-            <BookOpenText aria-hidden="true" size={15} />
-          ) : (
-            <Languages aria-hidden="true" size={15} />
-          )}
-          <span>{translationLabel}</span>
-          <kbd>T</kbd>
-        </button>
-        <hr className="context-menu-separator" />
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            moreMenu.closeMenu();
-            onToggleRead(article);
-          }}
+          <Ellipsis aria-hidden="true" size={18} />
+        </Menu.Trigger>
+        <MenuPopup
+          positioner={{ side: "top", align: "end", sideOffset: 8 }}
+          id={moreMenuId}
+          className="article-more-menu context-action-menu"
+          aria-label="More article actions"
         >
-          {article.isRead ? (
-            <Mail aria-hidden="true" size={15} />
-          ) : (
-            <MailOpen aria-hidden="true" size={15} />
-          )}
-          <span>{article.isRead ? "Mark as unread" : "Mark as read"}</span>
-          <kbd>U</kbd>
-        </button>
-        <hr className="context-menu-separator" />
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            moreMenu.closeMenu();
-            onCopy(article);
-          }}
-        >
-          <Copy aria-hidden="true" size={15} />
-          <span>Copy article link</span>
-          <kbd>C</kbd>
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            moreMenu.closeMenu();
-            onOpenSource(article);
-          }}
-        >
-          <ExternalLink aria-hidden="true" size={15} />
-          <span>Open article source</span>
-          <kbd>O</kbd>
-        </button>
-      </div>
+          {fullContentAvailable ? (
+            <>
+              <MenuItem
+                disabled={fullContentLoading}
+                onClick={() => {
+                  onToggleFullContent(article);
+                }}
+              >
+                <FullContentIcon
+                  className={fullContentLoading ? "spin" : undefined}
+                  aria-hidden="true"
+                  size={15}
+                />
+                <span>{fullContentLabel}</span>
+                <kbd>W</kbd>
+              </MenuItem>
+              <hr className="context-menu-separator" />
+            </>
+          ) : null}
+          <MenuItem
+            disabled={translationState.loading}
+            onClick={() => {
+              onToggleTranslation(article);
+            }}
+          >
+            {translationState.loading ? (
+              <LoaderCircle className="spin" aria-hidden="true" size={15} />
+            ) : translationState.visible ? (
+              <BookOpenText aria-hidden="true" size={15} />
+            ) : (
+              <Languages aria-hidden="true" size={15} />
+            )}
+            <span>{translationLabel}</span>
+            <kbd>T</kbd>
+          </MenuItem>
+          <hr className="context-menu-separator" />
+          <MenuItem
+            onClick={() => {
+              onToggleRead(article);
+            }}
+          >
+            {article.isRead ? (
+              <Mail aria-hidden="true" size={15} />
+            ) : (
+              <MailOpen aria-hidden="true" size={15} />
+            )}
+            <span>{article.isRead ? "Mark as unread" : "Mark as read"}</span>
+            <kbd>U</kbd>
+          </MenuItem>
+          <hr className="context-menu-separator" />
+          <MenuItem
+            onClick={() => {
+              onCopy(article);
+            }}
+          >
+            <Copy aria-hidden="true" size={15} />
+            <span>Copy article link</span>
+            <kbd>C</kbd>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              onOpenSource(article);
+            }}
+          >
+            <ExternalLink aria-hidden="true" size={15} />
+            <span>Open article source</span>
+            <kbd>O</kbd>
+          </MenuItem>
+        </MenuPopup>
+      </Menu.Root>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { YouTubeStatus } from "../../../shared/youtube";
 import { appUrl, errorMessage } from "../../api/api-contract";
 import { httpRequest } from "../../api/http-request";
-import { useAnimatedDialog } from "../../ui/motion";
+import { Modal, useDialog } from "../../ui/dialog";
 
 export function YouTubeSettings({ userId }: { userId: string }) {
   const [status, setStatus] = useState<YouTubeStatus | null>(null);
@@ -11,7 +11,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const connectDialog = useAnimatedDialog(() => setError(null), { autoOpen: false });
+  const connectDialog = useDialog(() => setError(null), { autoOpen: false });
   const headers = { "X-Feedfold-Account": userId };
 
   useEffect(() => {
@@ -187,18 +187,12 @@ export function YouTubeSettings({ userId }: { userId: string }) {
           <p>{notice}</p>
         </div>
       ) : null}
-      <dialog
-        ref={connectDialog.dialogRef}
+      <Modal
+        dialog={connectDialog}
         className="management-dialog youtube-connect-dialog"
         aria-labelledby="youtube-connect-title"
         aria-describedby="youtube-connect-description"
-        data-state={connectDialog.closing ? "closing" : "open"}
-        inert={connectDialog.closing}
-        onClose={connectDialog.handleClose}
-        onCancel={(event) => {
-          if (busy) event.preventDefault();
-          else connectDialog.handleCancel(event);
-        }}
+        dismissible={!busy}
       >
         <header className="management-dialog-heading">
           <h2 id="youtube-connect-title">Hide Shorts from your feed?</h2>
@@ -244,7 +238,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
             </button>
           </div>
         </footer>
-      </dialog>
+      </Modal>
     </section>
   );
 }
