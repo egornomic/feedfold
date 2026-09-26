@@ -11,6 +11,7 @@ export function MenuPopup({
   className,
   positioner,
   keepMounted,
+  onKeyDown,
   ...props
 }: Omit<Menu.Popup.Props, "className"> & {
   className: string;
@@ -26,7 +27,14 @@ export function MenuPopup({
         collisionPadding={8}
         {...positioner}
       >
-        <Menu.Popup className={`overlay-menu ${className}`} {...props}>
+        <Menu.Popup
+          className={`overlay-menu ${className}`}
+          {...props}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            onKeyDown?.(event);
+          }}
+        >
           {children}
         </Menu.Popup>
       </Menu.Positioner>
