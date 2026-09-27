@@ -117,7 +117,7 @@ Compose reads these values from the shell or a project-level `.env` file:
 | `FEEDFOLD_LOGIN_COOLDOWN_MINUTES` | `15` | Login cooldown window. |
 | `FEEDFOLD_STEP_UP_LIMIT` | `10` | Failed recent-authentication attempts allowed per session during its cooldown. |
 | `FEEDFOLD_STEP_UP_COOLDOWN_MINUTES` | `15` | Recent-authentication cooldown window. |
-| `POLL_INTERVAL_MINUTES` | `20` | Starting interval for new published feeds, rounded up to 5, 10, 20, 30, or 60 minutes. |
+| `POLL_INTERVAL_MINUTES` | `30` | Starting interval for new published feeds, rounded up to 5, 10, 30, 180, 360, or 720 minutes. Feeds adapt using the average of their last 10 posting gaps: under 30 minutes → 5m; under 2 hours → 10m; under 1 day → 30m; under 3 days → 3h; under 7 days → 6h; otherwise → 12h. Empty checks only slow a feed after silence exceeds twice its usual posting gap. |
 | `FEED_FETCH_TIMEOUT_MS` | `15000` | Feed request timeout, in milliseconds. |
 | `WEB_FEED_LOAD_TIMEOUT_MS` | `30000` | Maximum normal load time for a JavaScript-rendered web feed, in milliseconds. |
 | `ARTICLE_FETCH_TIMEOUT_MS` | `20000` | Full-article request timeout, in milliseconds. |

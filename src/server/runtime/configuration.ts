@@ -11,7 +11,7 @@ export function runtimeConfiguration(environment: NodeJS.ProcessEnv) {
   return {
     pollIntervalMinutes: positiveInteger(
       environment.POLL_INTERVAL_MINUTES,
-      20,
+      30,
       "POLL_INTERVAL_MINUTES",
     ),
     feedFetchTimeoutMs: positiveInteger(

@@ -47,11 +47,11 @@ export const MARK_READ_AGE_DAYS = [1, 2, 3, 7, 14] as const;
 export type MarkReadAgeDays = (typeof MARK_READ_AGE_DAYS)[number];
 export const DUPLICATE_ARTICLE_WINDOW_DAYS = [1, 7, 30] as const;
 export type DuplicateArticleWindowDays = (typeof DUPLICATE_ARTICLE_WINDOW_DAYS)[number];
-export const FEED_POLL_INTERVAL_MINUTES = [5, 10, 20, 30, 60] as const;
+export const FEED_POLL_INTERVAL_MINUTES = [5, 10, 30, 180, 360, 720] as const;
 export type FeedPollIntervalMinutes = (typeof FEED_POLL_INTERVAL_MINUTES)[number];
 
 export function normalizeFeedPollInterval(minutes: number): FeedPollIntervalMinutes {
-  return FEED_POLL_INTERVAL_MINUTES.find((interval) => interval >= minutes) ?? 60;
+  return FEED_POLL_INTERVAL_MINUTES.find((interval) => interval >= minutes) ?? 720;
 }
 
 export interface AiModelOption {

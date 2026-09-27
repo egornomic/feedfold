@@ -71,7 +71,7 @@ function createFeed(
     lastErrorKind: null,
     lastMatchCount: id === 6 ? 18 : null,
     createdAt,
-    pollIntervalMinutes: 20,
+    pollIntervalMinutes: 30,
     unreadCount: 0,
     totalCount: 0,
     paused: false,
@@ -468,7 +468,7 @@ export function createDemoData(now = new Date()): DemoData {
   });
 
   const settings: AppSettings = {
-    pollIntervalMinutes: 20,
+    pollIntervalMinutes: 30,
     duplicateArticleWindowDays: 7,
     singleKeyShortcuts: true,
     markReadOnScroll: false,

@@ -93,7 +93,7 @@ export interface StoredArticleAiTranslation extends ArticleAiTranslation {
 
 export type Row = Record<string, unknown>;
 
-export const WEB_FEED_POLL_INTERVAL_MINUTES = 60;
+export const WEB_FEED_POLL_INTERVAL_MINUTES = 180;
 export const feedPollIntervalSql = "feed_sources.poll_interval_minutes";
 
 export function now(): string {

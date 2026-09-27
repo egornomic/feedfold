@@ -42,7 +42,7 @@ import type {
   DuplicateArticleWindowDays,
   FeedPollIntervalMinutes,
 } from "../../../shared/types";
-import { DUPLICATE_ARTICLE_WINDOW_DAYS } from "../../../shared/types";
+import { DUPLICATE_ARTICLE_WINDOW_DAYS, FEED_POLL_INTERVAL_MINUTES } from "../../../shared/types";
 import { ApiError, api, errorMessage } from "../../api/api";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import type { SettingsCategory } from "../../app/routes";
@@ -1760,15 +1760,15 @@ function SettingsPage({
               <label htmlFor="poll-interval">
                 <strong>New feed interval</strong>
                 <p>
-                  Published feeds start here, then adapt between 5 and 60 minutes based on new
-                  posts.
+                  Published feeds start here, then adapt between 5 minutes and 12 hours based on
+                  their usual time between posts.
                 </p>
               </label>
               <DropdownSelect
                 id="poll-interval"
                 value={String(settings.pollIntervalMinutes)}
                 disabled={saving}
-                options={[5, 10, 20, 30, 60].map((minutes) => ({
+                options={FEED_POLL_INTERVAL_MINUTES.map((minutes) => ({
                   value: String(minutes),
                   label: formatRefreshInterval(minutes),
                 }))}

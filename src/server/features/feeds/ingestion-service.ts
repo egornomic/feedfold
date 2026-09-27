@@ -68,19 +68,16 @@ export class FeedIngestionService {
       }
 
       const changedArticleIds = new Set<number>();
-      let insertedArticleCount = 0;
       const initialRefresh = this.feeds.isInitialSourceRefresh(sourceId);
       if (parsed) {
         this.feeds.updateFromParsedFeed(sourceId, parsed);
         const stored = this.articles.storeParsedFeedArticles(sourceId, parsed);
-        insertedArticleCount = stored.insertedArticleCount;
         for (const articleId of stored.changedArticleIds) changedArticleIds.add(articleId);
       }
       this.quotas.assertGlobalStorage();
       this.feeds.completeSuccessfulRefresh(sourceId, {
         ...input,
-        scheduled: input.scheduled === true && !initialRefresh,
-        insertedArticleCount,
+        scheduled: input.scheduled === true || initialRefresh,
       });
       return changedArticleIds;
     })();

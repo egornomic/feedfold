@@ -152,7 +152,7 @@ export class AuthService {
 
   constructor(
     private readonly repository: AuthRepository,
-    private readonly defaultPollIntervalMinutes = 20,
+    private readonly defaultPollIntervalMinutes = 30,
     options: AuthOptions = {},
   ) {
     this.maxAccounts = options.maxAccounts ?? 1;

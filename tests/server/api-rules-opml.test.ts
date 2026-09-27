@@ -413,16 +413,28 @@ describe("live API, OPML, and filtering rules", () => {
         })
       ).statusCode,
     ).toBe(400);
-    expect(
-      (
-        await app.inject({
-          method: "PATCH",
-          url: "/api/settings",
-          headers: { cookie: readerCookie },
-          payload: { pollIntervalMinutes: 15 },
-        })
-      ).statusCode,
-    ).toBe(400);
+    for (const pollIntervalMinutes of [5, 10, 30, 180, 360, 720]) {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/settings",
+        headers: { cookie: readerCookie },
+        payload: { pollIntervalMinutes },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ pollIntervalMinutes });
+    }
+    for (const pollIntervalMinutes of [15, 20, 60]) {
+      expect(
+        (
+          await app.inject({
+            method: "PATCH",
+            url: "/api/settings",
+            headers: { cookie: readerCookie },
+            payload: { pollIntervalMinutes },
+          })
+        ).statusCode,
+      ).toBe(400);
+    }
     expect(
       (
         await app.inject({

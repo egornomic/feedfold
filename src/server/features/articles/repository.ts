@@ -521,13 +521,14 @@ export class ArticleRepository {
   storeParsedFeedArticles(
     sourceId: number,
     parsed: ParsedFeed,
-  ): { changedArticleIds: Set<number>; insertedArticleCount: number } {
+  ): { changedArticleIds: Set<number> } {
     const changedArticleIds = new Set<number>();
-    let insertedArticleCount = 0;
-    const sourceKind = this.sqlite
-      .prepare("SELECT source_kind FROM feed_sources WHERE id = ?")
-      .pluck()
-      .get(sourceId) as FeedSourceKind;
+    const { sourceKind, lastSuccessAt } = this.sqlite
+      .prepare(
+        "SELECT source_kind AS sourceKind, last_success_at AS lastSuccessAt FROM feed_sources WHERE id = ?",
+      )
+      .get(sourceId) as { sourceKind: FeedSourceKind; lastSuccessAt: string | null };
+    const observedAt = now();
     const findExisting = this.sqlite.prepare(
       `SELECT id, title, url, author, published_at AS publishedAt, summary,
               image_url AS imageUrl, media_json AS mediaJson,
@@ -537,8 +538,8 @@ export class ArticleRepository {
     const insert = this.sqlite.prepare(
       `INSERT INTO articles (
          source_id, external_id, title, url, author, published_at, discovered_at,
-         summary, image_url, media_json, feed_content_html, extraction_status
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         summary, image_url, media_json, feed_content_html, extraction_status, schedule_posted_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const update = this.sqlite.prepare(
       `UPDATE articles
@@ -621,13 +622,13 @@ export class ArticleRepository {
         mediaJson,
         article.feedContentHtml,
         extractionStatus,
+        article.publishedAt ?? (lastSuccessAt === null ? null : observedAt),
       );
       const articleId = Number(result.lastInsertRowid);
       changedArticleIds.add(articleId);
-      insertedArticleCount += 1;
     }
 
-    return { changedArticleIds, insertedArticleCount };
+    return { changedArticleIds };
   }
 
   deliverSourceArticles(

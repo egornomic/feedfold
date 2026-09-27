@@ -22,7 +22,7 @@ import {
   visibleClause,
   WEB_FEED_POLL_INTERVAL_MINUTES,
 } from "../shared.js";
-import { observeScheduledRefresh } from "./schedule.js";
+import { sourcePollInterval } from "./schedule.js";
 
 export interface SourceSubscription {
   feedId: number;
@@ -526,31 +526,19 @@ export class FeedRepository {
       etag: string | null;
       lastModified: string | null;
       scheduled: boolean;
-      insertedArticleCount: number;
       webMatchCount?: number;
     },
   ): void {
     const completedAt = now();
-    const current = this.sqlite
-      .prepare(
-        `SELECT poll_interval_minutes AS pollIntervalMinutes,
-                activity_rate_per_hour AS activityRatePerHour,
-                last_scheduled_observation_at AS lastScheduledObservationAt
-         FROM feed_sources WHERE id = ?`,
-      )
-      .get(sourceId) as {
-      pollIntervalMinutes: FeedPollIntervalMinutes;
-      activityRatePerHour: number | null;
-      lastScheduledObservationAt: string | null;
-    };
-    const schedule = input.scheduled
-      ? observeScheduledRefresh(current, {
-          completedAt,
-          insertedArticleCount: input.insertedArticleCount,
-        })
-      : current;
+    const currentInterval = this.sqlite
+      .prepare("SELECT poll_interval_minutes FROM feed_sources WHERE id = ?")
+      .pluck()
+      .get(sourceId) as FeedPollIntervalMinutes;
+    const pollIntervalMinutes = input.scheduled
+      ? sourcePollInterval(this.sqlite, sourceId, currentInterval, completedAt)
+      : currentInterval;
     const nextPollAt = new Date(
-      Date.parse(completedAt) + schedule.pollIntervalMinutes * 60_000,
+      Date.parse(completedAt) + pollIntervalMinutes * 60_000,
     ).toISOString();
     this.sqlite
       .prepare(
@@ -558,17 +546,14 @@ export class FeedRepository {
          SET refreshing = 0, health_status = 'healthy', last_success_at = ?,
              last_http_status = ?, last_error_kind = NULL, last_error = NULL,
              etag = COALESCE(?, etag), last_modified = COALESCE(?, last_modified),
-             poll_interval_minutes = ?, activity_rate_per_hour = ?,
-             last_scheduled_observation_at = ?, next_poll_at = ? WHERE id = ?`,
+             poll_interval_minutes = ?, next_poll_at = ? WHERE id = ?`,
       )
       .run(
         completedAt,
         input.httpStatus,
         input.etag,
         input.lastModified,
-        schedule.pollIntervalMinutes,
-        schedule.activityRatePerHour,
-        schedule.lastScheduledObservationAt,
+        pollIntervalMinutes,
         nextPollAt,
         sourceId,
       );
