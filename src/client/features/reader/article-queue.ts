@@ -58,6 +58,7 @@ export interface ArticleQueueController {
 
 interface ArticleQueueOptions {
   route: AppRouteController;
+  mutationRevision: number;
   enabled: boolean;
   readingMode: ReadingMode;
   onReadingModeChange: (mode: ReadingMode) => void;
@@ -66,12 +67,15 @@ interface ArticleQueueOptions {
 
 export function useArticleQueue({
   route,
+  mutationRevision,
   enabled,
   readingMode,
   onReadingModeChange,
   showToast,
 }: ArticleQueueOptions): ArticleQueueController {
   const client = useQueryClient();
+  const [reloadRevision, setReloadRevision] = useState(0);
+  const reconciliationRevision = mutationRevision + reloadRevision;
   const readingPositions = useRef(new Map<string, ReadingPosition>());
   const changingCounters = useIsMutating({ mutationKey: counterMutationKey }) > 0;
   const [articles, updateArticles] = useState<Article[]>([]);
@@ -92,7 +96,12 @@ export function useArticleQueue({
   const contextReturn = useRef<(ContextArticleReturn & { route: ReaderRoute }) | null>(null);
   const [anchor, setAnchor] = useState<number | null>(() => route.routedArticleId);
   const [anchorReady, setAnchorReady] = useState(route.routedArticleId === null);
-  const applied = useRef<{ key: string; data: unknown; updatedAt: number } | null>(null);
+  const applied = useRef<{
+    key: string;
+    data: unknown;
+    updatedAt: number;
+    reconciliationRevision: number;
+  } | null>(null);
   const appliedDetail = useRef<Article | null>(null);
   const previousRouteKind = useRef(route.route.kind);
 
@@ -177,10 +186,13 @@ export function useArticleQueue({
     if (
       applied.current?.key === requestKey &&
       applied.current.data === pages.data &&
-      applied.current.updatedAt === pages.dataUpdatedAt
+      applied.current.updatedAt === pages.dataUpdatedAt &&
+      applied.current.reconciliationRevision === reconciliationRevision
     )
       return;
     const sameQueue = applied.current?.key === requestKey;
+    const reconcile =
+      sameQueue && applied.current?.reconciliationRevision !== reconciliationRevision;
     const candidates = appendUnseenArticles(
       [],
       pages.data.pages.flatMap((page) => page.articles),
@@ -189,7 +201,8 @@ export function useArticleQueue({
     const returnTarget =
       target && appRoutePath(target.route) === appRoutePath(route.readerRoute) ? target : null;
     const current = articlesRef.current;
-    const reading = route.routedArticleId !== null || sameQueue;
+    // Background deliveries retain the reading queue; explicit changes apply its new contents and order.
+    const reading = !reconcile && (route.routedArticleId !== null || sameQueue);
     let next =
       reading && (sameQueue || anchor === null)
         ? appendUnseenArticles(articlesWithUpdatedState(current, candidates), candidates).articles
@@ -200,6 +213,12 @@ export function useArticleQueue({
               : article;
           });
     next = articlesWithContextReturn(next, returnTarget);
+    if (reconcile && detail.data && route.routedArticleId === detail.data.id) {
+      next = articlesWithContextReturn(next, {
+        article: detail.data,
+        index: current.findIndex((article) => article.id === detail.data.id),
+      });
+    }
     if (readingMode === "expanded")
       for (const article of candidates) fullContentLoadedIds.current.add(article.id);
     if (detail.data && route.routedArticleId === detail.data.id) {
@@ -209,7 +228,12 @@ export function useArticleQueue({
           : article,
       );
     }
-    applied.current = { key: requestKey, data: pages.data, updatedAt: pages.dataUpdatedAt };
+    applied.current = {
+      key: requestKey,
+      data: pages.data,
+      updatedAt: pages.dataUpdatedAt,
+      reconciliationRevision,
+    };
     setArticles(next);
     setLoadedReaderRoute(route.readerRoute);
     setDisplayedReadingMode(readingMode);
@@ -228,6 +252,7 @@ export function useArticleQueue({
   }, [
     pages.data,
     pages.dataUpdatedAt,
+    reconciliationRevision,
     anchor,
     requestKey,
     readingMode,
@@ -287,6 +312,7 @@ export function useArticleQueue({
 
   const loadArticles = useCallback(async () => {
     await client.invalidateQueries({ queryKey: readerKeys.lists });
+    setReloadRevision((revision) => revision + 1);
   }, [client]);
   const mergeArticle = useCallback(
     (updated: Article) => {

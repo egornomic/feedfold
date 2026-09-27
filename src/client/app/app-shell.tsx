@@ -80,7 +80,12 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
   const setShortcutHelpOpen = useInterfaceState((state) => state.setShortcutHelpOpen);
   const setManagementRequest = useInterfaceState((state) => state.setManagementRequest);
   const openFeedManagement = useInterfaceState((state) => state.openFeedManagement);
-  const { data: dataResource, bootstrap: bootstrapResult, rules: rulesResult } = useReaderData();
+  const {
+    data: dataResource,
+    bootstrap: bootstrapResult,
+    rules: rulesResult,
+    mutationRevision,
+  } = useReaderData();
   const bootstrap = bootstrapResult.data ?? null;
   const bootstrapError = bootstrapResult.error ? errorMessage(bootstrapResult.error) : null;
   const rules = rulesResult.data ?? null;
@@ -95,6 +100,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
 
   const queue = useArticleQueue({
     route,
+    mutationRevision,
     enabled: true,
     readingMode,
     onReadingModeChange: setReadingMode,
@@ -368,7 +374,10 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
         id="main-content"
         className="main-column"
         tabIndex={-1}
-        inert={route.pending}
+        // Article transitions remain interactive so a swipe can reverse mid-animation.
+        inert={
+          route.pending && (route.route.kind !== "article" || route.current().kind !== "article")
+        }
         aria-busy={route.pending}
       >
         {route.view === "reader" ? (

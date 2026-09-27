@@ -187,6 +187,104 @@ async function settle(page: Page) {
 }
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it.each(["rename", "pause"] as const)(
+    "keeps read articles in the unread queue after a feed %s",
+    async (action) => {
+      const sample = seedReaderBacklog(database, `Metadata ${action}`, 3);
+      database.feeds.updateFeed(1, sample.feed.id, { paused: false });
+      const page = await open("expanded");
+      const titles = () => page.locator(".expanded-article .article-header h2").allTextContents();
+      try {
+        await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+        await expect.poll(() => page.locator(".expanded-article").count()).toBe(3);
+        const original = await titles();
+        await page.getByRole("button", { name: "Mark as read (U)", exact: true }).first().click();
+        await expect.poll(() => database.feeds.getFeed(1, sample.feed.id)?.unreadCount).toBe(2);
+        await expect.poll(titles).toEqual(original);
+        await page
+          .getByRole("button", { name: `Manage ${sample.feed.title}`, exact: true })
+          .click();
+        if (action === "rename") {
+          await page.getByRole("menuitem", { name: "Rename feed", exact: true }).click();
+          await page.getByRole("textbox", { name: "Feed name" }).fill("Renamed metadata feed");
+          await page.getByRole("button", { name: "Save name", exact: true }).click();
+          await page
+            .getByRole("dialog", { name: "Rename feed", exact: true })
+            .waitFor({ state: "hidden" });
+          expect(database.feeds.getFeed(1, sample.feed.id)?.title).toBe("Renamed metadata feed");
+        } else {
+          await page.getByRole("menuitem", { name: "Feed settings", exact: true }).click();
+          await page.getByRole("button", { name: "Pause feed", exact: true }).click();
+          await page.getByRole("button", { name: "Resume feed", exact: true }).waitFor();
+          expect(database.feeds.getFeed(1, sample.feed.id)?.paused).toBe(true);
+          await page.getByRole("button", { name: "Close", exact: true }).click();
+          await page.getByRole("dialog").waitFor({ state: "hidden" });
+        }
+        await expect.poll(titles).toEqual(original);
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
+  it("removes older articles from the unread queue after a bulk read without reloading", async () => {
+    const sample = seedReaderBacklog(database, "Bulk read queue", 3);
+    database.feeds.completeSourceRefresh(sample.sourceId, {
+      ...sample.refresh,
+      parsed: {
+        title: sample.feed.title,
+        siteUrl: null,
+        articles: sample.articles.map((article, index) => ({
+          ...article,
+          publishedAt: new Date(Date.now() - (index + 2) * 86_400_000).toISOString(),
+        })),
+      },
+    });
+    const page = await open("magazine");
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+      await page
+        .getByRole("button", { name: `Open ${sample.articles[0]?.title}`, exact: true })
+        .waitFor();
+      await page.getByRole("button", { name: "Mark older articles as read", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Older than a day", exact: true }).click();
+      await expect.poll(() => database.feeds.getFeed(1, sample.feed.id)?.unreadCount).toBe(0);
+      await page.getByText("No unread articles", { exact: true }).waitFor();
+      expect(await page.locator(".virtual-article-row").count()).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("applies a saved folder order to its visible articles without reloading", async () => {
+    const sample = seedReaderBacklog(database, "Sorted queue", 3);
+    const folder = database.folders.createFolder(1, {
+      name: "Sort review",
+      sortDirection: "oldest",
+    });
+    database.feeds.updateFeed(1, sample.feed.id, { folderId: folder.id });
+    const page = await open("magazine");
+    const firstTitle = () => page.locator(".virtual-article-row").first().textContent();
+    try {
+      await page.goto(`${origin}folders/${folder.id}/all`);
+      await expect.poll(firstTitle).toContain(sample.articles[2]?.title);
+      await page.getByRole("button", { name: `Manage ${folder.name}`, exact: true }).click();
+      await page.getByRole("menuitem", { name: "Folder settings", exact: true }).click();
+      await page.getByRole("combobox", { name: "Article order", exact: true }).click();
+      await page.getByRole("option", { name: "Newest first", exact: true }).click();
+      await page.getByRole("button", { name: "Save folder", exact: true }).click();
+      await expect
+        .poll(() => database.folders.getFolder(1, folder.id)?.sortDirection)
+        .toBe("newest");
+      await page
+        .getByRole("dialog", { name: "Folder settings", exact: true })
+        .waitFor({ state: "hidden" });
+      await expect.poll(firstTitle).toContain(sample.articles[0]?.title);
+    } finally {
+      await page.close();
+    }
+  });
+
   for (const mode of ["magazine", "expanded"] as const) {
     it(`${mode}: loads pages with bounded DOM, retries failure, and searches unmounted article bodies`, async () => {
       const page = await open(mode);
@@ -682,6 +780,7 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
 async function openTouchReader(
   index = 3,
   reducedMotion: "reduce" | "no-preference" = "no-preference",
+  cpuSlowdown = 1,
 ) {
   const touchContext = await browser.newContext({
     baseURL: origin,
@@ -699,6 +798,7 @@ async function openTouchReader(
   await page.locator(".article-open-button").nth(index).click();
   await page.locator(".article-swipe-layer.is-active .article-content").waitFor();
   const session = await touchContext.newCDPSession(page);
+  await session.send("Emulation.setCPUThrottlingRate", { rate: cpuSlowdown });
   const touch = async (
     type: "touchStart" | "touchMove" | "touchEnd" | "touchCancel",
     x = 0,
@@ -733,40 +833,47 @@ async function openTouchReader(
 }
 
 describe("reader motion with touch input and the live API", () => {
-  it("restores cancelled and boundary swipes, then navigates and reverses without losing a visible page", async () => {
-    const { page, touchContext, touch, swipe, title, settled } = await openTouchReader(0);
-    try {
-      const original = await title();
-      await swipe(320, 130, true);
-      await settled();
-      expect(await title()).toBe(original);
-      await swipe(100, 280);
-      await settled();
-      expect(await title()).toBe(original);
-      await swipe(320, 130);
-      await expect.poll(title).toContain("0001");
-      await touch("touchStart", 110);
-      // A finger resting on an entering page must not discard its visible neighbour.
-      const pages = await page.locator(".article-swipe-layer").evaluateAll((elements) =>
-        elements.map((element) => {
-          const rect = element.getBoundingClientRect();
-          return { left: rect.left, right: rect.right };
-        }),
+  it.each([1, 6])(
+    "restores cancelled and boundary swipes, then navigates and reverses without losing a visible page (%ix CPU slowdown)",
+    async (cpuSlowdown) => {
+      const { page, touchContext, touch, swipe, title, settled } = await openTouchReader(
+        0,
+        "no-preference",
+        cpuSlowdown,
       );
-      const [outgoing, incoming] = pages.sort((a, b) => a.left - b.left);
-      if (!outgoing || !incoming) throw new Error("A visible article disappeared during entry");
-      expect(Math.abs(outgoing.right - incoming.left)).toBeLessThan(1);
-      for (const x of [140, 170, 200, 230, 260]) {
-        await touch("touchMove", x);
-        await page.waitForTimeout(16);
+      try {
+        const original = await title();
+        await swipe(320, 130, true);
+        await settled();
+        expect(await title()).toBe(original);
+        await swipe(100, 280);
+        await settled();
+        expect(await title()).toBe(original);
+        await swipe(320, 130);
+        await expect.poll(title).toContain("0001");
+        await touch("touchStart", 110);
+        // A finger resting on an entering page must not discard its visible neighbour.
+        const pages = await page.locator(".article-swipe-layer").evaluateAll((elements) =>
+          elements.map((element) => {
+            const rect = element.getBoundingClientRect();
+            return { left: rect.left, right: rect.right };
+          }),
+        );
+        const [outgoing, incoming] = pages.sort((a, b) => a.left - b.left);
+        if (!outgoing || !incoming) throw new Error("A visible article disappeared during entry");
+        expect(Math.abs(outgoing.right - incoming.left)).toBeLessThan(1);
+        for (const x of [140, 170, 200, 230, 260]) {
+          await touch("touchMove", x);
+          await page.waitForTimeout(16);
+        }
+        await touch("touchEnd");
+        await expect.poll(title).toBe(original);
+        await settled();
+      } finally {
+        await touchContext.close();
       }
-      await touch("touchEnd");
-      await expect.poll(title).toBe(original);
-      await settled();
-    } finally {
-      await touchContext.close();
-    }
-  });
+    },
+  );
 
   it("accepts repeated navigation and a keyboard interruption, with actions applying to the visible article", async () => {
     const { page, touchContext, swipe, title, settled } = await openTouchReader();
