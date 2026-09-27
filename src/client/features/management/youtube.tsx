@@ -230,9 +230,6 @@ export function YouTubeSettings({ userId }: { userId: string }) {
               {error}
             </div>
           ) : null}
-          <p className="youtube-connect-status" role="status">
-            {busy ? "Connecting…" : null}
-          </p>
         </div>
         <footer className="management-dialog-footer">
           <span />
