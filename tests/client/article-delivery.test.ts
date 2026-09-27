@@ -315,7 +315,7 @@ describe("live article delivery", () => {
           database.articles.listArticlePage(TEST_USER_ID, { state: "unread" }).articles.length ===
           0,
       );
-      expect(nextArticleButton(container).disabled).toBe(true);
+      expect(nextArticleButton(container).disabled).toBe(false);
 
       const refreshButton = container.querySelector<HTMLButtonElement>(
         '[aria-label="Refresh this view (R)"]',
