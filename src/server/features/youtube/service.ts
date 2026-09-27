@@ -5,12 +5,7 @@ import { ApplicationApiError } from "../../errors.js";
 import type { FeedRefreshService } from "../refresh/service.js";
 import type { YouTubeConfig } from "./config.js";
 import { digest, YouTubeTokenCipher } from "./crypto.js";
-import {
-  GoogleAccessExpired,
-  YOUTUBE_SCOPE,
-  type YouTubeChannel,
-  YouTubeGoogleClient,
-} from "./google.js";
+import { YOUTUBE_SCOPE, type YouTubeChannel, YouTubeGoogleClient } from "./google.js";
 
 const HOUR = 3_600_000;
 const timestamp = (offset = 0): string => new Date(Date.now() + offset).toISOString();
@@ -156,7 +151,6 @@ export class YouTubeService {
     await this.exclusive(userId, async () => {
       const tokens = await this.google.exchange(code, verifier);
       if (!tokens.refresh_token || !tokens.scope?.split(" ").includes(YOUTUBE_SCOPE)) {
-        await this.google.revoke(tokens.refresh_token ?? tokens.access_token);
         throw new ApplicationApiError(
           400,
           "Allow read-only YouTube access to connect your subscriptions.",
@@ -165,7 +159,6 @@ export class YouTubeService {
       const channel = await this.google.channel(tokens.access_token);
       const previous = this.connection(userId);
       if (previous && previous.channel_id !== channel.id) {
-        await this.google.revoke(tokens.refresh_token);
         throw new ApplicationApiError(
           409,
           "Disconnect the current YouTube channel before connecting a different one.",
@@ -288,7 +281,6 @@ export class YouTubeService {
           .access_token;
       this.reconcile(userId, await this.google.subscriptions(token));
     } catch (error) {
-      if (error instanceof GoogleAccessExpired) this.removeConnection(userId);
       const message =
         error instanceof ApplicationApiError
           ? error.message
@@ -321,17 +313,6 @@ export class YouTubeService {
     this.refresh.notifyDataChanged(userId);
   }
 
-  expireStaleConnections(): void {
-    const stale = this.database.connection
-      .prepare(
-        "SELECT user_id FROM youtube_connections WHERE COALESCE(last_sync_at, connected_at) <= ?",
-      )
-      .all(timestamp(-29 * 24 * HOUR)) as Array<{ user_id: number }>;
-    for (const row of stale) {
-      if (!this.active.has(row.user_id)) this.removeConnection(row.user_id);
-    }
-  }
-
   async disconnect(userId: number): Promise<void> {
     await this.exclusive(userId, async () => {
       const connection = this.connection(userId);
@@ -355,7 +336,6 @@ export class YouTubeService {
   }
 
   private async syncDue(): Promise<void> {
-    this.expireStaleConnections();
     this.database.connection
       .prepare("DELETE FROM youtube_oauth_states WHERE expires_at <= ?")
       .run(timestamp());

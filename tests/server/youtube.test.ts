@@ -353,8 +353,7 @@ describe("YouTube data retention", () => {
       conditionOperator: "and",
       action: "hide",
     });
-    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
-    service.expireStaleConnections();
+    service["removeConnection"](1);
     expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
     connect(1);
     service.reconcile(1, [first]);
@@ -376,8 +375,7 @@ describe("YouTube data retention", () => {
       action: "hide",
     });
     service.createShortsRule(1);
-    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
-    service.expireStaleConnections();
+    service["removeConnection"](1);
     expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
   });
 
@@ -387,22 +385,37 @@ describe("YouTube data retention", () => {
     const rule = database.rules.listRules(1)[0];
     if (!rule) throw new Error("Missing Shorts rule");
     database.rules.deleteRule(1, rule.id);
-    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
-    service.expireStaleConnections();
+    service["removeConnection"](1);
     expect(service.status(1).connected).toBe(false);
     expect(database.rules.listRules(1)).toHaveLength(0);
   });
 
-  it("expires stale imports even for disabled accounts while retaining fresh imports", () => {
-    const { database, service } = setup();
-    service.reconcile(1, [first]);
-    service.expireStaleConnections();
-    expect(service.status(1).connected).toBe(true);
-    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
-    service.expireStaleConnections();
-    expect(service.status(1)).toMatchObject({ connected: false, feedCount: 0 });
-    expect(database.feeds.listFeeds(1)).toHaveLength(0);
-  });
+  it.each([0, 1])(
+    "retains stale connections and feeds for enabled=%s accounts",
+    async (enabled) => {
+      const { database, service } = setup();
+      service.reconcile(1, [first]);
+      service.createShortsRule(1);
+      database.connection.prepare("UPDATE users SET enabled = ? WHERE id = 1").run(enabled);
+      database.connection
+        .prepare(
+          "UPDATE youtube_connections SET last_sync_at = '2000-01-01', refresh_token = 'unreadable-token', next_sync_at = '2000-01-01'",
+        )
+        .run();
+      const feeds = database.feeds.listFeeds(1);
+      const rules = database.rules.listRules(1);
+      service.start();
+      await service.stop();
+      expect(service.status(1)).toMatchObject({
+        connected: true,
+        feedCount: 1,
+        lastSyncAt: "2000-01-01",
+      });
+      expect(database.feeds.listFeeds(1)).toEqual(feeds);
+      expect(database.rules.listRules(1)).toEqual(rules);
+      if (enabled) expect(service.status(1).error).toContain("Try again later");
+    },
+  );
 });
 
 describe("YouTube backup privacy", () => {
