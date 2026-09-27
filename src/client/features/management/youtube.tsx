@@ -35,7 +35,10 @@ export function YouTubeSettings({ userId }: { userId: string }) {
     }
   }, []);
 
-  const act = async (action: "connect" | "disconnect" | "status", filterShorts = false) => {
+  const act = async (
+    action: "connect" | "disconnect-keep" | "disconnect-remove" | "status",
+    filterShorts = false,
+  ) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -51,10 +54,21 @@ export function YouTubeSettings({ userId }: { userId: string }) {
         window.location.assign(url);
         return;
       }
-      if (action === "disconnect") {
-        await mutateRequest(() => httpRequest<void>("/api/youtube", { method: "DELETE", headers }));
+      if (action === "disconnect-keep" || action === "disconnect-remove") {
+        const removeFeeds = action === "disconnect-remove";
+        await mutateRequest(() =>
+          httpRequest<void>("/api/youtube", {
+            method: "DELETE",
+            headers,
+            body: JSON.stringify({ removeFeeds }),
+          }),
+        );
         setConfirmDisconnect(false);
-        setNotice("YouTube disconnected. Synced feeds and their reading history were removed.");
+        setNotice(
+          removeFeeds
+            ? "YouTube disconnected. Imported channels and their reading history were removed."
+            : "YouTube disconnected. Imported channels and their reading history were kept.",
+        );
       }
       await statusQuery.refetch();
     } catch (caught) {
@@ -144,10 +158,11 @@ export function YouTubeSettings({ userId }: { userId: string }) {
       {confirmDisconnect ? (
         <div className="setting-row">
           <div>
-            <strong>Disconnect YouTube?</strong>
+            <strong>Remove imported channels too?</strong>
             <p>
-              This revokes Google access and removes your synced feeds and their reading history,
-              including saved articles. It does not change your YouTube subscriptions.
+              Disconnecting stops subscription syncing and revokes Google access. Keep your imported
+              channels, or remove them along with saved articles and reading history. Your
+              subscriptions on YouTube will not change.
             </p>
           </div>
           <div className="settings-actions">
@@ -160,12 +175,20 @@ export function YouTubeSettings({ userId }: { userId: string }) {
               Cancel
             </button>
             <button
+              className="secondary-button"
+              type="button"
+              disabled={busy}
+              onClick={() => void act("disconnect-keep")}
+            >
+              Disconnect and keep channels
+            </button>
+            <button
               className="danger-button"
               type="button"
               disabled={busy}
-              onClick={() => void act("disconnect")}
+              onClick={() => void act("disconnect-remove")}
             >
-              Disconnect and remove feeds
+              Disconnect and remove channels
             </button>
           </div>
         </div>

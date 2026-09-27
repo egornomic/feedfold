@@ -353,7 +353,7 @@ describe("YouTube data retention", () => {
       conditionOperator: "and",
       action: "hide",
     });
-    service["removeConnection"](1);
+    service["removeConnection"](1, true);
     expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
     connect(1);
     service.reconcile(1, [first]);
@@ -375,7 +375,7 @@ describe("YouTube data retention", () => {
       action: "hide",
     });
     service.createShortsRule(1);
-    service["removeConnection"](1);
+    service["removeConnection"](1, true);
     expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
   });
 
@@ -385,10 +385,70 @@ describe("YouTube data retention", () => {
     const rule = database.rules.listRules(1)[0];
     if (!rule) throw new Error("Missing Shorts rule");
     database.rules.deleteRule(1, rule.id);
-    service["removeConnection"](1);
+    service["removeConnection"](1, true);
     expect(service.status(1).connected).toBe(false);
     expect(database.rules.listRules(1)).toHaveLength(0);
   });
+
+  it.each([false, true])(
+    "disconnects with removeFeeds=%s while respecting the channel choice",
+    (removeFeeds) => {
+      const { database, service, connect } = setup();
+      service.reconcile(1, [first]);
+      service.createShortsRule(1);
+      const feed = database.feeds.listFeeds(1)[0];
+      if (!feed) throw new Error("Missing synced feed");
+      const ordinary = database.feeds.createFeed(1, { feedUrl: "https://example.com/feed" });
+      completeFeedRefresh(database.feeds, feed.id, {
+        httpStatus: 200,
+        etag: null,
+        lastModified: null,
+        parsed: {
+          title: "Videos",
+          siteUrl: null,
+          articles: [
+            {
+              externalId: "video123",
+              title: "Saved video",
+              url: "https://www.youtube.com/watch?v=video123",
+              author: null,
+              publishedAt: null,
+              summary: "",
+              imageUrl: null,
+              feedContentHtml: null,
+              media: youtubeMediaFromUrl("https://www.youtube.com/watch?v=video123"),
+            },
+          ],
+        },
+      });
+      const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
+      if (!article) throw new Error("Missing video");
+      database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
+      const articles = database.articles.listArticlePage(1, { state: "all" }).articles;
+      const rules = database.rules.listRules(1);
+      service["removeConnection"](1, removeFeeds);
+      expect(service.status(1)).toMatchObject({ connected: false, feedCount: 0 });
+      expect(database.feeds.getFeed(1, ordinary.id)).not.toBeNull();
+      if (removeFeeds) {
+        expect(database.feeds.getFeed(1, feed.id)).toBeNull();
+        expect(database.articles.listArticlePage(1, { state: "all" }).articles).toEqual([]);
+        expect(database.rules.listRules(1)).toEqual([]);
+      } else {
+        expect(database.feeds.getFeed(1, feed.id)).not.toBeNull();
+        expect(database.articles.listArticlePage(1, { state: "all" }).articles).toEqual(articles);
+        expect(database.rules.listRules(1)).toEqual(rules);
+        expect(
+          database.feeds.updateFeed(1, feed.id, { feedUrl: "https://example.com/kept-channel" }),
+        ).not.toBeNull();
+        database.feeds.updateFeed(1, feed.id, { feedUrl: url(first.id) });
+        connect(1);
+        service.reconcile(1, [first]);
+        expect(database.feeds.listFeeds(1)).toHaveLength(2);
+        expect(database.articles.listArticlePage(1, { state: "all" }).articles).toEqual(articles);
+      }
+      expect(database.connection.pragma("foreign_key_check")).toEqual([]);
+    },
+  );
 
   it.each([0, 1])(
     "retains stale connections and feeds for enabled=%s accounts",
@@ -586,10 +646,17 @@ describe("YouTube HTTP account boundaries", () => {
           headers: { cookie, origin: "http://localhost:45173" },
         });
         expect(afterCooldown.statusCode).toBe(200);
+        const missingChoice = await app.inject({
+          method: "DELETE",
+          url: "/api/youtube",
+          headers: { cookie: otherCookie, origin: "http://localhost:45173" },
+        });
+        expect(missingChoice.statusCode).toBe(400);
         const disconnected = await app.inject({
           method: "DELETE",
           url: "/api/youtube",
           headers: { cookie: otherCookie, origin: "http://localhost:45173" },
+          payload: { removeFeeds: true },
         });
         expect(disconnected.statusCode).toBe(204);
       } finally {

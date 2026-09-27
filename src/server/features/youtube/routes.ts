@@ -82,7 +82,8 @@ export async function youtubeRoutes(
     return reply.redirect(`${options.basePath}/settings/feeds?youtube=${result}`, 303);
   });
   app.delete("/api/youtube", async (request, reply) => {
-    await service().disconnect(options.userId(request));
+    const { removeFeeds } = z.object({ removeFeeds: z.boolean() }).parse(request.body);
+    await service().disconnect(options.userId(request), removeFeeds);
     return reply.code(204).send();
   });
 }

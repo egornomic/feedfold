@@ -295,14 +295,16 @@ export class YouTubeService {
     }
   }
 
-  private removeConnection(userId: number): void {
+  private removeConnection(userId: number, removeFeeds: boolean): void {
     this.database.connection.transaction(() => {
-      const feeds = this.database.connection
-        .prepare("SELECT feed_id FROM youtube_feeds WHERE user_id = ?")
-        .all(userId) as Array<{ feed_id: number }>;
-      for (const feed of feeds) this.database.feeds.deleteFeed(userId, feed.feed_id);
-      const ruleId = this.connection(userId)?.shorts_rule_id;
-      if (ruleId !== null && ruleId !== undefined) this.database.rules.deleteRule(userId, ruleId);
+      if (removeFeeds) {
+        const feeds = this.database.connection
+          .prepare("SELECT feed_id FROM youtube_feeds WHERE user_id = ?")
+          .all(userId) as Array<{ feed_id: number }>;
+        for (const feed of feeds) this.database.feeds.deleteFeed(userId, feed.feed_id);
+        const ruleId = this.connection(userId)?.shorts_rule_id;
+        if (ruleId !== null && ruleId !== undefined) this.database.rules.deleteRule(userId, ruleId);
+      }
       this.database.connection
         .prepare("DELETE FROM youtube_connections WHERE user_id = ?")
         .run(userId);
@@ -313,13 +315,13 @@ export class YouTubeService {
     this.refresh.notifyDataChanged(userId);
   }
 
-  async disconnect(userId: number): Promise<void> {
+  async disconnect(userId: number, removeFeeds: boolean): Promise<void> {
     await this.exclusive(userId, async () => {
       const connection = this.connection(userId);
       if (connection) {
         await this.google.revoke(this.cipher.decrypt(userId, connection.refresh_token));
       }
-      this.removeConnection(userId);
+      this.removeConnection(userId, removeFeeds);
     });
   }
 

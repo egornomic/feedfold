@@ -185,7 +185,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   await app.register(authRoutes, {
     beforeDeleteAccount: async (id: number) => {
       try {
-        await services.youtubeService?.disconnect(id);
+        await services.youtubeService?.disconnect(id, true);
       } catch {
         app.log.warn(
           { event: "youtube_revocation_failed" },
