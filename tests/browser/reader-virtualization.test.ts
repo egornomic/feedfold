@@ -740,6 +740,7 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
 async function openTouchReader(
   index = 3,
   reducedMotion: "reduce" | "no-preference" = "no-preference",
+  cpuSlowdown = 1,
 ) {
   const touchContext = await browser.newContext({
     baseURL: origin,
@@ -757,6 +758,7 @@ async function openTouchReader(
   await page.locator(".article-open-button").nth(index).click();
   await page.locator(".article-swipe-layer.is-active .article-content").waitFor();
   const session = await touchContext.newCDPSession(page);
+  await session.send("Emulation.setCPUThrottlingRate", { rate: cpuSlowdown });
   const touch = async (
     type: "touchStart" | "touchMove" | "touchEnd" | "touchCancel",
     x = 0,
@@ -791,40 +793,47 @@ async function openTouchReader(
 }
 
 describe("reader motion with touch input and the live API", () => {
-  it("restores cancelled and boundary swipes, then navigates and reverses without losing a visible page", async () => {
-    const { page, touchContext, touch, swipe, title, settled } = await openTouchReader(0);
-    try {
-      const original = await title();
-      await swipe(320, 130, true);
-      await settled();
-      expect(await title()).toBe(original);
-      await swipe(100, 280);
-      await settled();
-      expect(await title()).toBe(original);
-      await swipe(320, 130);
-      await expect.poll(title).toContain("0001");
-      await touch("touchStart", 110);
-      // A finger resting on an entering page must not discard its visible neighbour.
-      const pages = await page.locator(".article-swipe-layer").evaluateAll((elements) =>
-        elements.map((element) => {
-          const rect = element.getBoundingClientRect();
-          return { left: rect.left, right: rect.right };
-        }),
+  it.each([1, 6])(
+    "restores cancelled and boundary swipes, then navigates and reverses without losing a visible page (%ix CPU slowdown)",
+    async (cpuSlowdown) => {
+      const { page, touchContext, touch, swipe, title, settled } = await openTouchReader(
+        0,
+        "no-preference",
+        cpuSlowdown,
       );
-      const [outgoing, incoming] = pages.sort((a, b) => a.left - b.left);
-      if (!outgoing || !incoming) throw new Error("A visible article disappeared during entry");
-      expect(Math.abs(outgoing.right - incoming.left)).toBeLessThan(1);
-      for (const x of [140, 170, 200, 230, 260]) {
-        await touch("touchMove", x);
-        await page.waitForTimeout(16);
+      try {
+        const original = await title();
+        await swipe(320, 130, true);
+        await settled();
+        expect(await title()).toBe(original);
+        await swipe(100, 280);
+        await settled();
+        expect(await title()).toBe(original);
+        await swipe(320, 130);
+        await expect.poll(title).toContain("0001");
+        await touch("touchStart", 110);
+        // A finger resting on an entering page must not discard its visible neighbour.
+        const pages = await page.locator(".article-swipe-layer").evaluateAll((elements) =>
+          elements.map((element) => {
+            const rect = element.getBoundingClientRect();
+            return { left: rect.left, right: rect.right };
+          }),
+        );
+        const [outgoing, incoming] = pages.sort((a, b) => a.left - b.left);
+        if (!outgoing || !incoming) throw new Error("A visible article disappeared during entry");
+        expect(Math.abs(outgoing.right - incoming.left)).toBeLessThan(1);
+        for (const x of [140, 170, 200, 230, 260]) {
+          await touch("touchMove", x);
+          await page.waitForTimeout(16);
+        }
+        await touch("touchEnd");
+        await expect.poll(title).toBe(original);
+        await settled();
+      } finally {
+        await touchContext.close();
       }
-      await touch("touchEnd");
-      await expect.poll(title).toBe(original);
-      await settled();
-    } finally {
-      await touchContext.close();
-    }
-  });
+    },
+  );
 
   it("accepts repeated navigation and a keyboard interruption, with actions applying to the visible article", async () => {
     const { page, touchContext, swipe, title, settled } = await openTouchReader();

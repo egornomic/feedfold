@@ -374,7 +374,10 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
         id="main-content"
         className="main-column"
         tabIndex={-1}
-        inert={route.pending}
+        // Article transitions remain interactive so a swipe can reverse mid-animation.
+        inert={
+          route.pending && (route.route.kind !== "article" || route.current().kind !== "article")
+        }
         aria-busy={route.pending}
       >
         {route.view === "reader" ? (
