@@ -16,6 +16,7 @@ import { youtubeConfiguration } from "../../src/server/features/youtube/config.j
 import { digest, YouTubeTokenCipher } from "../../src/server/features/youtube/crypto.js";
 import { YouTubeService } from "../../src/server/features/youtube/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import { migrateDatabase } from "../../src/server/migrations.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 import { DESKTOP_POLICY } from "../../src/server/service-policy.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
@@ -340,6 +341,34 @@ describe("YouTube subscription sync", () => {
 });
 
 describe("YouTube data retention", () => {
+  it("migrates existing generated-rule ownership without claiming personal rules", () => {
+    const { database, service, connect } = setup();
+    service.reconcile(1, [first]);
+    service.createShortsRule(1);
+    const generated = database.rules.listRules(1)[0];
+    if (!generated) throw new Error("Missing generated rule");
+    const personal = database.rules.createRule(1, {
+      name: "My own filter",
+      conditions: [{ field: "title", pattern: "advertisement" }],
+      conditionOperator: "and",
+      action: "hide",
+    });
+    database.connection.exec(`
+      ALTER TABLE rules DROP COLUMN youtube_generated;
+      ALTER TABLE youtube_connections ADD COLUMN shorts_rule_id INTEGER REFERENCES rules(id) ON DELETE SET NULL;
+      DELETE FROM migrations WHERE version = (SELECT max(version) FROM migrations);
+    `);
+    database.connection
+      .prepare("UPDATE youtube_connections SET shorts_rule_id = ? WHERE user_id = 1")
+      .run(generated.id);
+    migrateDatabase(database.connection, 20);
+    service["removeConnection"](1, false);
+    connect(1);
+    service.reconcile(1, [first]);
+    service["removeConnection"](1, true);
+    expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
+    expect(database.connection.pragma("foreign_key_check")).toEqual([]);
+  });
   it("removes the generated Shorts rule when a connection ends so reconnect can include Shorts", () => {
     const { database, service, connect } = setup();
     service.reconcile(1, [first]);
@@ -353,8 +382,7 @@ describe("YouTube data retention", () => {
       conditionOperator: "and",
       action: "hide",
     });
-    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
-    service.expireStaleConnections();
+    service["removeConnection"](1, true);
     expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
     connect(1);
     service.reconcile(1, [first]);
@@ -376,8 +404,7 @@ describe("YouTube data retention", () => {
       action: "hide",
     });
     service.createShortsRule(1);
-    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
-    service.expireStaleConnections();
+    service["removeConnection"](1, true);
     expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
   });
 
@@ -387,22 +414,121 @@ describe("YouTube data retention", () => {
     const rule = database.rules.listRules(1)[0];
     if (!rule) throw new Error("Missing Shorts rule");
     database.rules.deleteRule(1, rule.id);
-    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
-    service.expireStaleConnections();
+    service["removeConnection"](1, true);
     expect(service.status(1).connected).toBe(false);
     expect(database.rules.listRules(1)).toHaveLength(0);
   });
 
-  it("expires stale imports even for disabled accounts while retaining fresh imports", () => {
-    const { database, service } = setup();
-    service.reconcile(1, [first]);
-    service.expireStaleConnections();
-    expect(service.status(1).connected).toBe(true);
-    database.connection.prepare("UPDATE youtube_connections SET last_sync_at = '2000-01-01'").run();
-    service.expireStaleConnections();
-    expect(service.status(1)).toMatchObject({ connected: false, feedCount: 0 });
-    expect(database.feeds.listFeeds(1)).toHaveLength(0);
-  });
+  it.each([false, true])(
+    "disconnects with removeFeeds=%s while respecting the channel choice",
+    (removeFeeds) => {
+      const { database, service, connect } = setup();
+      service.reconcile(1, [first]);
+      service.createShortsRule(1);
+      const feed = database.feeds.listFeeds(1)[0];
+      if (!feed) throw new Error("Missing synced feed");
+      const ordinary = database.feeds.createFeed(1, { feedUrl: "https://example.com/feed" });
+      completeFeedRefresh(database.feeds, feed.id, {
+        httpStatus: 200,
+        etag: null,
+        lastModified: null,
+        parsed: {
+          title: "Videos",
+          siteUrl: null,
+          articles: [
+            {
+              externalId: "video123",
+              title: "Saved video",
+              url: "https://www.youtube.com/watch?v=video123",
+              author: null,
+              publishedAt: null,
+              summary: "",
+              imageUrl: null,
+              feedContentHtml: null,
+              media: youtubeMediaFromUrl("https://www.youtube.com/watch?v=video123"),
+            },
+          ],
+        },
+      });
+      const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
+      if (!article) throw new Error("Missing video");
+      database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
+      const articles = database.articles.listArticlePage(1, { state: "all" }).articles;
+      const rules = database.rules.listRules(1);
+      service["removeConnection"](1, removeFeeds);
+      expect(service.status(1)).toMatchObject({ connected: false, feedCount: 0 });
+      expect(database.feeds.getFeed(1, ordinary.id)).not.toBeNull();
+      if (removeFeeds) {
+        expect(database.feeds.getFeed(1, feed.id)).toBeNull();
+        expect(database.articles.listArticlePage(1, { state: "all" }).articles).toEqual([]);
+        expect(database.rules.listRules(1)).toEqual([]);
+      } else {
+        expect(database.feeds.getFeed(1, feed.id)).not.toBeNull();
+        expect(database.articles.listArticlePage(1, { state: "all" }).articles).toEqual(articles);
+        expect(database.rules.listRules(1)).toEqual(rules);
+        expect(
+          database.feeds.updateFeed(1, feed.id, { feedUrl: "https://example.com/kept-channel" }),
+        ).not.toBeNull();
+        database.feeds.updateFeed(1, feed.id, { feedUrl: url(first.id) });
+        connect(1);
+        service.reconcile(1, [first]);
+        expect(database.feeds.listFeeds(1)).toHaveLength(2);
+        expect(database.articles.listArticlePage(1, { state: "all" }).articles).toEqual(articles);
+      }
+      expect(database.connection.pragma("foreign_key_check")).toEqual([]);
+    },
+  );
+
+  it.each([false, true])(
+    "removes retained generated Shorts filters after reconnecting with filterShorts=%s",
+    (filterShorts) => {
+      const { database, service, connect } = setup();
+      service.reconcile(1, [first]);
+      service.createShortsRule(1);
+      const personal = database.rules.createRule(1, {
+        name: "My own filter",
+        conditions: [{ field: "title", pattern: "advertisement" }],
+        conditionOperator: "and",
+        action: "hide",
+      });
+      const retained = database.rules.listRules(1);
+      service["removeConnection"](1, false);
+      expect(database.rules.listRules(1)).toEqual(retained);
+      connect(1);
+      service.reconcile(1, [first]);
+      if (filterShorts) service.createShortsRule(1);
+      expect(database.rules.listRules(1)).toEqual(retained);
+      service["removeConnection"](1, true);
+      expect(database.rules.listRules(1).map((rule) => rule.id)).toEqual([personal.id]);
+    },
+  );
+
+  it.each([0, 1])(
+    "retains stale connections and feeds for enabled=%s accounts",
+    async (enabled) => {
+      const { database, service } = setup();
+      service.reconcile(1, [first]);
+      service.createShortsRule(1);
+      database.connection.prepare("UPDATE users SET enabled = ? WHERE id = 1").run(enabled);
+      database.connection
+        .prepare(
+          "UPDATE youtube_connections SET last_sync_at = '2000-01-01', refresh_token = 'unreadable-token', next_sync_at = '2000-01-01'",
+        )
+        .run();
+      const feeds = database.feeds.listFeeds(1);
+      const rules = database.rules.listRules(1);
+      service.start();
+      await service.stop();
+      expect(service.status(1)).toMatchObject({
+        connected: true,
+        feedCount: 1,
+        lastSyncAt: "2000-01-01",
+      });
+      expect(database.feeds.listFeeds(1)).toEqual(feeds);
+      expect(database.rules.listRules(1)).toEqual(rules);
+      if (enabled) expect(service.status(1).error).toContain("Try again later");
+    },
+  );
 });
 
 describe("YouTube backup privacy", () => {
@@ -573,10 +699,17 @@ describe("YouTube HTTP account boundaries", () => {
           headers: { cookie, origin: "http://localhost:45173" },
         });
         expect(afterCooldown.statusCode).toBe(200);
+        const missingChoice = await app.inject({
+          method: "DELETE",
+          url: "/api/youtube",
+          headers: { cookie: otherCookie, origin: "http://localhost:45173" },
+        });
+        expect(missingChoice.statusCode).toBe(400);
         const disconnected = await app.inject({
           method: "DELETE",
           url: "/api/youtube",
           headers: { cookie: otherCookie, origin: "http://localhost:45173" },
+          payload: { removeFeeds: true },
         });
         expect(disconnected.statusCode).toBe(204);
       } finally {
