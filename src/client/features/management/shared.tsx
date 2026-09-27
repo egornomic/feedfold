@@ -66,7 +66,7 @@ export function PageHeader({
   actions,
 }: {
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
 }) {
   const setNavOpen = useInterfaceState((state) => state.setNavOpen);
@@ -82,7 +82,7 @@ export function PageHeader({
       </button>
       <div className="page-header-copy">
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description ? <p>{description}</p> : null}
       </div>
       {actions ? <div className="page-header-actions">{actions}</div> : null}
     </header>

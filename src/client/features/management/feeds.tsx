@@ -218,7 +218,6 @@ function FeedsPageContent({
     <div className="management-page feeds-management-page">
       <PageHeader
         title="Manage feeds"
-        description="Subscriptions, folders, and source health in one place."
         actions={
           activeTab === "subscriptions" ? (
             <div className="feed-page-actions">
