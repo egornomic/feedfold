@@ -783,6 +783,9 @@
 .youtube-connect-dialog .management-dialog-body p + p {
   margin-top: 12px;
 }
+.youtube-connect-status {
+  min-height: 1lh;
+}
 .saving-label {
   display: inline-flex;
   align-items: center;
