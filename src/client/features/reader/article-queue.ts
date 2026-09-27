@@ -18,6 +18,7 @@ import { articlesWithContextReturn, type ContextArticleReturn } from "./contextu
 import type { ReadingPosition } from "./interaction/reading-position";
 import {
   appendUnseenArticles,
+  articleMatchesState,
   articleQueryForReaderRoute,
   articlesWithUpdatedState,
   firstUnseenArticlePage,
@@ -171,13 +172,11 @@ export function useArticleQueue({
     setAnchor(null);
     const target = contextReturn.current;
     setArticles((current) =>
-      current.filter((article) => {
-        if (article.id === target?.article.id) return true;
-        if (route.readerRoute.state === "unread") return !article.isRead;
-        if (route.readerRoute.state === "read") return article.isRead;
-        if (route.readerRoute.state === "starred") return article.isStarred;
-        return true;
-      }),
+      current.filter(
+        (article) =>
+          article.id === target?.article.id ||
+          articleMatchesState(article, route.readerRoute.state),
+      ),
     );
   }, [route.route.kind, route.routedArticleId, route.readerRoute.state, setArticles]);
 
@@ -197,6 +196,9 @@ export function useArticleQueue({
       [],
       pages.data.pages.flatMap((page) => page.articles),
     ).articles;
+    const matchingCandidates = candidates.filter((article) =>
+      articleMatchesState(article, route.readerRoute.state),
+    );
     const target = contextReturn.current;
     const returnTarget =
       target && appRoutePath(target.route) === appRoutePath(route.readerRoute) ? target : null;
@@ -205,8 +207,9 @@ export function useArticleQueue({
     const reading = !reconcile && (route.routedArticleId !== null || sameQueue);
     let next =
       reading && (sameQueue || anchor === null)
-        ? appendUnseenArticles(articlesWithUpdatedState(current, candidates), candidates).articles
-        : candidates.map((article) => {
+        ? appendUnseenArticles(articlesWithUpdatedState(current, candidates), matchingCandidates)
+            .articles
+        : matchingCandidates.map((article) => {
             const complete = current.find((item) => item.id === article.id);
             return complete && fullContentLoadedIds.current.has(article.id)
               ? { ...complete, isRead: article.isRead, isStarred: article.isStarred }

@@ -26,6 +26,13 @@ export interface ArticlePageBatch {
   nextCursor: string | null;
 }
 
+export function articleMatchesState(article: Article, state: ArticleState): boolean {
+  if (state === "unread") return !article.isRead;
+  if (state === "read") return article.isRead;
+  if (state === "starred") return article.isStarred;
+  return true;
+}
+
 export function appendUnseenArticles(articles: Article[], candidates: Article[]): AppendedArticles {
   const ids = new Set(articles.map((article) => article.id));
   const appended = candidates.filter((article) => {

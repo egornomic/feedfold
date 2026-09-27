@@ -187,6 +187,57 @@ async function settle(page: Page) {
 }
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it.each(["folder", "feed"] as const)(
+    "excludes a newly read article when revisiting a cached unread %s",
+    async (scope) => {
+      const sample = seedReaderBacklog(database, `Unread ${scope}`, 3);
+      const folder = database.folders.createFolder(1, { name: `Unread ${scope} folder` });
+      database.feeds.updateFeed(1, sample.feed.id, { folderId: folder.id });
+      const page = await open("magazine");
+      const scopePath =
+        scope === "folder" ? `folders/${folder.id}/unread` : `feeds/${sample.feed.id}/unread`;
+      const selected = database.articles.listArticlePage(1, {
+        feedId: sample.feed.id,
+        state: "unread",
+      }).articles[1];
+      if (!selected) throw new Error("The unread fixture has no article");
+      const rows = () => page.locator(".article-open-button").allTextContents();
+      try {
+        await page.goto(`${origin}${scopePath}`);
+        await expect.poll(rows).toHaveLength(3);
+        await page.locator(".quick-links .nav-item").first().click();
+        await page.getByRole("button", { name: `Open ${selected.title}`, exact: true }).click();
+        await expect.poll(() => database.articles.getArticle(1, selected.id)?.isRead).toBe(true);
+        await page.locator(".article-swipe-layer.is-active .article-content").waitFor();
+        // The live API excludes the read article; a cached list must agree immediately.
+        const response = await page.request.get(
+          `/api/articles?state=unread&${scope}Id=${scope === "folder" ? folder.id : sample.feed.id}`,
+        );
+        expect(response.status()).toBe(200);
+        const result = await response.json();
+        expect(result.articles.map((article: { id: number }) => article.id)).not.toContain(
+          selected.id,
+        );
+        await page
+          .locator(
+            scope === "folder"
+              ? `button[data-management-folder-id="${folder.id}"]`
+              : `.feed-nav-item[data-management-feed-id="${sample.feed.id}"]`,
+          )
+          .click();
+        await page.waitForURL(`${origin}${scopePath}`);
+        await page
+          .locator('.reading-workspace[aria-busy="false"] .article-open-button')
+          .first()
+          .waitFor();
+        expect(await rows()).not.toContain(`Open ${selected.title}`);
+        expect(await rows()).toHaveLength(2);
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
   it.each(["rename", "pause"] as const)(
     "keeps read articles in the unread queue after a feed %s",
     async (action) => {
