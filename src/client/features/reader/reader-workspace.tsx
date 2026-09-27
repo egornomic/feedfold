@@ -184,7 +184,12 @@ export function ReaderWorkspace({
               }
               onRetryContent={articleEnrichment.retryArticleContent}
               canPrevious={queue.activeArticleIndex > 0}
-              canNext={queue.activeArticleIndex >= 0 && !queue.loading && !queue.loadingMore}
+              canNext={
+                queue.activeArticleIndex >= 0 &&
+                queue.queueReady &&
+                !queue.loading &&
+                !queue.loadingMore
+              }
               fullContentVisible={
                 queue.activeArticle
                   ? articleEnrichment.fullContentVisibleIds.has(queue.activeArticle.id)

@@ -155,7 +155,9 @@ export function useArticleActions({
         direction === 1 &&
         currentIndex === queue.articles.length - 1 &&
         !queue.nextCursor &&
-        !queue.loading
+        !queue.loading &&
+        !queue.loadingMore &&
+        queue.queueReady
       ) {
         route.navigate({ ...route.readerRoute, state: "unread" }, routed ? "replace" : "push");
         return true;
