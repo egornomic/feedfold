@@ -1415,7 +1415,6 @@ function SettingsPage({
     <div ref={pageRef} className="management-page settings-page">
       <PageHeader
         title="Settings"
-        description="Tune appearance, reading, feeds, AI, and account access."
         actions={
           saving ? (
             <span className="saving-label">
