@@ -19,7 +19,6 @@ interface Connection {
   next_sync_at: string;
   last_attempt_at: string | null;
   error: string | null;
-  shorts_rule_id: number | null;
 }
 
 export class YouTubeService {
@@ -209,7 +208,7 @@ export class YouTubeService {
           action: "hide",
         });
         this.database.connection
-          .prepare("UPDATE youtube_connections SET shorts_rule_id = ? WHERE user_id = ?")
+          .prepare("UPDATE rules SET youtube_generated = 1 WHERE id = ? AND user_id = ?")
           .run(rule.id, userId);
       }
     })();
@@ -302,8 +301,10 @@ export class YouTubeService {
           .prepare("SELECT feed_id FROM youtube_feeds WHERE user_id = ?")
           .all(userId) as Array<{ feed_id: number }>;
         for (const feed of feeds) this.database.feeds.deleteFeed(userId, feed.feed_id);
-        const ruleId = this.connection(userId)?.shorts_rule_id;
-        if (ruleId !== null && ruleId !== undefined) this.database.rules.deleteRule(userId, ruleId);
+        const rules = this.database.connection
+          .prepare("SELECT id FROM rules WHERE user_id = ? AND youtube_generated = 1")
+          .all(userId) as Array<{ id: number }>;
+        for (const rule of rules) this.database.rules.deleteRule(userId, rule.id);
       }
       this.database.connection
         .prepare("DELETE FROM youtube_connections WHERE user_id = ?")

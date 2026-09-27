@@ -1565,6 +1565,12 @@ const migrations: Migration[] = [
   {
     sql: `ALTER TABLE youtube_connections ADD COLUMN shorts_rule_id INTEGER REFERENCES rules(id) ON DELETE SET NULL;`,
   },
+  {
+    sql: `ALTER TABLE rules ADD COLUMN youtube_generated INTEGER NOT NULL DEFAULT 0;
+      UPDATE rules SET youtube_generated = 1
+      WHERE id IN (SELECT shorts_rule_id FROM youtube_connections WHERE shorts_rule_id IS NOT NULL);
+      ALTER TABLE youtube_connections DROP COLUMN shorts_rule_id;`,
+  },
 ];
 
 export function migrateDatabase(
