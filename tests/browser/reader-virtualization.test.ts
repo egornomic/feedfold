@@ -187,6 +187,82 @@ async function settle(page: Page) {
 }
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it("keeps a read article open after refreshing its unread reader context", async () => {
+    const sample = seedReaderBacklog(database, "Refreshed unread article", 3);
+    const page = await open("magazine");
+    const selected = database.articles.listArticlePage(1, {
+      feedId: sample.feed.id,
+      state: "unread",
+    }).articles[1];
+    if (!selected) throw new Error("The refresh fixture has no article");
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+      await page.getByRole("button", { name: `Open ${selected.title}`, exact: true }).click();
+      await expect.poll(() => database.articles.getArticle(1, selected.id)?.isRead).toBe(true);
+      const anchoredPage = page.waitForResponse((response) =>
+        response.url().includes(`anchorId=${selected.id}`),
+      );
+      await page.reload();
+      expect((await anchoredPage).status()).toBe(200);
+      await page.locator('.reading-workspace[aria-busy="false"]').waitFor();
+      await settle(page);
+      await expect
+        .poll(() => page.locator(".article-swipe-layer.is-active h2").allTextContents())
+        .toEqual([`${selected.title} (opens in a new tab)`]);
+      await page.getByRole("button", { name: "Back to articles", exact: true }).click();
+      await expect.poll(() => page.locator(".article-open-button").count()).toBe(2);
+      expect(await page.locator(".article-open-button").allTextContents()).not.toContain(
+        `Open ${selected.title}`,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("keeps excluded cached read articles out when loading the next unread page", async () => {
+    const sample = seedReaderBacklog(database, "Cached unread pagination", 105);
+    const page = await open("magazine");
+    const selected = database.articles.listArticlePage(1, {
+      feedId: sample.feed.id,
+      state: "unread",
+    }).articles[0];
+    if (!selected) throw new Error("The pagination fixture has no article");
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+      await page.getByRole("button", { name: `Open ${selected.title}`, exact: true }).waitFor();
+      await page.getByRole("button", { name: "All articles", exact: true }).click();
+      await page
+        .getByRole("button", { name: `Mark ${selected.title} as read`, exact: true })
+        .click();
+      await expect.poll(() => database.articles.getArticle(1, selected.id)?.isRead).toBe(true);
+      await page.getByRole("button", { name: /104 Unread/ }).click();
+      await page
+        .getByRole("button", { name: `Open ${sample.feed.title} 0001`, exact: true })
+        .waitFor();
+      expect(await page.locator(".article-open-button").allTextContents()).not.toContain(
+        `Open ${selected.title}`,
+      );
+      const nextPage = page.waitForResponse((response) => response.url().includes("cursor="));
+      await bottom(page);
+      const response = await nextPage;
+      expect(response.status()).toBe(200);
+      const result = await response.json();
+      expect(result.articles.map((article: { id: number }) => article.id)).not.toContain(
+        selected.id,
+      );
+      await settle(page);
+      await bottom(page);
+      await page
+        .getByRole("button", { name: `Open ${sample.feed.title} 0104`, exact: true })
+        .waitFor();
+      expect(await page.locator(".article-open-button").allTextContents()).not.toContain(
+        `Open ${selected.title}`,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
   it.each(["folder", "feed"] as const)(
     "excludes a newly read article when revisiting a cached unread %s",
     async (scope) => {

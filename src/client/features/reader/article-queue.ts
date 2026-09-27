@@ -215,7 +215,7 @@ export function useArticleQueue({
               : article;
           });
     next = articlesWithContextReturn(next, returnTarget);
-    if (reconcile && detail.data && route.routedArticleId === detail.data.id) {
+    if (detail.data && route.routedArticleId === detail.data.id) {
       next = articlesWithContextReturn(next, {
         article: detail.data,
         index: current.findIndex((article) => article.id === detail.data.id),
@@ -223,13 +223,6 @@ export function useArticleQueue({
     }
     if (readingMode === "expanded")
       for (const article of candidates) fullContentLoadedIds.current.add(article.id);
-    if (detail.data && route.routedArticleId === detail.data.id) {
-      next = next.map((article) =>
-        article.id === detail.data.id
-          ? { ...detail.data, isRead: article.isRead, isStarred: article.isStarred }
-          : article,
-      );
-    }
     applied.current = {
       key: requestKey,
       data: pages.data,
@@ -295,7 +288,10 @@ export function useArticleQueue({
           if (latestRequestKey.current !== requestKey) return;
           const result = await pages.fetchNextPage({ cancelRefetch: false, throwOnError: true });
           return {
-            candidates: result.data?.pages.flatMap((page) => page.articles) ?? [],
+            candidates:
+              result.data?.pages
+                .flatMap((page) => page.articles)
+                .filter((article) => articleMatchesState(article, route.readerRoute.state)) ?? [],
             nextCursor: result.data?.pages.at(-1)?.nextCursor ?? null,
           };
         });
@@ -312,7 +308,7 @@ export function useArticleQueue({
       if (pendingPage.current?.promise === promise) pendingPage.current = null;
     });
     return promise;
-  }, [pages, requestKey, setArticles, showToast]);
+  }, [pages, requestKey, route.readerRoute.state, setArticles, showToast]);
 
   const loadArticles = useCallback(async () => {
     await client.invalidateQueries({ queryKey: readerKeys.lists });
