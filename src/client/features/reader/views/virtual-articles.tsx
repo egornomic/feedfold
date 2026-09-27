@@ -17,11 +17,7 @@ import {
   type VirtuosoHandle,
 } from "react-virtuoso";
 import type { Article } from "../../../../shared/types";
-import {
-  PassedArticles,
-  type ReadingPosition,
-  readingPositionIndex,
-} from "../interaction/reading-position";
+import { PassedArticles } from "../interaction/reading-position";
 
 type RowProps = ItemProps<Article> & { context: ListContext; retained?: boolean };
 type Row = ReactElement<RowProps>;
@@ -127,8 +123,6 @@ export function VirtualArticles({
   loadingMore,
   loadMoreError,
   onLoadMore,
-  positions,
-  positionKey,
   children,
 }: {
   articles: Article[];
@@ -142,8 +136,6 @@ export function VirtualArticles({
   loadingMore: boolean;
   loadMoreError: boolean;
   onLoadMore: () => void;
-  positions: Map<string, ReadingPosition>;
-  positionKey: string;
   children: (article: Article) => ReactNode;
 }) {
   const virtuoso = useRef<VirtuosoHandle>(null);
@@ -153,22 +145,6 @@ export function VirtualArticles({
   const latest = useRef({ articles, enabled, markReadOnScroll, onMarkPassedRead });
   latest.current = { articles, enabled, markReadOnScroll, onMarkPassedRead };
   const intentUntil = useRef(0);
-  const initial = useRef(positions.get(positionKey));
-  const initialLocation = useRef(
-    initial.current
-      ? {
-          index: readingPositionIndex(articles, initial.current),
-          align: "start" as const,
-          offset: -initial.current.offset,
-        }
-      : {
-          index: Math.max(
-            0,
-            articles.findIndex((article) => article.id === activeId),
-          ),
-          align: "start" as const,
-        },
-  );
   const previousActive = useRef(activeId);
 
   useLayoutEffect(() => {
@@ -232,11 +208,6 @@ export function VirtualArticles({
       }
       if (first) {
         const articleId = Number(first.dataset.articleId);
-        positions.set(positionKey, {
-          articleId,
-          index: latest.current.articles.findIndex((article) => article.id === articleId),
-          offset: first.getBoundingClientRect().top - top,
-        });
         const block =
           [...first.querySelectorAll<HTMLElement>("h2, p, img, pre, video, iframe")].find(
             (element) => element.getBoundingClientRect().bottom > top + 1,
@@ -357,7 +328,7 @@ export function VirtualArticles({
       scroller.removeEventListener("pointerdown", pointer);
       window.removeEventListener("keydown", keyboard, true);
     };
-  }, [scroller, positions, positionKey, expanded]);
+  }, [scroller, expanded]);
 
   useEffect(() => {
     if (!expanded || !scroller) return;
@@ -433,7 +404,6 @@ export function VirtualArticles({
           setScroller(element instanceof HTMLElement ? element : null),
         [],
       )}
-      initialTopMostItemIndex={initialLocation.current}
       increaseViewportBy={{ top: 500, bottom: 700 }}
       endReached={() => {
         if (!loadMoreError) loadMore();

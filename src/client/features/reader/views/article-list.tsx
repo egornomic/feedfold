@@ -5,13 +5,10 @@ import { articleDate, articleLabel, mediaTypeLabel } from "../article/article-fo
 import { articleImageUrl } from "../article/article-image-url";
 import { ArticleThumbnailPlaceholder } from "../article/article-thumbnail-placeholder";
 import { LinkifiedText } from "../article/linkified-text";
-import type { ReadingPosition } from "../interaction/reading-position";
 import { VirtualArticles } from "./virtual-articles";
 
 export function ArticleList({
   enabled,
-  positions,
-  positionKey,
   loadMoreError,
   articles,
   activeId,
@@ -26,8 +23,6 @@ export function ArticleList({
   onToggleStar,
 }: {
   enabled: boolean;
-  positions: Map<string, ReadingPosition>;
-  positionKey: string;
   loadMoreError: boolean;
   articles: Article[];
   activeId: number | null;
@@ -46,8 +41,6 @@ export function ArticleList({
       articles={articles}
       activeId={activeId}
       enabled={enabled}
-      positions={positions}
-      positionKey={positionKey}
       loadMoreError={loadMoreError}
       markReadOnScroll={markReadOnScroll}
       onMarkPassedRead={onMarkPassedRead}

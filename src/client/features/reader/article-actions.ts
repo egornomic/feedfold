@@ -153,7 +153,7 @@ export function useArticleActions({
       }
       const nextIndex = Math.min(
         queue.articles.length - 1,
-        Math.max(0, (currentIndex < 0 ? 0 : currentIndex) + direction),
+        Math.max(0, currentIndex < 0 ? 0 : currentIndex + direction),
       );
       const next = queue.articles[nextIndex];
       if (next && next.id !== currentId) {

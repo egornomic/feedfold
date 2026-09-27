@@ -15,7 +15,6 @@ import type { AppRouteController } from "../../app/route";
 import { appRoutePath, type ReaderRoute } from "../../app/routes";
 import { useDelayedPending } from "../../ui/loading";
 import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
-import type { ReadingPosition } from "./interaction/reading-position";
 import {
   appendUnseenArticles,
   articleMatchesState,
@@ -25,7 +24,6 @@ import {
 } from "./reader-state";
 
 export interface ArticleQueueController {
-  readingPositions: Map<string, ReadingPosition>;
   loadMoreError: boolean;
   readingMode: ReadingMode;
   articles: Article[];
@@ -77,7 +75,6 @@ export function useArticleQueue({
   const client = useQueryClient();
   const [reloadRevision, setReloadRevision] = useState(0);
   const reconciliationRevision = mutationRevision + reloadRevision;
-  const readingPositions = useRef(new Map<string, ReadingPosition>());
   const changingCounters = useIsMutating({ mutationKey: counterMutationKey }) > 0;
   const [articles, updateArticles] = useState<Article[]>([]);
   const articlesRef = useRef(articles);
@@ -170,6 +167,8 @@ export function useArticleQueue({
     previousRouteKind.current = route.route.kind;
     if (!returning) return;
     setAnchor(null);
+    setActiveArticleId(null);
+    setExpandedKeyboardTargetId(null);
     const target = contextReturn.current;
     setArticles((current) =>
       current.filter(
@@ -240,10 +239,12 @@ export function useArticleQueue({
     setArticles(next);
     setLoadedReaderRoute(route.readerRoute);
     setDisplayedReadingMode(readingMode);
-    setActiveArticleId(
-      (id) =>
-        returnTarget?.article.id ??
-        (next.some((article) => article.id === id) ? id : (next[0]?.id ?? null)),
+    setActiveArticleId((id) =>
+      route.routedArticleId !== null
+        ? route.routedArticleId
+        : sameQueue && next.some((article) => article.id === id)
+          ? id
+          : null,
     );
     if (!sameQueue) {
       setQueryRevision((revision) => revision + 1);
@@ -354,7 +355,6 @@ export function useArticleQueue({
         : null;
 
   return {
-    readingPositions: readingPositions.current,
     loadMoreError: pages.isFetchNextPageError,
     readingMode: displayedReadingMode,
     articles,

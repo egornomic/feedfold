@@ -150,10 +150,8 @@ export function ReaderWorkspace({
         ) : queue.readingMode === "magazine" ? (
           <>
             <ArticleList
-              key={readerPath}
+              key={`${readerPath}:${readerOpen}`}
               enabled={!queue.loading && !readerOpen}
-              positions={queue.readingPositions}
-              positionKey={`magazine:${readerPath}`}
               loadMoreError={queue.loadMoreError}
               articles={queue.articles}
               activeId={queue.activeArticleId}
@@ -236,8 +234,6 @@ export function ReaderWorkspace({
         ) : (
           <ExpandedStream
             enabled={!queue.loading}
-            positions={queue.readingPositions}
-            positionKey={`expanded:${route.routedArticleId ?? readerPath}`}
             loadMoreError={queue.loadMoreError}
             key={`expanded:${route.routedArticleId ?? readerPath}`}
             articles={
