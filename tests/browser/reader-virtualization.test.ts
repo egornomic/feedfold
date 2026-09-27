@@ -187,6 +187,46 @@ async function settle(page: Page) {
 }
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it.each(["rename", "pause"] as const)(
+    "keeps read articles in the unread queue after a feed %s",
+    async (action) => {
+      const sample = seedReaderBacklog(database, `Metadata ${action}`, 3);
+      database.feeds.updateFeed(1, sample.feed.id, { paused: false });
+      const page = await open("expanded");
+      const titles = () => page.locator(".expanded-article .article-header h2").allTextContents();
+      try {
+        await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+        await expect.poll(() => page.locator(".expanded-article").count()).toBe(3);
+        const original = await titles();
+        await page.getByRole("button", { name: "Mark as read (U)", exact: true }).first().click();
+        await expect.poll(() => database.feeds.getFeed(1, sample.feed.id)?.unreadCount).toBe(2);
+        await expect.poll(titles).toEqual(original);
+        await page
+          .getByRole("button", { name: `Manage ${sample.feed.title}`, exact: true })
+          .click();
+        if (action === "rename") {
+          await page.getByRole("menuitem", { name: "Rename feed", exact: true }).click();
+          await page.getByRole("textbox", { name: "Feed name" }).fill("Renamed metadata feed");
+          await page.getByRole("button", { name: "Save name", exact: true }).click();
+          await page
+            .getByRole("dialog", { name: "Rename feed", exact: true })
+            .waitFor({ state: "hidden" });
+          expect(database.feeds.getFeed(1, sample.feed.id)?.title).toBe("Renamed metadata feed");
+        } else {
+          await page.getByRole("menuitem", { name: "Feed settings", exact: true }).click();
+          await page.getByRole("button", { name: "Pause feed", exact: true }).click();
+          await page.getByRole("button", { name: "Resume feed", exact: true }).waitFor();
+          expect(database.feeds.getFeed(1, sample.feed.id)?.paused).toBe(true);
+          await page.getByRole("button", { name: "Close", exact: true }).click();
+          await page.getByRole("dialog").waitFor({ state: "hidden" });
+        }
+        await expect.poll(titles).toEqual(original);
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
   it("removes older articles from the unread queue after a bulk read without reloading", async () => {
     const sample = seedReaderBacklog(database, "Bulk read queue", 3);
     database.feeds.completeSourceRefresh(sample.sourceId, {

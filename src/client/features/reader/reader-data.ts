@@ -80,7 +80,11 @@ export function useReaderData() {
     const mutations: ReaderDataMutations = {
       createFeed: (...args) => run(() => api.createFeed(...args)),
       importOpml: (...args) => run(() => api.importOpml(...args)),
-      updateFeed: (...args) => run(() => api.updateFeed(...args)),
+      updateFeed: (id, input) =>
+        run(
+          () => api.updateFeed(id, input),
+          input.folderId !== undefined || input.feedUrl !== undefined,
+        ),
       deleteFeed: (...args) => run(() => api.deleteFeed(...args)),
       updateWebFeedSelection: (...args) => run(() => api.updateWebFeedSelection(...args)),
       createFolder: (...args) => run(() => api.createFolder(...args)),
