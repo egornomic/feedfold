@@ -15,16 +15,15 @@ import type { AppRouteController } from "../../app/route";
 import { appRoutePath, type ReaderRoute } from "../../app/routes";
 import { useDelayedPending } from "../../ui/loading";
 import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
-import type { ReadingPosition } from "./interaction/reading-position";
 import {
   appendUnseenArticles,
+  articleMatchesState,
   articleQueryForReaderRoute,
   articlesWithUpdatedState,
   firstUnseenArticlePage,
 } from "./reader-state";
 
 export interface ArticleQueueController {
-  readingPositions: Map<string, ReadingPosition>;
   loadMoreError: boolean;
   readingMode: ReadingMode;
   articles: Article[];
@@ -76,7 +75,6 @@ export function useArticleQueue({
   const client = useQueryClient();
   const [reloadRevision, setReloadRevision] = useState(0);
   const reconciliationRevision = mutationRevision + reloadRevision;
-  const readingPositions = useRef(new Map<string, ReadingPosition>());
   const changingCounters = useIsMutating({ mutationKey: counterMutationKey }) > 0;
   const [articles, updateArticles] = useState<Article[]>([]);
   const articlesRef = useRef(articles);
@@ -169,15 +167,15 @@ export function useArticleQueue({
     previousRouteKind.current = route.route.kind;
     if (!returning) return;
     setAnchor(null);
+    setActiveArticleId(null);
+    setExpandedKeyboardTargetId(null);
     const target = contextReturn.current;
     setArticles((current) =>
-      current.filter((article) => {
-        if (article.id === target?.article.id) return true;
-        if (route.readerRoute.state === "unread") return !article.isRead;
-        if (route.readerRoute.state === "read") return article.isRead;
-        if (route.readerRoute.state === "starred") return article.isStarred;
-        return true;
-      }),
+      current.filter(
+        (article) =>
+          article.id === target?.article.id ||
+          articleMatchesState(article, route.readerRoute.state),
+      ),
     );
   }, [route.route.kind, route.routedArticleId, route.readerRoute.state, setArticles]);
 
@@ -197,6 +195,9 @@ export function useArticleQueue({
       [],
       pages.data.pages.flatMap((page) => page.articles),
     ).articles;
+    const matchingCandidates = candidates.filter((article) =>
+      articleMatchesState(article, route.readerRoute.state),
+    );
     const target = contextReturn.current;
     const returnTarget =
       target && appRoutePath(target.route) === appRoutePath(route.readerRoute) ? target : null;
@@ -205,15 +206,16 @@ export function useArticleQueue({
     const reading = !reconcile && (route.routedArticleId !== null || sameQueue);
     let next =
       reading && (sameQueue || anchor === null)
-        ? appendUnseenArticles(articlesWithUpdatedState(current, candidates), candidates).articles
-        : candidates.map((article) => {
+        ? appendUnseenArticles(articlesWithUpdatedState(current, candidates), matchingCandidates)
+            .articles
+        : matchingCandidates.map((article) => {
             const complete = current.find((item) => item.id === article.id);
             return complete && fullContentLoadedIds.current.has(article.id)
               ? { ...complete, isRead: article.isRead, isStarred: article.isStarred }
               : article;
           });
     next = articlesWithContextReturn(next, returnTarget);
-    if (reconcile && detail.data && route.routedArticleId === detail.data.id) {
+    if (detail.data && route.routedArticleId === detail.data.id) {
       next = articlesWithContextReturn(next, {
         article: detail.data,
         index: current.findIndex((article) => article.id === detail.data.id),
@@ -221,13 +223,6 @@ export function useArticleQueue({
     }
     if (readingMode === "expanded")
       for (const article of candidates) fullContentLoadedIds.current.add(article.id);
-    if (detail.data && route.routedArticleId === detail.data.id) {
-      next = next.map((article) =>
-        article.id === detail.data.id
-          ? { ...detail.data, isRead: article.isRead, isStarred: article.isStarred }
-          : article,
-      );
-    }
     applied.current = {
       key: requestKey,
       data: pages.data,
@@ -237,10 +232,12 @@ export function useArticleQueue({
     setArticles(next);
     setLoadedReaderRoute(route.readerRoute);
     setDisplayedReadingMode(readingMode);
-    setActiveArticleId(
-      (id) =>
-        returnTarget?.article.id ??
-        (next.some((article) => article.id === id) ? id : (next[0]?.id ?? null)),
+    setActiveArticleId((id) =>
+      route.routedArticleId !== null
+        ? route.routedArticleId
+        : sameQueue && next.some((article) => article.id === id)
+          ? id
+          : null,
     );
     if (!sameQueue) {
       setQueryRevision((revision) => revision + 1);
@@ -291,7 +288,10 @@ export function useArticleQueue({
           if (latestRequestKey.current !== requestKey) return;
           const result = await pages.fetchNextPage({ cancelRefetch: false, throwOnError: true });
           return {
-            candidates: result.data?.pages.flatMap((page) => page.articles) ?? [],
+            candidates:
+              result.data?.pages
+                .flatMap((page) => page.articles)
+                .filter((article) => articleMatchesState(article, route.readerRoute.state)) ?? [],
             nextCursor: result.data?.pages.at(-1)?.nextCursor ?? null,
           };
         });
@@ -308,7 +308,7 @@ export function useArticleQueue({
       if (pendingPage.current?.promise === promise) pendingPage.current = null;
     });
     return promise;
-  }, [pages, requestKey, setArticles, showToast]);
+  }, [pages, requestKey, route.readerRoute.state, setArticles, showToast]);
 
   const loadArticles = useCallback(async () => {
     await client.invalidateQueries({ queryKey: readerKeys.lists });
@@ -351,7 +351,6 @@ export function useArticleQueue({
         : null;
 
   return {
-    readingPositions: readingPositions.current,
     loadMoreError: pages.isFetchNextPageError,
     readingMode: displayedReadingMode,
     articles,

@@ -8,13 +8,10 @@ import {
   EMPTY_ARTICLE_TRANSLATION_STATE,
 } from "../article/article-ai-state";
 import { ArticleDocument } from "../article/article-document";
-import type { ReadingPosition } from "../interaction/reading-position";
 import { VirtualArticles } from "./virtual-articles";
 
 export function ExpandedStream({
   enabled,
-  positions,
-  positionKey,
   loadMoreError,
   articles,
   activeId,
@@ -44,8 +41,6 @@ export function ExpandedStream({
   onFilterSelection,
 }: {
   enabled: boolean;
-  positions: Map<string, ReadingPosition>;
-  positionKey: string;
   loadMoreError: boolean;
   articles: Article[];
   activeId: number | null;
@@ -81,8 +76,6 @@ export function ExpandedStream({
       activeId={activeId}
       topAlignedId={topAlignedId}
       enabled={enabled}
-      positions={positions}
-      positionKey={positionKey}
       loadMoreError={loadMoreError}
       markReadOnScroll={markReadOnScroll}
       onMarkPassedRead={onMarkPassedRead}

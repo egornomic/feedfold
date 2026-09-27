@@ -112,11 +112,9 @@ export function useArticleEnrichment({
   );
 
   useEffect(() => {
-    if (readingMode !== "magazine" || queue.loading || queue.activeArticleIndex < 0) return;
-    for (const article of queue.articles.slice(
-      queue.activeArticleIndex,
-      queue.activeArticleIndex + 2,
-    )) {
+    if (readingMode !== "magazine" || queue.loading) return;
+    const start = Math.max(0, queue.activeArticleIndex);
+    for (const article of queue.articles.slice(start, start + 2)) {
       void loadFullArticle(article);
     }
   }, [loadFullArticle, queue, readingMode]);

@@ -279,7 +279,7 @@ describe("live article delivery", () => {
         "the initial unread articles",
         () => container.querySelectorAll(".article-open-button").length === 2,
       );
-      await waitFor("the selected article to prefetch", () => initialContentRequests === 1);
+      await waitFor("the first article to prefetch", () => initialContentRequests === 1);
       expect(
         database.articles.listArticlePage(TEST_USER_ID, { state: "unread" }).articles,
       ).toHaveLength(2);
@@ -435,6 +435,13 @@ describe("live article delivery", () => {
           !container.querySelector('.expanded-article [aria-label="Remove from Saved (S)"]'),
       );
 
+      await act(async () => {
+        dom.window.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "j" }));
+      });
+      await waitFor(
+        "expanded navigation into the first article",
+        () => activeExpandedArticleTitle(container) === "Delivered while reading",
+      );
       await act(async () => {
         dom.window.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "j" }));
       });

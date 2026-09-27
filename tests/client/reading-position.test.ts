@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  PassedArticles,
-  readingPositionIndex,
-} from "../../src/client/features/reader/interaction/reading-position.js";
-import type { Article } from "../../src/shared/types.js";
-
-const article = (id: number) => ({ id }) as Article;
+import { PassedArticles } from "../../src/client/features/reader/interaction/reading-position.js";
 
 describe("reading a virtual article queue", () => {
   it("marks only articles seen and passed, even after their elements are removed", () => {
@@ -23,11 +17,5 @@ describe("reading a virtual article queue", () => {
     reading.observe(1, 0, 800, 0, 600);
     expect(reading.passed(500)).toEqual([]);
     expect(reading.passed(800)).toEqual([1]);
-  });
-  it("restores the same article after earlier articles have left the queue", () => {
-    expect(
-      readingPositionIndex([article(2), article(3)], { articleId: 3, index: 2, offset: -70 }),
-    ).toBe(1);
-    expect(readingPositionIndex([article(2)], { articleId: 3, index: 2, offset: -70 })).toBe(0);
   });
 });
