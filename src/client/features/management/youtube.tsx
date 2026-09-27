@@ -74,9 +74,8 @@ export function YouTubeSettings({ userId }: { userId: string }) {
     } catch (caught) {
       setError(errorMessage(caught));
       await statusQuery.refetch();
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   if (status && !status.available) return null;
@@ -231,7 +230,6 @@ export function YouTubeSettings({ userId }: { userId: string }) {
               {error}
             </div>
           ) : null}
-          {busy ? <p role="status">Connecting…</p> : null}
         </div>
         <footer className="management-dialog-footer">
           <span />

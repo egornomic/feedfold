@@ -780,9 +780,6 @@
   margin: 0;
   color: var(--text-secondary);
 }
-.youtube-connect-dialog .management-dialog-body p + p {
-  margin-top: 12px;
-}
 .saving-label {
   display: inline-flex;
   align-items: center;
