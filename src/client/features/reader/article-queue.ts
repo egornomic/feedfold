@@ -25,6 +25,7 @@ import {
 
 export interface ArticleQueueController {
   loadMoreError: boolean;
+  queueReady: boolean;
   readingMode: ReadingMode;
   articles: Article[];
   setArticles: Dispatch<SetStateAction<Article[]>>;
@@ -352,6 +353,7 @@ export function useArticleQueue({
 
   return {
     loadMoreError: pages.isFetchNextPageError,
+    queueReady: pages.data !== undefined && applied.current?.key === requestKey,
     readingMode: displayedReadingMode,
     articles,
     setArticles,

@@ -151,6 +151,17 @@ export function useArticleActions({
         openArticle(next, openReader, routed ? "replace" : "push");
         return true;
       }
+      if (
+        direction === 1 &&
+        currentIndex === queue.articles.length - 1 &&
+        !queue.nextCursor &&
+        !queue.loading &&
+        !queue.loadingMore &&
+        queue.queueReady
+      ) {
+        route.navigate({ ...route.readerRoute, state: "unread" }, routed ? "replace" : "push");
+        return true;
+      }
       const nextIndex = Math.min(
         queue.articles.length - 1,
         Math.max(0, currentIndex < 0 ? 0 : currentIndex + direction),
@@ -162,7 +173,7 @@ export function useArticleActions({
       }
       return false;
     },
-    [openArticle, queue, readingMode, route.current],
+    [openArticle, queue, readingMode, route],
   );
 
   const copyArticleUrl = useCallback(

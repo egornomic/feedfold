@@ -4,6 +4,117 @@ import { waitFor } from "./react-harness.js";
 import { readerFixture } from "./reader-fixture.js";
 
 describe("reader navigation", () => {
+  it.each(["button", "j", "ArrowRight"])(
+    "returns to the feed's unread page after its last article using %s",
+    async (input) => {
+      const fixture = readerFixture("/articles/unread", 1);
+      fixture.database.settings.updateSettings(1, { singleKeyShortcuts: true });
+      fixture.dom.window.history.replaceState(null, "", `/feeds/${fixture.feed.id}/unread`);
+      try {
+        await fixture.mount();
+        await waitFor(
+          "article preview",
+          () => !!fixture.container.querySelector(".article-open-button"),
+        );
+        await act(async () =>
+          fixture.container.querySelector<HTMLButtonElement>(".article-open-button")?.click(),
+        );
+        await waitFor(
+          "read article",
+          () =>
+            !!fixture.container.querySelector('[aria-label="Mark as unread (U)"]') &&
+            fixture.database.bootstrap.getBootstrap(1).counts.unread === 0,
+        );
+        await act(async () => {
+          if (input === "button") {
+            fixture.container
+              .querySelector<HTMLButtonElement>('[aria-label="Next article (J)"]')
+              ?.click();
+          } else {
+            fixture.dom.window.dispatchEvent(
+              new fixture.dom.window.KeyboardEvent("keydown", { key: input, bubbles: true }),
+            );
+          }
+        });
+        await waitFor(
+          "completed feed",
+          () =>
+            fixture.dom.window.location.pathname === `/feeds/${fixture.feed.id}/unread` &&
+            fixture.container.querySelector(".empty-state h2")?.textContent ===
+              "No unread articles",
+        );
+        expect(fixture.container.querySelector(".empty-state")?.textContent).toContain(
+          "Read Saved",
+        );
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
+
+  it.each(["pending", "failed"] as const)(
+    "keeps a bookmarked article open when its surrounding queue is %s",
+    async (result) => {
+      const fixture = readerFixture("/articles/unread", 1);
+      fixture.database.settings.updateSettings(1, { singleKeyShortcuts: true });
+      const selected = fixture.database.articles.listArticlePage(1, { state: "all" }).articles[0];
+      if (!selected) throw new Error("The fixture has no article");
+      fixture.dom.window.history.replaceState(null, "", `/articles/${selected.id}`);
+      const articles = fixture.hold("articles");
+      try {
+        await fixture.mount();
+        await waitFor(
+          "bookmarked content",
+          () =>
+            articles.held > 0 &&
+            fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
+              ?.textContent === "Full content 1",
+        );
+        if (result === "failed") {
+          await act(async () => articles.fail());
+          await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+        }
+        for (const key of ["j", "ArrowRight"]) {
+          await act(async () =>
+            fixture.dom.window.dispatchEvent(
+              new fixture.dom.window.KeyboardEvent("keydown", { key, bubbles: true }),
+            ),
+          );
+          expect(fixture.dom.window.location.pathname).toBe(`/articles/${selected.id}`);
+        }
+        expect(
+          fixture.container.querySelector<HTMLButtonElement>('[aria-label="Next article (J)"]')
+            ?.disabled,
+        ).toBe(true);
+        await act(async () => articles.release());
+        if (result === "failed") {
+          await act(async () =>
+            fixture.dom.window.dispatchEvent(new fixture.dom.window.Event("online")),
+          );
+        }
+        await waitFor(
+          "loaded surrounding queue",
+          () =>
+            fixture.container.querySelector<HTMLButtonElement>('[aria-label="Next article (J)"]')
+              ?.disabled === false,
+        );
+        await act(async () =>
+          fixture.container
+            .querySelector<HTMLButtonElement>('[aria-label="Next article (J)"]')
+            ?.click(),
+        );
+        await waitFor(
+          "completed feed",
+          () =>
+            fixture.container.querySelector(".empty-state h2")?.textContent ===
+            "No unread articles",
+        );
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
+
   it("follows rapid next and previous keys while an article is opening", async () => {
     const fixture = readerFixture("/articles/all", 4);
     fixture.database.settings.updateSettings(1, { singleKeyShortcuts: true });

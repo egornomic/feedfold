@@ -186,8 +186,9 @@ export function ReaderWorkspace({
               canPrevious={queue.activeArticleIndex > 0}
               canNext={
                 queue.activeArticleIndex >= 0 &&
-                (queue.activeArticleIndex < queue.articles.length - 1 ||
-                  (queue.nextCursor !== null && !queue.loadingMore))
+                queue.queueReady &&
+                !queue.loading &&
+                !queue.loadingMore
               }
               fullContentVisible={
                 queue.activeArticle
