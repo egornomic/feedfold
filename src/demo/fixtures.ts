@@ -198,16 +198,17 @@ export function createDemoData(now = new Date()): DemoData {
     {
       id: DEMO_RELEASE_ARTICLE_ID,
       feedId: 8,
-      title: "feedfold 0.9.0",
-      url: "https://github.com/egornomic/feedfold/releases/tag/v0.9.0",
+      title: "feedfold 1.0.0",
+      url: "https://github.com/egornomic/feedfold/releases/tag/v1.0.0",
       author: "egornomic",
-      publishedAt: "2026-09-17T14:00:00.000Z",
+      publishedAt: "2026-09-28T19:00:00.000Z",
       summary:
-        "Zoom images comfortably on mobile, open search from the toolbar, and enjoy clearer settings and more consistent controls.",
+        "Sync YouTube subscriptions, read LaTeX equations, and enjoy faster reading with feeds that refresh at their own publishing pace.",
       contentHtml: `<ul>
-<li>Pinch to zoom and pan images on mobile without zooming the page or switching articles.</li>
-<li>Open article search from a compact toolbar control that keeps your reading list uncluttered.</li>
-<li>Use settings more comfortably on smaller screens, with accurate theme previews and more consistent control sizes.</li>
+<li>Connect your YouTube account in the hosted app to sync subscriptions daily and optionally hide Shorts.</li>
+<li>Get started with guided source setup, read LaTeX equations in articles and AI summaries, and copy code blocks.</li>
+<li>Feed refresh intervals adapt to each source’s publishing pace, while long article lists stay responsive.</li>
+<li>Enjoy more consistent navigation, unread filters, menus, and reading transitions.</li>
 </ul>`,
       isStarred: true,
     },
