@@ -682,6 +682,22 @@ export class WebFeedBrowserLoader {
           await route.abort("blockedbyclient");
         }
       });
+      if (policy) {
+        // Playwright skips route handlers after redirects. Chromium pauses every hop.
+        devtools.on("Fetch.requestPaused", async (event) => {
+          try {
+            if (event.redirectedRequestId) policy.beforeRequest(event.request.url);
+            await devtools.send("Fetch.continueRequest", { requestId: event.requestId });
+          } catch (error) {
+            if (requests.signal.aborted) return;
+            fatalError = error instanceof FeedRequestDeferred ? error : browserFailure(error);
+            await page?.close();
+          }
+        });
+        await devtools.send("Fetch.enable", {
+          patterns: [{ urlPattern: "*", requestStage: "Request" }],
+        });
+      }
       await context.routeWebSocket(/.*/, async (socket) => {
         try {
           const socketUrl = socket.url().replace(/^ws:/i, "http:").replace(/^wss:/i, "https:");

@@ -6,6 +6,10 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import {
+  FeedPollingPolicy,
+  FeedRequestDeferred,
+} from "../../src/server/features/feeds/polling-policy.js";
 import { migrateDatabase } from "../../src/server/migrations.js";
 import {
   DEFAULT_ARTICLE_SUMMARY_PROMPT,
@@ -29,6 +33,36 @@ afterEach(async () => {
 });
 
 describe("database migrations", () => {
+  it("preserves an existing publisher delay while allowing a different provider after migration", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-28T12:00:00.000Z"));
+    const database = new Sqlite(":memory:");
+    database.pragma("foreign_keys = ON");
+    try {
+      migrateDatabase(database, 180, 54);
+      database.exec(`
+        INSERT INTO feed_sources (id, feed_url, source_kind, title, created_at, updated_at,
+          request_origin, retry_after_at)
+        VALUES (1, 'https://x.com/reader', 'published', 'Posts',
+          '2026-09-28T12:00:00.000Z', '2026-09-28T12:00:00.000Z',
+          'https://primary.example', '2026-09-28T13:00:00.000Z');
+      `);
+      migrateDatabase(database, 180);
+      const policy = new FeedPollingPolicy(database).forSource(1);
+      expect(() => policy.beforeRequest("https://primary.example/reader/rss")).toThrow(
+        FeedRequestDeferred,
+      );
+      expect(() => policy.beforeRequest("https://fallback.example/reader/rss")).not.toThrow();
+      expect(() => policy.beforeRequest("https://primary.example/reader/rss")).toThrow(
+        FeedRequestDeferred,
+      );
+      vi.setSystemTime(new Date("2026-09-28T13:00:00.000Z"));
+      expect(() => policy.beforeRequest("https://primary.example/reader/rss")).not.toThrow();
+    } finally {
+      database.close();
+    }
+  });
+
   it("rebuilds existing schedules from posting history while excluding undated initial imports", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-27T12:00:00.000Z"));

@@ -58,26 +58,28 @@ export class FeedPollingPolicy {
   nextPollAt(sourceId: number, earliest: number, origin?: string | null): number {
     const source = this.sqlite
       .prepare(`SELECT publisher_hints AS hints,
-      publisher_not_before AS notBefore, retry_after_at AS retryAt, request_origin AS origin
+      publisher_not_before AS notBefore, request_origin AS origin
       FROM feed_sources WHERE id = ?`)
       .get(sourceId) as {
       hints: string;
       notBefore: string | null;
-      retryAt: string | null;
       origin: string | null;
     };
     const requestedOrigin = origin === undefined ? source.origin : origin;
     const cooldown = requestedOrigin
       ? (this.sqlite
-          .prepare("SELECT retry_after_at FROM feed_origin_cooldowns WHERE origin = ?")
+          .prepare(`SELECT MAX(retry_after_at) FROM (
+            SELECT retry_after_at FROM feed_origin_cooldowns WHERE origin = ?
+            UNION ALL
+            SELECT retry_after_at FROM feed_source_cooldowns WHERE origin = ? AND source_id = ?
+          )`)
           .pluck()
-          .get(requestedOrigin) as string | undefined)
+          .get(requestedOrigin, requestedOrigin, sourceId) as string | null)
       : undefined;
     return allowedPollingTime(
       Math.max(
         earliest,
         source.notBefore ? Date.parse(source.notBefore) : 0,
-        source.retryAt ? Date.parse(source.retryAt) : 0,
         cooldown ? Date.parse(cooldown) : 0,
       ),
       JSON.parse(source.hints) as PublisherHints,
@@ -111,9 +113,10 @@ export class FeedPollingPolicy {
             .run(new URL(url).origin, until);
         } else {
           this.sqlite
-            .prepare(`UPDATE feed_sources SET retry_after_at = MAX(COALESCE(retry_after_at, ''), ?)
-            WHERE id = ?`)
-            .run(until, sourceId);
+            .prepare(`INSERT INTO feed_source_cooldowns (source_id, origin, retry_after_at)
+            SELECT id, ?, ? FROM feed_sources WHERE id = ?
+            ON CONFLICT(source_id, origin) DO UPDATE SET retry_after_at = MAX(retry_after_at, excluded.retry_after_at)`)
+            .run(new URL(url).origin, until, sourceId);
         }
       },
     };

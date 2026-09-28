@@ -5,8 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
+import { WebFeedService } from "../../src/server/features/feeds/web/service.js";
 import { FeedRefreshService } from "../../src/server/features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
+import type { WebFeedConfig } from "../../src/shared/types.js";
 
 const start = Date.parse("2026-09-28T12:00:00.000Z");
 const minute = 60_000;
@@ -29,7 +31,7 @@ async function publisher(handler: (path: string, response: ServerResponse) => vo
   return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, requests };
 }
 
-async function reader() {
+async function reader(webFeedService?: WebFeedService) {
   const directory = await mkdtemp(join(tmpdir(), "feedfold-polling-"));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const path = join(directory, "feedfold.db");
@@ -40,7 +42,7 @@ async function reader() {
       new DefaultFeedSourceLoader(
         (task) => database.feeds.runOutbound(task),
         2_000,
-        undefined,
+        webFeedService,
         fetch,
       ),
       1,
@@ -353,6 +355,151 @@ describe("staggering and shared publisher restrictions", () => {
 });
 
 describe("publisher policy at the actual request destination", () => {
+  it("keeps each unavailable Nitter provider's deadline while loading a healthy fallback", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    at(start);
+    const posts = `<rss version="2.0"><channel><title>Posts</title>
+      <link>https://x.com/reader</link><description>Posts</description>
+      <item><guid>12345</guid><title>New post</title>
+      <link>https://x.com/reader/status/12345</link></item></channel></rss>`;
+    let unavailable = true;
+    const primary = await publisher((_path, response) => {
+      if (unavailable) response.writeHead(503, { "Retry-After": "14400" });
+      response.end(posts);
+    });
+    const secondary = await publisher((_path, response) => {
+      response.writeHead(503, { "Retry-After": "28800" }).end();
+    });
+    const available = await publisher((_path, response) => response.end(posts));
+    vi.stubEnv("NITTER_BASE_URLS", [primary.origin, secondary.origin, available.origin].join(","));
+    const app = await reader();
+    const first = app.database.feeds.createFeed(1, { feedUrl: "https://x.com/reader" });
+    const other = app.database.feeds.createFeed(1, { feedUrl: "https://x.com/other" });
+    await app.check([first.id, other.id]);
+    expect(available.requests).toHaveLength(2);
+    expect(primary.requests).toHaveLength(2);
+    expect(secondary.requests).toHaveLength(2);
+    expect(app.database.feeds.getFeed(1, first.id)).toMatchObject({
+      totalCount: 1,
+      healthStatus: "healthy",
+      lastHttpStatus: 200,
+    });
+    at(start + 239 * minute);
+    await app.restart();
+    await app.check([first.id]);
+    expect(primary.requests).toHaveLength(2);
+    expect(secondary.requests).toHaveLength(2);
+    expect(available.requests).toHaveLength(3);
+    unavailable = false;
+    at(start + 240 * minute);
+    await app.check([first.id]);
+    expect(primary.requests).toHaveLength(3);
+    expect(secondary.requests).toHaveLength(2);
+    expect(available.requests).toHaveLength(3);
+  });
+
+  it.each(["page", "script", "iframe"])(
+    "honors publisher cooldowns through a web %s's redirect chain and resumes afterward",
+    async (resource) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      at(start);
+      let posts = 2;
+      const entries = () =>
+        Array.from(
+          { length: posts },
+          (_, index) =>
+            `<article><a href="https://example.test/${index}">Post ${index}</a></article>`,
+        ).join("");
+      const destination = await publisher((path, response) => {
+        if (path === "/limited") {
+          response.writeHead(429, { "Retry-After": "3600" }).end();
+          return;
+        }
+        response.writeHead(200, {
+          "Content-Type": resource === "page" ? "text/html" : "text/javascript",
+        });
+        response.end(
+          resource === "page"
+            ? `<title>News</title><main>${entries()}</main>`
+            : `document.querySelector('main').innerHTML = ${JSON.stringify(entries())};`,
+        );
+      });
+      let frameOrigin = "";
+      const source = await publisher((path, response) => {
+        if (path === "/start" && resource === "iframe") {
+          response.writeHead(200, { "Content-Type": "text/html" });
+          response.end(
+            `<title>News</title><main>${entries()}</main><iframe src="${frameOrigin}/embedded"></iframe>`,
+          );
+          return;
+        }
+        if ((path === "/start" && resource === "script") || path === "/embedded") {
+          response.writeHead(200, { "Content-Type": "text/html" });
+          response.end('<title>News</title><main></main><script src="/first"></script>');
+          return;
+        }
+        const target =
+          path === "/start"
+            ? "/first"
+            : path === "/first"
+              ? "/second"
+              : `${destination.origin}/posts`;
+        response.writeHead(path === "/first" ? 307 : 302, { Location: target }).end();
+      });
+      frameOrigin = source.origin.replace("127.0.0.1", "localhost");
+      const web = new WebFeedService({
+        allowPrivateNetworks: true,
+        settleQuietMs: 50,
+        settleTimeoutMs: 1_000,
+      });
+      cleanups.push(() => web.close());
+      const app = await reader(web);
+      const config: WebFeedConfig = {
+        pageUrl: `${source.origin}/start`,
+        selectors: {
+          item: "main > article",
+          link: "a",
+          title: "a",
+          date: null,
+          author: null,
+          summary: null,
+          image: null,
+        },
+      };
+      const initial = await web.extract(config);
+      const feed = app.database.feeds.createWebFeed(1, {
+        title: "News",
+        pageUrl: config.pageUrl,
+        folderId: null,
+        config,
+        parsed: initial.parsed,
+      });
+      expect(feed.totalCount).toBe(2);
+      const limited = app.database.feeds.createFeed(1, {
+        feedUrl: `${destination.origin}/limited`,
+      });
+      await app.check([limited.id]);
+      expect(destination.requests).toEqual(["/posts", "/limited"]);
+      posts = 3;
+      await app.check([feed.id]);
+      expect(destination.requests).toEqual(["/posts", "/limited"]);
+      expect(app.database.feeds.getFeed(1, feed.id)).toMatchObject({
+        totalCount: 2,
+        refreshing: false,
+      });
+      expect(
+        Date.parse(app.database.feeds.getFeed(1, feed.id)?.nextPollAt as string),
+      ).toBeGreaterThanOrEqual(start + 60 * minute);
+      at(start + 60 * minute);
+      await app.check([feed.id]);
+      expect(destination.requests).toEqual(["/posts", "/limited", "/posts"]);
+      expect(app.database.feeds.getFeed(1, feed.id)).toMatchObject({
+        totalCount: 3,
+        healthStatus: "healthy",
+      });
+    },
+  );
+
   it("checks redirected origins and keeps a different origin available", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     at(start);

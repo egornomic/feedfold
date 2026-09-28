@@ -1663,6 +1663,20 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    sql: `
+      CREATE TABLE feed_source_cooldowns (
+        source_id INTEGER NOT NULL REFERENCES feed_sources(id) ON DELETE CASCADE,
+        origin TEXT NOT NULL,
+        retry_after_at TEXT NOT NULL,
+        PRIMARY KEY (source_id, origin)
+      );
+      INSERT INTO feed_source_cooldowns (source_id, origin, retry_after_at)
+        SELECT id, request_origin, retry_after_at FROM feed_sources
+        WHERE request_origin IS NOT NULL AND retry_after_at IS NOT NULL;
+      ALTER TABLE feed_sources DROP COLUMN retry_after_at;
+    `,
+  },
 ];
 
 export function migrateDatabase(
