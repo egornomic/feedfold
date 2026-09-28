@@ -3,6 +3,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { JSDOM } from "jsdom";
+import katex from "katex";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { youtubeMediaFromUrl } from "../../src/server/article-media.js";
@@ -37,6 +39,27 @@ async function listen(server: Server): Promise<string> {
 }
 
 describe("feed refresh and full-text extraction", () => {
+  it("preserves publisher math when extracting a full article over HTTP", async () => {
+    const inline = "f(x)=x^2";
+    const display = String.raw`\int_0^1 x^2\,dx=\frac{1}{3}`;
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end(`<html><head><title>Calculus</title></head><body><article>
+        <h1>Calculus</h1><p>The function is ${katex.renderToString(inline)}.</p>
+        <p>${katex.renderToString(display, { displayMode: true })}</p>
+        <p>The fundamental theorem connects derivatives and integrals. Evaluating the
+        antiderivative at the endpoints gives the area under this continuous curve.</p>
+        </article></body></html>`);
+    });
+    const baseUrl = await listen(server);
+    const outcome = await extractArticle({ id: 1, url: baseUrl }, 2_000, fetch);
+    expect(outcome.status).toBe("complete");
+    const text = JSDOM.fragment(outcome.contentHtml ?? "").textContent;
+    expect(text).toContain(`The function is \\(${inline}\\).`);
+    expect(text).toContain(`\\[${display}\\]`);
+    expect(text?.match(/f\(x\)/g)).toHaveLength(1);
+  });
+
   it("starts new subscriptions with the 10 latest articles without backfilling older entries", async () => {
     let latestArticle = 12;
     const server = createServer((_request, response) => {

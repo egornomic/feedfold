@@ -109,6 +109,21 @@ const sanitizeOptions: sanitizeHtml.IOptions = {
   allowProtocolRelative: false,
 };
 
+function preserveArticleMath(html: string): string {
+  if (!/<math\b/i.test(html)) return html;
+  const fragment = JSDOM.fragment(html);
+  for (const math of fragment.querySelectorAll("math")) {
+    const source = math.querySelector('annotation[encoding="application/x-tex"]')?.textContent;
+    if (!source) continue;
+    const display = math.getAttribute("display") === "block" || !!math.closest(".katex-display");
+    const formula = math.closest(".katex-display") ?? math.closest(".katex") ?? math;
+    formula.replaceWith(
+      fragment.ownerDocument.createTextNode(display ? `\\[${source}\\]` : `\\(${source}\\)`),
+    );
+  }
+  return fragmentHtml(fragment);
+}
+
 export function removeGeneratedArticleQuoteMarkers(html: string): string {
   if (!html.includes(QUOTE_MARK_CLASS)) return html;
 
@@ -287,7 +302,7 @@ export function cleanArticleHtml(html: string, baseUrl?: string): string {
         }),
       }
     : undefined;
-  const sanitized = sanitizeHtml(removeGeneratedArticleQuoteMarkers(html), {
+  const sanitized = sanitizeHtml(preserveArticleMath(removeGeneratedArticleQuoteMarkers(html)), {
     ...sanitizeOptions,
     transformTags,
   }).trim();

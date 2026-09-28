@@ -87,7 +87,9 @@ export async function extractArticle(
         virtualConsole: articleVirtualConsole,
       });
       try {
-        const result = new Readability(dom.window.document).parse();
+        const result = new Readability(dom.window.document, {
+          classesToPreserve: ["katex", "katex-display"],
+        }).parse();
         if (!result?.content)
           throw new Error("The source page did not contain readable article text.");
         const contentHtml = cleanArticleHtml(result.content, response.url || record.url);

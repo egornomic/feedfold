@@ -12,6 +12,42 @@ function renderMarkdown(text: string, grounding?: AiGrounding): DocumentFragment
 }
 
 describe("AI Markdown", () => {
+  it("renders inline and display math while preserving currency and code examples", () => {
+    const fragment = renderMarkdown(
+      `Inline $$E = mc^2$$. Costs $5 or $10.
+
+$$
+\\frac{1}{2} + \\sqrt{x}
+$$
+
+\`$$code$$\`
+
+\`\`\`tex
+$$example$$
+\`\`\``,
+    );
+    expect(fragment.querySelectorAll("math")).toHaveLength(2);
+    expect(fragment.querySelectorAll(".katex-display")).toHaveLength(1);
+    expect(fragment.querySelector("annotation")?.textContent).toBe("E = mc^2");
+    expect(fragment.querySelector("svg path")).not.toBeNull();
+    expect(fragment.querySelector("p")?.textContent).toContain("Costs $5 or $10.");
+    expect(fragment.querySelector("p code")?.textContent).toBe("$$code$$");
+    expect(fragment.querySelector("pre code")?.textContent).toBe("$$example$$\n");
+  });
+
+  it("keeps malformed formulas readable and does not let math embed links or images", () => {
+    const fragment = renderMarkdown(String.raw`$$\frac{$$
+
+$$\href{javascript:alert(1)}{click}$$
+
+$$\includegraphics{https://tracker.example.test/pixel.png}$$
+
+Still readable.`);
+    expect(fragment.querySelector(".katex-error")?.textContent).toBe(String.raw`\frac{`);
+    expect(fragment.textContent).toContain("Still readable.");
+    expect(fragment.querySelector("a, img, script")).toBeNull();
+  });
+
   it("offers copying for fenced code while preserving whitespace and inline code", () => {
     const fragment = renderMarkdown('Inline `value`\n\n```js\n\tconst value = "<tag>";\n```');
     expect(fragment.querySelectorAll('button[aria-label="Copy code"]')).toHaveLength(1);

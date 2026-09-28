@@ -1,39 +1,10 @@
 import type { JSX } from "react";
 import Markdown, { type Components, type ExtraProps, type UrlTransform } from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import type { AiGrounding } from "../../../../shared/types.js";
 import { CodeBlock } from "./code-block.js";
-
-const allowedElements = [
-  "a",
-  "blockquote",
-  "br",
-  "code",
-  "del",
-  "em",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "hr",
-  "input",
-  "li",
-  "ol",
-  "p",
-  "pre",
-  "section",
-  "strong",
-  "sup",
-  "table",
-  "tbody",
-  "td",
-  "th",
-  "thead",
-  "tr",
-  "ul",
-] as const;
 
 const safeUrl: UrlTransform = (value) => {
   if (value.startsWith("#")) return value;
@@ -129,9 +100,13 @@ export function AiMarkdown({
   return (
     <>
       <Markdown
-        allowedElements={allowedElements}
+        disallowedElements={["img"]}
         components={components}
-        remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
+        remarkPlugins={[
+          [remarkGfm, { singleTilde: false }],
+          [remarkMath, { singleDollarTextMath: false }],
+        ]}
+        rehypePlugins={[[rehypeKatex, { errorColor: "currentColor" }]]}
         skipHtml
         urlTransform={safeUrl}
       >

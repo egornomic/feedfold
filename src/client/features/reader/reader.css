@@ -1291,6 +1291,22 @@
   overflow-wrap: break-word;
 }
 
+:is(.article-content, .article-summary-text) .katex {
+  font-size: 1.1em;
+  letter-spacing: normal;
+}
+
+:is(.article-content, .article-summary-text) .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.2em;
+}
+
+:is(.article-content, .article-summary-text) .katex-display > .katex {
+  width: max-content;
+  min-width: 100%;
+}
+
 :root:not([data-theme="light"]) .article-content {
   letter-spacing: 0.004em;
 }

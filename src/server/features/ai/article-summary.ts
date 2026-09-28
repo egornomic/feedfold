@@ -47,6 +47,7 @@ Web verification:
 
 Output rules:
 - The result is rendered as GitHub-Flavored Markdown. Use Markdown when it improves readability. Do not return raw HTML or images.
+- For LaTeX math, use $$...$$ inline or $$ on separate lines for display equations. Single dollar signs are reserved for currency.
 - Return only the result requested by the task.`;
 }
 
