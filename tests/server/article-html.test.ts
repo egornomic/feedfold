@@ -1,4 +1,5 @@
 import { JSDOM } from "jsdom";
+import katex from "katex";
 import { describe, expect, it } from "vitest";
 import { cleanArticleHtml } from "../../src/server/article-html.js";
 
@@ -7,6 +8,20 @@ function articleBody(html: string): HTMLElement {
 }
 
 describe("article HTML rendering", () => {
+  it.each(["mathml", "htmlAndMathml"] as const)(
+    "preserves publisher equations from %s as one renderable formula",
+    (output) => {
+      const formula = String.raw`f\colon[a,b]\to\mathbb{R},\quad a < b`;
+      for (const displayMode of [false, true]) {
+        const rendered = katex.renderToString(formula, { output, displayMode });
+        const html = cleanArticleHtml(`<p>Before ${rendered} after.</p>`);
+        const expected = displayMode ? `\\[${formula}\\]` : `\\(${formula}\\)`;
+        expect(articleBody(html).textContent).toBe(`Before ${expected} after.`);
+        expect(cleanArticleHtml(html)).toBe(html);
+      }
+    },
+  );
+
   it("preserves starred code and distinguishes their data and layout tables", () => {
     const html = cleanArticleHtml(
       `<p>Views are declarative markup in <code>.native</code> files.</p>

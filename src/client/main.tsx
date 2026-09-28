@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 import "@fontsource-variable/ibm-plex-sans/wght.css";
 import "@fontsource-variable/ibm-plex-sans/wght-italic.css";
+import "katex/dist/katex.min.css";
 import { App } from "./app/app";
 import { PwaUpdate } from "./app/pwa-update";
 import { isDesktopApp } from "./platform/desktop";

@@ -1062,6 +1062,42 @@ async function openTouchReader(
 }
 
 describe("reader motion with touch input and the live API", () => {
+  it("scrolls wide equations without navigating away from the article", async () => {
+    const articleId = 5;
+    const originalHtml = database.articles.getArticle(1, articleId)?.feedContentHtml;
+    database.connection
+      .prepare("UPDATE articles SET feed_content_html = ? WHERE id = ?")
+      .run(
+        String.raw`<p>\[\sum_{i=1}^{n} x_i = x_1 + x_2 + x_3 + x_4 + x_5 + x_6 + x_7 + x_8 + x_9 + x_{10}\]</p>`,
+        articleId,
+      );
+    const { page, touchContext, touch, title, settled } = await openTouchReader(articleId - 1);
+    try {
+      const originalTitle = await title();
+      const equation = page.locator(".article-swipe-layer.is-active .katex-display");
+      const box = await equation.boundingBox();
+      if (!box) throw new Error("The equation is missing");
+      const x = box.x + box.width - 10;
+      const y = box.y + box.height / 2;
+      await touch("touchStart", x, y);
+      for (let step = 1; step <= 6; step++) {
+        await touch("touchMove", x - step * 30, y);
+        await page.waitForTimeout(16);
+      }
+      await touch("touchEnd");
+      await settled();
+      expect(await title()).toBe(originalTitle);
+      await expect
+        .poll(() => equation.evaluate((element) => element.scrollLeft))
+        .toBeGreaterThan(0);
+    } finally {
+      await touchContext.close();
+      database.connection
+        .prepare("UPDATE articles SET feed_content_html = ? WHERE id = ?")
+        .run(originalHtml, articleId);
+    }
+  });
+
   it.each([1, 6])(
     "restores cancelled and boundary swipes, then navigates and reverses without losing a visible page (%ix CPU slowdown)",
     async (cpuSlowdown) => {

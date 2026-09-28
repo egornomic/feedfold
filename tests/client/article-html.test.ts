@@ -1,11 +1,58 @@
 // @vitest-environment jsdom
 import { JSDOM } from "jsdom";
-import { act, createElement } from "react";
+import { act, createElement, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
 import { ArticleHtml } from "../../src/client/features/reader/article/article-html.js";
+import { cleanArticleHtml } from "../../src/server/article-html.js";
 
 describe("article HTML", () => {
+  it("renders sanitized article and translation math without changing prices or code", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const previousActEnvironment = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    const html = cleanArticleHtml(String.raw`<p>Inline \(E = mc^2\). Costs $5 or $10.</p>
+      <p>\[\frac{1}{2}\]</p><p>$$\sqrt{x}$$</p>
+      <pre><code>\(example\)</code></pre><p><code>$$code$$</code></p>
+      <p>\(\frac\)</p><p>Still readable.</p>`);
+    try {
+      const render = (sanitizedHtml: string, className = "article-content") =>
+        act(async () => {
+          root.render(
+            createElement(
+              StrictMode,
+              null,
+              createElement(ArticleHtml, { sanitizedHtml, className }),
+            ),
+          );
+        });
+      await render(html);
+      expect(container.querySelectorAll("math")).toHaveLength(3);
+      expect(container.querySelectorAll(".katex-display")).toHaveLength(2);
+      expect(container.querySelector("annotation")?.textContent).toBe("E = mc^2");
+      expect(container.querySelector("p")?.textContent).toContain("Costs $5 or $10.");
+      expect(container.querySelector("pre code")?.textContent).toBe(String.raw`\(example\)`);
+      expect(container.querySelector("p code")?.textContent).toBe("$$code$$");
+      expect(container.querySelector(".katex-error")?.textContent).toBe(String.raw`\frac`);
+      expect(container.textContent).toContain("Still readable.");
+      const formula = container.querySelector("math");
+      await render(html);
+      expect(container.querySelector("math")).toBe(formula);
+      await render(
+        String.raw`<p>Translated \(a^2 + b^2 = c^2\).</p>`,
+        "article-content article-translation",
+      );
+      expect(container.querySelectorAll("math")).toHaveLength(1);
+      expect(container.querySelector("annotation")?.textContent).toBe("a^2 + b^2 = c^2");
+      await render("<p>Next article.</p>");
+      expect(container.textContent).toBe("Next article.");
+    } finally {
+      await act(async () => root.unmount());
+      Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", previousActEnvironment);
+    }
+  });
+
   it("keeps code intact and updates copy controls when the reader changes content", async () => {
     const dom = new JSDOM('<div id="app"></div>');
     const previousWindow = globalThis.window;

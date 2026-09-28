@@ -1,3 +1,4 @@
+import renderMathInElement from "katex/contrib/auto-render";
 import {
   createElement,
   Fragment,
@@ -81,6 +82,16 @@ export const ArticleHtml = memo(function ArticleHtml({
   const [codeBlocks, setCodeBlocks] = useState<
     Array<{ block: HTMLPreElement; wrapper: HTMLDivElement }>
   >([]);
+
+  useLayoutEffect(() => {
+    if (sanitizedHtml && containerRef.current) {
+      renderMathInElement(containerRef.current, {
+        throwOnError: false,
+        errorColor: "currentColor",
+        ignoredClasses: ["katex"],
+      });
+    }
+  }, [sanitizedHtml]);
 
   useLayoutEffect(() => {
     if (!sanitizedHtml.includes("<pre")) {
