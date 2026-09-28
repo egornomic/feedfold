@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseFeed } from "feedsmith";
+import { DomUtils, parseDocument } from "htmlparser2";
 import sanitizeHtml from "sanitize-html";
 import { xFeedUrl } from "../shared/x.js";
 import { firstSafeImageUrl } from "./article-image.js";
@@ -137,7 +138,14 @@ function normalizeRss(feed: UnknownRecord, feedUrl: string): ParsedFeed {
       feedContentHtml,
     };
   });
-  return { title, siteUrl, articles };
+  return {
+    title,
+    siteUrl,
+    articles,
+    ...(typeof feed.ttl === "number" ? { ttl: feed.ttl } : {}),
+    ...(Array.isArray(feed.skipHours) ? { skipHours: feed.skipHours as number[] } : {}),
+    ...(Array.isArray(feed.skipDays) ? { skipDays: feed.skipDays as string[] } : {}),
+  };
 }
 
 function preferredAtomLink(links: unknown, baseUrl: string): string | null {
@@ -284,7 +292,28 @@ export function parseAndNormalizeWordPressPosts(
 export function parseAndNormalizeFeed(source: string, feedUrl: string): ParsedFeed {
   const parsed = parseFeed(source);
   const feed = record(parsed.feed);
-  if (parsed.format === "rss") return normalizeRss(feed, feedUrl);
+  if (parsed.format === "rss") {
+    // Feedsmith 2.9.6 drops singleton hour/day lists. Recover those channel fields
+    // with the existing XML parser; repeated values still come from feedsmith.
+    if (/<skip(?:Hours|Days)\b/.test(source)) {
+      const document = parseDocument(source, { xmlMode: true });
+      const root = DomUtils.getElementsByTagName("rss", document.children, false)[0];
+      const channel = root && DomUtils.getElementsByTagName("channel", root.children, false)[0];
+      if (channel) {
+        const values = (container: string, element: string) => {
+          const parent = DomUtils.getElementsByTagName(container, channel.children, false)[0];
+          return parent
+            ? DomUtils.getElementsByTagName(element, parent.children, false)
+                .map((node) => DomUtils.textContent(node).trim())
+                .filter(Boolean)
+            : undefined;
+        };
+        feed.skipHours ??= values("skipHours", "hour")?.map(Number).filter(Number.isFinite);
+        feed.skipDays ??= values("skipDays", "day");
+      }
+    }
+    return normalizeRss(feed, feedUrl);
+  }
   if (parsed.format === "atom") return normalizeAtom(feed, feedUrl);
   if (parsed.format === "json") return normalizeJson(feed, feedUrl);
   return normalizeRdf(feed, feedUrl);

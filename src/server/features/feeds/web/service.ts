@@ -3,6 +3,7 @@ import { JSDOM } from "jsdom";
 import type { WebFeedAnalysis, WebFeedConfig } from "../../../../shared/types.js";
 import type { QuotaService } from "../../../quota.js";
 import type { ParsedFeed } from "../../shared.js";
+import type { FeedRequestPolicy } from "../polling-policy.js";
 import {
   WebFeedBrowserLoader,
   type WebFeedBrowserLoaderOptions,
@@ -123,8 +124,8 @@ export class WebFeedService {
     }
   }
 
-  async extract(config: WebFeedConfig): Promise<WebFeedExtraction> {
-    const load = () => this.#loader.load(config.pageUrl, config);
+  async extract(config: WebFeedConfig, policy?: FeedRequestPolicy): Promise<WebFeedExtraction> {
+    const load = () => this.#loader.load(config.pageUrl, config, policy);
     const loaded = this.#quotas ? await this.#quotas.runChromium(load) : await load();
     const dom = new JSDOM(loaded.html, { url: loaded.pageUrl });
     try {

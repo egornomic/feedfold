@@ -1,6 +1,7 @@
 import { JSDOM } from "jsdom";
 import type { FeedErrorKind } from "../shared/types.js";
 import { xFeedUrl, xPostId } from "../shared/x.js";
+import { FeedRequestDeferred } from "./features/feeds/polling-policy.js";
 import type { ParsedFeed } from "./features/shared.js";
 import { fetchFeed } from "./feed-http.js";
 import { parseAndNormalizeFeed } from "./feed-parser.js";
@@ -126,6 +127,7 @@ export async function fetchXFeed(
   const failures: string[] = [];
   let kind: FeedErrorKind = "network";
   let status: number | null = null;
+  let deferred: FeedRequestDeferred | null = null;
   for (const baseUrl of baseUrls) {
     const signal = AbortSignal.timeout(timeoutMs);
     status = null;
@@ -159,12 +161,16 @@ export async function fetchXFeed(
       return parsed;
     } catch (error) {
       if (error instanceof QuotaExceededError) throw error;
+      if (error instanceof FeedRequestDeferred && (!deferred || error.until < deferred.until)) {
+        deferred = error;
+      }
       if (signal.aborted) kind = "timeout";
       failures.push(
         `${new URL(baseUrl).host}: ${signal.aborted ? "timed out" : error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
+  if (deferred) throw deferred;
   throw new XFeedError(
     `Could not load X RSS from any configured instance. ${failures.join("; ")}`,
     kind,

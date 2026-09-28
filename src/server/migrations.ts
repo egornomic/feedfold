@@ -13,7 +13,7 @@ import {
 } from "./article-html.js";
 import { firstSafeImageUrl } from "./article-image.js";
 import { youtubeMediaFromUrl } from "./article-media.js";
-import { sourcePollInterval } from "./features/feeds/schedule.js";
+import { sourcePollInterval, staggeredPollAt } from "./features/feeds/schedule.js";
 import { removeTelegramFeedImages } from "./telegram-feed.js";
 import { xContentHtml, xContentUrl } from "./x-feed.js";
 
@@ -1630,6 +1630,36 @@ const migrations: Migration[] = [
           Date.parse(source.last_attempt_at ?? completedAt) + interval * 60_000,
         ).toISOString();
         updateSource.run(interval, nextPollAt, source.id);
+      }
+    },
+  },
+  {
+    sql: `
+      ALTER TABLE feed_sources ADD COLUMN publisher_hints TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE feed_sources ADD COLUMN publisher_not_before TEXT;
+      ALTER TABLE feed_sources ADD COLUMN retry_after_at TEXT;
+      ALTER TABLE feed_sources ADD COLUMN request_origin TEXT;
+      CREATE TABLE feed_origin_cooldowns (
+        origin TEXT PRIMARY KEY,
+        retry_after_at TEXT NOT NULL
+      );
+    `,
+    after(database) {
+      const update = database.prepare("UPDATE feed_sources SET next_poll_at = ? WHERE id = ?");
+      for (const source of database
+        .prepare(`SELECT id, poll_interval_minutes, next_poll_at
+        FROM feed_sources WHERE last_attempt_at IS NOT NULL AND next_poll_at IS NOT NULL`)
+        .all() as Array<{ id: number; poll_interval_minutes: number; next_poll_at: string }>) {
+        update.run(
+          new Date(
+            staggeredPollAt(
+              source.id,
+              source.poll_interval_minutes,
+              Date.parse(source.next_poll_at),
+            ),
+          ).toISOString(),
+          source.id,
+        );
       }
     },
   },

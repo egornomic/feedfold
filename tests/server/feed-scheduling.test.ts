@@ -112,7 +112,10 @@ describe("adaptive feed scheduling", () => {
       refresh(database, feed.id, [article("one", earlier(60)), article("two", completedAt)]);
       expect(database.feeds.getFeed(1, feed.id)).toMatchObject({ pollIntervalMinutes: 10 });
       expect(database.feeds.getDueFeedIds(earlier(-9))).toEqual([]);
-      expect(database.feeds.getDueFeedIds(earlier(-10))).toEqual([feed.id]);
+      const firstDue = database.feeds.getFeed(1, feed.id)?.nextPollAt as string;
+      expect(Date.parse(firstDue)).toBeGreaterThanOrEqual(completed + 10 * 60_000);
+      expect(Date.parse(firstDue)).toBeLessThan(completed + 20 * 60_000);
+      expect(database.feeds.getDueFeedIds(firstDue)).toEqual([feed.id]);
 
       vi.setSystemTime(completed + 240 * 60_000);
       completeFeedRefresh(database.feeds, feed.id, {
@@ -123,8 +126,10 @@ describe("adaptive feed scheduling", () => {
       });
       expect(database.feeds.getFeed(1, feed.id)).toMatchObject({
         pollIntervalMinutes: 30,
-        nextPollAt: earlier(-270),
       });
+      const nextDue = Date.parse(database.feeds.getFeed(1, feed.id)?.nextPollAt as string);
+      expect(nextDue).toBeGreaterThanOrEqual(completed + 270 * 60_000);
+      expect(nextDue).toBeLessThan(completed + 300 * 60_000);
     } finally {
       database.close();
     }

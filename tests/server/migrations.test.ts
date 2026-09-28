@@ -66,8 +66,8 @@ describe("database migrations", () => {
           .prepare("SELECT poll_interval_minutes, next_poll_at FROM feed_sources ORDER BY id")
           .all(),
       ).toEqual([
-        { poll_interval_minutes: 720, next_poll_at: "2026-09-28T00:00:00.000Z" },
-        { poll_interval_minutes: 30, next_poll_at: "2026-09-27T12:30:00.000Z" },
+        { poll_interval_minutes: 720, next_poll_at: "2026-09-28T07:24:59.068Z" },
+        { poll_interval_minutes: 30, next_poll_at: "2026-09-27T12:37:04.922Z" },
       ]);
       expect(database.prepare("SELECT title FROM articles ORDER BY id").pluck().all()).toEqual([
         "Older post",

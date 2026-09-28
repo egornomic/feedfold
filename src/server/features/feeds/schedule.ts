@@ -4,6 +4,14 @@ import type { FeedPollIntervalMinutes } from "../../../shared/types.js";
 const MINUTE_MS = 60_000;
 const POSTING_GAP_LIMIT = 10;
 
+export function staggeredPollAt(sourceId: number, intervalMinutes: number, after: number): number {
+  const interval = intervalMinutes * MINUTE_MS;
+  // The persisted source ID gives each source a stable phase, even when its interval changes.
+  // A golden-ratio rotation spreads consecutive IDs throughout the interval.
+  const offset = Math.floor(((sourceId * 0.6180339887498949) % 1) * interval);
+  return (Math.floor((after - offset) / interval) + 1) * interval + offset;
+}
+
 function intervalForPostingGap(gapMinutes: number): FeedPollIntervalMinutes {
   if (gapMinutes < 30) return 5;
   if (gapMinutes < 120) return 10;

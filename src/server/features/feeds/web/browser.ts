@@ -16,6 +16,7 @@ import {
   resolvePublicAddress,
 } from "../../../public-network.js";
 import { QuotaExceededError, type QuotaService } from "../../../quota.js";
+import { FeedRequestDeferred, type FeedRequestPolicy } from "../polling-policy.js";
 import { WebFeedError } from "./error.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -548,6 +549,7 @@ export class WebFeedBrowserLoader {
   async load(
     inputUrl: string,
     expectedConfig: WebFeedConfig | null = null,
+    policy?: FeedRequestPolicy,
   ): Promise<LoadedWebFeedPage> {
     const validationCache: HostValidationCache = new Map();
     await assertPublicPageUrl(
@@ -617,6 +619,11 @@ export class WebFeedBrowserLoader {
       page.on("download", (download) => void download.cancel());
       page.on("popup", (popup) => void popup.close());
       page.on("response", (response) => {
+        policy?.afterResponse(
+          response.url(),
+          response.status(),
+          response.headers()["retry-after"] ?? null,
+        );
         if (
           CONTENT_REQUEST_TYPES.has(response.request().resourceType()) &&
           response.status() >= 400
@@ -661,11 +668,12 @@ export class WebFeedBrowserLoader {
             const release = await this.#quotas?.startOutboundRequest(requests.signal);
             if (release) outboundRequests.set(request, release);
             requests.signal.throwIfAborted();
+            policy?.beforeRequest(requestUrl);
           }
           await route.continue();
         } catch (error) {
           releaseOutbound(request);
-          if (error instanceof QuotaExceededError) {
+          if (error instanceof QuotaExceededError || error instanceof FeedRequestDeferred) {
             fatalError = error;
             void page?.close();
           } else if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {

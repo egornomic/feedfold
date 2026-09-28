@@ -1,5 +1,10 @@
 import type { FeedErrorKind, FeedHealthStatus } from "../shared/types.js";
 import { xFeedUrl } from "../shared/x.js";
+import {
+  FeedRequestDeferred,
+  type FeedRequestPolicy,
+  retryAfterDeadline,
+} from "./features/feeds/polling-policy.js";
 import { WebFeedError, type WebFeedService } from "./features/feeds/web/service.js";
 import type { FeedRecord, ParsedFeed } from "./features/shared.js";
 import { fetchFeed } from "./feed-http.js";
@@ -16,7 +21,7 @@ export interface LoadedFeedSource {
 }
 
 export interface FeedSourceLoader {
-  load(feed: FeedRecord): Promise<LoadedFeedSource>;
+  load(feed: FeedRecord, policy: FeedRequestPolicy): Promise<LoadedFeedSource>;
 }
 
 export class FeedSourceError extends Error {
@@ -119,7 +124,7 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
     nitterBaseUrls();
   }
 
-  async load(feed: FeedRecord): Promise<LoadedFeedSource> {
+  async load(feed: FeedRecord, policy: FeedRequestPolicy): Promise<LoadedFeedSource> {
     let httpStatus: number | null = null;
     try {
       if (feed.sourceKind === "web") {
@@ -129,7 +134,7 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
             "unsupported_content",
           );
         }
-        const result = await this.webFeedService.extract(feed.webConfig);
+        const result = await this.webFeedService.extract(feed.webConfig, policy);
         httpStatus = result.httpStatus;
         return {
           httpStatus: result.httpStatus,
@@ -142,8 +147,8 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
 
       const xUrl = xFeedUrl(feed.feedUrl, nitterBaseUrls());
       if (xUrl) {
-        const parsed = await fetchXFeed(xUrl, this.timeoutMs, this.feedFetcher, (task) =>
-          this.runOutbound(task),
+        const parsed = await fetchXFeed(xUrl, this.timeoutMs, (url, options) =>
+          this.fetch(url, options, policy),
         );
         return {
           httpStatus: 200,
@@ -161,12 +166,14 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
       });
       if (feed.etag) headers.set("If-None-Match", feed.etag);
       if (feed.lastModified) headers.set("If-Modified-Since", feed.lastModified);
-      let response = await this.runOutbound(() =>
-        this.feedFetcher(sourceUrl, {
+      let response = await this.fetch(
+        sourceUrl,
+        {
           headers,
           redirect: "follow",
           signal: AbortSignal.timeout(this.timeoutMs),
-        }),
+        },
+        policy,
       );
       httpStatus = response.status;
       if (response.status === 304) {
@@ -176,11 +183,17 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
           lastModified: response.headers.get("last-modified"),
         };
       }
+      if (
+        (response.status === 429 || response.status === 503) &&
+        retryAfterDeadline(response.headers.get("retry-after"), Date.now()) !== null
+      ) {
+        throw new FeedHttpError(response.status);
+      }
       let source = response.ok ? await response.text() : null;
       const verificationProvider = browserVerificationProvider(response, source);
       let parsed: ParsedFeed | null = null;
       if (verificationProvider || response.status === 415) {
-        const fallback = await this.fetchWordPressPosts(feed, response.url || feed.feedUrl);
+        const fallback = await this.fetchWordPressPosts(feed, response.url || feed.feedUrl, policy);
         if (fallback) {
           response = fallback.response;
           httpStatus = response.status;
@@ -208,24 +221,56 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
         parsed,
       };
     } catch (error) {
+      if (error instanceof FeedRequestDeferred) throw error;
       const failure = failureDetails(error, feed.sourceKind, httpStatus);
       throw new FeedSourceError(message(error), failure, { cause: error });
     }
   }
 
+  private async fetch(
+    url: string,
+    options: RequestInit,
+    policy: FeedRequestPolicy,
+  ): Promise<Response> {
+    for (let redirects = 0; redirects <= 20; redirects += 1) {
+      const response = await this.runOutbound(async () => {
+        // Check after waiting for outbound capacity, immediately before every request.
+        policy.beforeRequest(url);
+        const response = await this.feedFetcher(url, { ...options, redirect: "manual" });
+        policy.afterResponse(
+          response.url || url,
+          response.status,
+          response.headers.get("retry-after"),
+        );
+        return response;
+      });
+      const location = response.headers.get("location");
+      if (![301, 302, 303, 307, 308].includes(response.status) || !location) return response;
+      await response.body?.cancel();
+      url = new URL(location, url).toString();
+    }
+    throw new Error("The feed redirected too many times.");
+  }
+
   private async fetchWordPressPosts(
     feed: FeedRecord,
     feedUrl: string,
+    policy: FeedRequestPolicy,
   ): Promise<{ response: Response; parsed: ParsedFeed } | null> {
     const url = wordpressPostsUrl(feedUrl);
     if (!url) return null;
-    const response = await this.runOutbound(() =>
-      this.feedFetcher(url, {
+    const response = await this.fetch(
+      url,
+      {
         headers: { Accept: "application/json", "User-Agent": USER_AGENT },
         redirect: "follow",
         signal: AbortSignal.timeout(this.timeoutMs),
-      }),
+      },
+      policy,
     );
+    if (response.status === 429 || response.status === 503) {
+      throw new FeedHttpError(response.status);
+    }
     if (!response.ok) return null;
     return {
       response,

@@ -57,7 +57,13 @@ export interface ParsedArticle {
   feedContentHtml: string | null;
 }
 
-export interface ParsedFeed {
+export interface PublisherHints {
+  ttl?: number;
+  skipHours?: number[];
+  skipDays?: string[];
+}
+
+export interface ParsedFeed extends PublisherHints {
   title: string;
   siteUrl: string | null;
   articles: ParsedArticle[];
