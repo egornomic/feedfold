@@ -130,9 +130,13 @@ export class FeedPollingPolicy {
         .get(sourceId) as string,
     ) as PublisherHints;
     const deadline = hints.ttl && hints.ttl > 0 ? completed + hints.ttl * 60_000 : null;
+    const notBefore =
+      deadline !== null && Number.isFinite(deadline) && deadline <= NEVER
+        ? new Date(deadline).toISOString()
+        : null;
     this.sqlite
       .prepare("UPDATE feed_sources SET publisher_not_before = ? WHERE id = ?")
-      .run(deadline === null ? null : new Date(deadline).toISOString(), sourceId);
+      .run(notBefore, sourceId);
   }
 
   defer(sourceId: number, until: number): void {

@@ -80,6 +80,35 @@ afterEach(async () => {
 });
 
 describe("publisher-aware polling over HTTP", () => {
+  it.each([
+    { kind: "beyond year 9999", ttl: "4200000000" },
+    { kind: "outside the Date range", ttl: String(Number.MAX_SAFE_INTEGER) },
+    { kind: "overflowing during conversion to milliseconds", ttl: `1${"0".repeat(304)}` },
+  ])("ingests articles and keeps normal polling for a TTL $kind", async ({ ttl }) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    at(start);
+    const origin = await publisher((_path, response) => response.end(rss(`<ttl>${ttl}</ttl>`)));
+    const app = await reader();
+    const feed = app.database.feeds.createFeed(1, { feedUrl: `${origin.origin}/feed.xml` });
+    await app.check([feed.id]);
+    expect(app.database.feeds.getFeed(1, feed.id)).toMatchObject({
+      totalCount: 2,
+      healthStatus: "healthy",
+      pollIntervalMinutes: 10,
+    });
+    const next = Date.parse(app.database.feeds.getFeed(1, feed.id)?.nextPollAt as string);
+    expect(next - start).toBeGreaterThanOrEqual(10 * minute);
+    expect(next - start).toBeLessThan(20 * minute);
+    await app.restart();
+    at(next);
+    await app.check(app.database.feeds.getDueFeedIds(), true);
+    expect(origin.requests).toEqual(["/feed.xml", "/feed.xml"]);
+    expect(app.database.feeds.getFeed(1, feed.id)).toMatchObject({
+      totalCount: 2,
+      healthStatus: "healthy",
+    });
+  });
+
   it("keeps a 10-minute feed behind its 60-minute TTL even for manual refreshes and after restart", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     at(start);
