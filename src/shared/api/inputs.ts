@@ -151,7 +151,7 @@ export const inputs = {
           (value) =>
             typeof value === "number" &&
             FEED_POLL_INTERVAL_MINUTES.includes(value as FeedPollIntervalMinutes),
-          "Choose 5, 10, 20, 30, or 60 minutes.",
+          "Choose 5, 10, or 30 minutes, or 3, 6, or 12 hours.",
         )
         .exactOptional(),
       duplicateArticleWindowDays: z

@@ -1,51 +1,66 @@
-import {
-  FEED_POLL_INTERVAL_MINUTES,
-  type FeedPollIntervalMinutes,
-  normalizeFeedPollInterval,
-} from "../../../shared/types.js";
+import type Sqlite from "better-sqlite3";
+import type { FeedPollIntervalMinutes } from "../../../shared/types.js";
 
-const ACTIVITY_RATE_ALPHA = 0.5;
-const MINUTES_PER_HOUR = 60;
+const MINUTE_MS = 60_000;
+const POSTING_GAP_LIMIT = 10;
 
-export interface FeedScheduleState {
-  pollIntervalMinutes: FeedPollIntervalMinutes;
-  activityRatePerHour: number | null;
-  lastScheduledObservationAt: string | null;
+export function staggeredPollAt(sourceId: number, intervalMinutes: number, after: number): number {
+  const interval = intervalMinutes * MINUTE_MS;
+  // The persisted source ID gives each source a stable phase, even when its interval changes.
+  // A golden-ratio rotation spreads consecutive IDs throughout the interval.
+  const offset = Math.floor(((sourceId * 0.6180339887498949) % 1) * interval);
+  return (Math.floor((after - offset) / interval) + 1) * interval + offset;
 }
 
-export function observeScheduledRefresh(
-  state: FeedScheduleState,
-  observation: { completedAt: string; insertedArticleCount: number },
-): FeedScheduleState {
-  if (state.lastScheduledObservationAt === null) {
-    return { ...state, lastScheduledObservationAt: observation.completedAt };
+function intervalForPostingGap(gapMinutes: number): FeedPollIntervalMinutes {
+  if (gapMinutes < 30) return 5;
+  if (gapMinutes < 120) return 10;
+  if (gapMinutes < 1_440) return 30;
+  if (gapMinutes < 4_320) return 180;
+  if (gapMinutes < 10_080) return 360;
+  return 720;
+}
+
+export function pollIntervalForPosts(
+  postedAt: readonly string[],
+  currentInterval: FeedPollIntervalMinutes,
+  completedAt: string,
+): FeedPollIntervalMinutes {
+  const completed = Date.parse(completedAt);
+  const times = [...new Set(postedAt.map((timestamp) => Date.parse(timestamp)))]
+    .filter((timestamp) => timestamp <= completed)
+    .sort((left, right) => right - left)
+    .slice(0, POSTING_GAP_LIMIT + 1);
+  const latest = times[0];
+  if (latest === undefined) return currentInterval;
+
+  const silenceMinutes = (completed - latest) / MINUTE_MS;
+  if (times.length === 1) {
+    return Math.max(
+      currentInterval,
+      intervalForPostingGap(silenceMinutes / 2),
+    ) as FeedPollIntervalMinutes;
   }
 
-  const elapsedHours =
-    (Date.parse(observation.completedAt) - Date.parse(state.lastScheduledObservationAt)) /
-    3_600_000;
-  if (elapsedHours <= 0) {
-    return { ...state, lastScheduledObservationAt: observation.completedAt };
-  }
+  const oldest = times.at(-1) ?? latest;
+  const averageGapMinutes = (latest - oldest) / (times.length - 1) / MINUTE_MS;
+  // Empty checks only slow a feed after silence exceeds twice its usual posting gap.
+  return intervalForPostingGap(Math.max(averageGapMinutes, silenceMinutes / 2));
+}
 
-  const sampleRate = observation.insertedArticleCount / elapsedHours;
-  const activityRatePerHour =
-    state.activityRatePerHour === null
-      ? sampleRate
-      : sampleRate > state.activityRatePerHour
-        ? sampleRate
-        : ACTIVITY_RATE_ALPHA * sampleRate + (1 - ACTIVITY_RATE_ALPHA) * state.activityRatePerHour;
-  const desiredInterval = activityRatePerHour <= 0 ? 60 : MINUTES_PER_HOUR / activityRatePerHour;
-  const targetInterval = normalizeFeedPollInterval(desiredInterval);
-  const pollIntervalMinutes =
-    targetInterval > state.pollIntervalMinutes
-      ? (FEED_POLL_INTERVAL_MINUTES.find((interval) => interval > state.pollIntervalMinutes) ??
-        targetInterval)
-      : targetInterval;
-
-  return {
-    pollIntervalMinutes,
-    activityRatePerHour,
-    lastScheduledObservationAt: observation.completedAt,
-  };
+export function sourcePollInterval(
+  database: Sqlite.Database,
+  sourceId: number,
+  currentInterval: FeedPollIntervalMinutes,
+  completedAt: string,
+): FeedPollIntervalMinutes {
+  const postedAt = database
+    .prepare(
+      `SELECT DISTINCT schedule_posted_at FROM articles
+       WHERE source_id = ? AND schedule_posted_at <= ?
+       ORDER BY schedule_posted_at DESC LIMIT ?`,
+    )
+    .pluck()
+    .all(sourceId, completedAt, POSTING_GAP_LIMIT + 1) as string[];
+  return pollIntervalForPosts(postedAt, currentInterval, completedAt);
 }

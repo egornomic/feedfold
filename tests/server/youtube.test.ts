@@ -356,7 +356,7 @@ describe("YouTube data retention", () => {
     database.connection.exec(`
       ALTER TABLE rules DROP COLUMN youtube_generated;
       ALTER TABLE youtube_connections ADD COLUMN shorts_rule_id INTEGER REFERENCES rules(id) ON DELETE SET NULL;
-      DELETE FROM migrations WHERE version = (SELECT max(version) FROM migrations);
+      DELETE FROM migrations WHERE version = 52;
     `);
     database.connection
       .prepare("UPDATE youtube_connections SET shorts_rule_id = ? WHERE user_id = 1")

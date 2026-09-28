@@ -383,34 +383,60 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
     }
   });
 
-  it("applies a saved folder order to its visible articles without reloading", async () => {
-    const sample = seedReaderBacklog(database, "Sorted queue", 3);
-    const folder = database.folders.createFolder(1, {
-      name: "Sort review",
-      sortDirection: "oldest",
-    });
-    database.feeds.updateFeed(1, sample.feed.id, { folderId: folder.id });
-    const page = await open("magazine");
-    const firstTitle = () => page.locator(".virtual-article-row").first().textContent();
-    try {
-      await page.goto(`${origin}folders/${folder.id}/all`);
-      await expect.poll(firstTitle).toContain(sample.articles[2]?.title);
-      await page.getByRole("button", { name: `Manage ${folder.name}`, exact: true }).click();
-      await page.getByRole("menuitem", { name: "Folder settings", exact: true }).click();
-      await page.getByRole("combobox", { name: "Article order", exact: true }).click();
-      await page.getByRole("option", { name: "Newest first", exact: true }).click();
-      await page.getByRole("button", { name: "Save folder", exact: true }).click();
-      await expect
-        .poll(() => database.folders.getFolder(1, folder.id)?.sortDirection)
-        .toBe("newest");
-      await page
-        .getByRole("dialog", { name: "Folder settings", exact: true })
-        .waitFor({ state: "hidden" });
-      await expect.poll(firstTitle).toContain(sample.articles[0]?.title);
-    } finally {
-      await page.close();
-    }
-  });
+  it.each(["normal save", "overlapping update"])(
+    "applies a saved folder order without reloading: %s",
+    async (scenario) => {
+      const sample = seedReaderBacklog(database, `Sorted queue ${scenario}`, 3);
+      const folder = database.folders.createFolder(1, {
+        name: `Sort review ${scenario}`,
+        sortDirection: "oldest",
+      });
+      database.feeds.updateFeed(1, sample.feed.id, { folderId: folder.id });
+      const page = await open("magazine");
+      const firstTitle = () => page.locator(".virtual-article-row").first().textContent();
+      let releaseArticles = () => {};
+      try {
+        await page.goto(`${origin}folders/${folder.id}/all`);
+        await expect.poll(firstTitle).toContain(sample.articles.at(-1)?.title);
+        if (scenario === "overlapping update") {
+          const articlesReady = new Promise<void>((resolve) => {
+            releaseArticles = resolve;
+          });
+          let interrupted = false;
+          await page.route(/\/api\/articles\?/, async (route) => {
+            if (!interrupted) {
+              interrupted = true;
+              // A real server notification replaces the reload started by Save folder.
+              const response = await context.request.patch(`/api/feeds/${sample.feed.id}`, {
+                data: { title: "Concurrent rename" },
+              });
+              expect(response.ok()).toBe(true);
+            }
+            await articlesReady;
+            await route.continue();
+          });
+        }
+        await page.getByRole("button", { name: `Manage ${folder.name}`, exact: true }).click();
+        await page.getByRole("menuitem", { name: "Folder settings", exact: true }).click();
+        await page.getByRole("combobox", { name: "Article order", exact: true }).click();
+        await page.getByRole("option", { name: "Newest first", exact: true }).click();
+        await page.getByRole("button", { name: "Save folder", exact: true }).click();
+        await expect
+          .poll(() => database.folders.getFolder(1, folder.id)?.sortDirection)
+          .toBe("newest");
+        await page
+          .getByRole("dialog", { name: "Folder settings", exact: true })
+          .waitFor({ state: "hidden" });
+        if (scenario === "overlapping update")
+          expect(await firstTitle()).toContain(sample.articles.at(-1)?.title);
+        releaseArticles();
+        await expect.poll(firstTitle).toContain(sample.articles[0]?.title);
+      } finally {
+        releaseArticles();
+        await page.close();
+      }
+    },
+  );
 
   for (const mode of ["magazine", "expanded"] as const) {
     it(`${mode}: loads pages with bounded DOM, retries failure, and searches unmounted article bodies`, async () => {

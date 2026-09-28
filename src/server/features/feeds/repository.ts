@@ -22,7 +22,8 @@ import {
   visibleClause,
   WEB_FEED_POLL_INTERVAL_MINUTES,
 } from "../shared.js";
-import { observeScheduledRefresh } from "./schedule.js";
+import { FeedPollingPolicy } from "./polling-policy.js";
+import { sourcePollInterval, staggeredPollAt } from "./schedule.js";
 
 export interface SourceSubscription {
   feedId: number;
@@ -346,9 +347,7 @@ export class FeedRepository {
   }
 
   markFeedRefreshing(sourceId: number): void {
-    this.sqlite
-      .prepare("UPDATE feed_sources SET refreshing = 1, last_attempt_at = ? WHERE id = ?")
-      .run(now(), sourceId);
+    this.sqlite.prepare("UPDATE feed_sources SET refreshing = 1 WHERE id = ?").run(sourceId);
   }
 
   listSourceSubscriptions(sourceId: number): SourceSubscription[] {
@@ -514,9 +513,15 @@ export class FeedRepository {
     this.sqlite
       .prepare(
         `UPDATE feed_sources
-         SET title = ?, site_url = COALESCE(?, site_url), updated_at = ? WHERE id = ?`,
+         SET title = ?, site_url = COALESCE(?, site_url), updated_at = ?, publisher_hints = ? WHERE id = ?`,
       )
-      .run(parsed.title, parsed.siteUrl, timestamp, sourceId);
+      .run(
+        parsed.title,
+        parsed.siteUrl,
+        timestamp,
+        JSON.stringify({ ttl: parsed.ttl, skipHours: parsed.skipHours, skipDays: parsed.skipDays }),
+        sourceId,
+      );
   }
 
   completeSuccessfulRefresh(
@@ -526,31 +531,29 @@ export class FeedRepository {
       etag: string | null;
       lastModified: string | null;
       scheduled: boolean;
-      insertedArticleCount: number;
       webMatchCount?: number;
     },
   ): void {
     const completedAt = now();
-    const current = this.sqlite
+    const previous = this.sqlite
       .prepare(
-        `SELECT poll_interval_minutes AS pollIntervalMinutes,
-                activity_rate_per_hour AS activityRatePerHour,
-                last_scheduled_observation_at AS lastScheduledObservationAt
-         FROM feed_sources WHERE id = ?`,
+        "SELECT poll_interval_minutes AS interval, last_success_at AS success FROM feed_sources WHERE id = ?",
       )
-      .get(sourceId) as {
-      pollIntervalMinutes: FeedPollIntervalMinutes;
-      activityRatePerHour: number | null;
-      lastScheduledObservationAt: string | null;
-    };
-    const schedule = input.scheduled
-      ? observeScheduledRefresh(current, {
-          completedAt,
-          insertedArticleCount: input.insertedArticleCount,
-        })
-      : current;
+      .get(sourceId) as { interval: FeedPollIntervalMinutes; success: string | null };
+    const currentInterval = previous.interval;
+    const pollIntervalMinutes = input.scheduled
+      ? sourcePollInterval(this.sqlite, sourceId, currentInterval, completedAt)
+      : currentInterval;
+    const completed = Date.parse(completedAt);
+    const polling = new FeedPollingPolicy(this.sqlite);
+    polling.finishAttempt(sourceId, completed);
+    // Align once on initialization/interval changes; subsequent checks advance along the same grid.
+    const after =
+      previous.success === null || currentInterval !== pollIntervalMinutes
+        ? completed + pollIntervalMinutes * 60_000
+        : completed;
     const nextPollAt = new Date(
-      Date.parse(completedAt) + schedule.pollIntervalMinutes * 60_000,
+      polling.nextPollAt(sourceId, staggeredPollAt(sourceId, pollIntervalMinutes, after)),
     ).toISOString();
     this.sqlite
       .prepare(
@@ -558,17 +561,14 @@ export class FeedRepository {
          SET refreshing = 0, health_status = 'healthy', last_success_at = ?,
              last_http_status = ?, last_error_kind = NULL, last_error = NULL,
              etag = COALESCE(?, etag), last_modified = COALESCE(?, last_modified),
-             poll_interval_minutes = ?, activity_rate_per_hour = ?,
-             last_scheduled_observation_at = ?, next_poll_at = ? WHERE id = ?`,
+             poll_interval_minutes = ?, next_poll_at = ? WHERE id = ?`,
       )
       .run(
         completedAt,
         input.httpStatus,
         input.etag,
         input.lastModified,
-        schedule.pollIntervalMinutes,
-        schedule.activityRatePerHour,
-        schedule.lastScheduledObservationAt,
+        pollIntervalMinutes,
         nextPollAt,
         sourceId,
       );
@@ -593,13 +593,18 @@ export class FeedRepository {
       expectedSelectionRevision?: number;
     },
   ): void {
-    const nextPollAt = new Date(Date.now() + input.retryMinutes * 60_000).toISOString();
     this.sqlite.transaction(() => {
       if (
         input.expectedSelectionRevision !== undefined &&
         !this.selectionRevisionMatches(sourceId, input.expectedSelectionRevision)
       )
         return;
+      const completed = Date.now();
+      const polling = new FeedPollingPolicy(this.sqlite);
+      polling.finishAttempt(sourceId, completed);
+      const nextPollAt = new Date(
+        polling.nextPollAt(sourceId, completed + input.retryMinutes * 60_000),
+      ).toISOString();
       this.sqlite
         .prepare(
           `UPDATE feed_sources

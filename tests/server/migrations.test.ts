@@ -3,9 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Sqlite from "better-sqlite3";
 import { JSDOM } from "jsdom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDatabase } from "../../src/server/database.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
+import {
+  FeedPollingPolicy,
+  FeedRequestDeferred,
+} from "../../src/server/features/feeds/polling-policy.js";
 import { migrateDatabase } from "../../src/server/migrations.js";
 import {
   DEFAULT_ARTICLE_SUMMARY_PROMPT,
@@ -22,12 +26,95 @@ function articleBody(html: string): HTMLElement {
 }
 
 afterEach(async () => {
+  vi.useRealTimers();
   for (const directory of directories.splice(0)) {
     await rm(directory, { recursive: true, force: true });
   }
 });
 
 describe("database migrations", () => {
+  it("preserves an existing publisher delay while allowing a different provider after migration", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-28T12:00:00.000Z"));
+    const database = new Sqlite(":memory:");
+    database.pragma("foreign_keys = ON");
+    try {
+      migrateDatabase(database, 180, 54);
+      database.exec(`
+        INSERT INTO feed_sources (id, feed_url, source_kind, title, created_at, updated_at,
+          request_origin, retry_after_at)
+        VALUES (1, 'https://x.com/reader', 'published', 'Posts',
+          '2026-09-28T12:00:00.000Z', '2026-09-28T12:00:00.000Z',
+          'https://primary.example', '2026-09-28T13:00:00.000Z');
+      `);
+      migrateDatabase(database, 180);
+      const policy = new FeedPollingPolicy(database).forSource(1);
+      expect(() => policy.beforeRequest("https://primary.example/reader/rss")).toThrow(
+        FeedRequestDeferred,
+      );
+      expect(() => policy.beforeRequest("https://fallback.example/reader/rss")).not.toThrow();
+      expect(() => policy.beforeRequest("https://primary.example/reader/rss")).toThrow(
+        FeedRequestDeferred,
+      );
+      vi.setSystemTime(new Date("2026-09-28T13:00:00.000Z"));
+      expect(() => policy.beforeRequest("https://primary.example/reader/rss")).not.toThrow();
+    } finally {
+      database.close();
+    }
+  });
+
+  it("rebuilds existing schedules from posting history while excluding undated initial imports", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-27T12:00:00.000Z"));
+    const database = new Sqlite(":memory:");
+    database.pragma("foreign_keys = ON");
+    try {
+      migrateDatabase(database, 60, 52);
+      database.exec(`
+        INSERT INTO feed_sources (id, feed_url, source_kind, title, poll_interval_minutes,
+          last_attempt_at, last_success_at, created_at, updated_at)
+        VALUES (1, 'https://example.test/monthly.xml', 'published', 'Monthly', 60,
+          '2026-09-27T12:00:00.000Z', '2026-09-27T12:00:00.000Z',
+          '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'),
+          (2, 'https://example.test/undated.xml', 'published', 'Undated', 30,
+          '2026-09-27T12:00:00.000Z', '2026-09-27T12:00:00.000Z',
+          '2026-09-27T11:00:00.000Z', '2026-09-27T11:00:00.000Z');
+        INSERT INTO feeds (id, user_id, source_id, title, initialized_at, created_at, updated_at)
+        VALUES (1, 1, 1, 'Monthly', '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'),
+          (2, 1, 2, 'Undated', '2026-09-27T12:00:00.000Z', '2026-09-27T11:00:00.000Z', '2026-09-27T11:00:00.000Z');
+        INSERT INTO articles (id, source_id, external_id, title, published_at, discovered_at)
+        VALUES (1, 1, 'older', 'Older post', '2026-08-28T12:00:00.000Z', '2026-08-28T12:00:00.000Z'),
+          (2, 1, 'latest', 'Latest post', '2026-09-27T12:00:00.000Z', '2026-09-27T12:00:00.000Z'),
+          (3, 2, 'initial-one', 'First import', NULL, '2026-09-27T11:59:59.998Z'),
+          (4, 2, 'initial-two', 'Second import', NULL, '2026-09-27T11:59:59.999Z');
+      `);
+      migrateDatabase(database, 180);
+      expect(
+        database
+          .prepare("SELECT poll_interval_minutes FROM settings WHERE user_id = 1")
+          .pluck()
+          .get(),
+      ).toBe(30);
+      expect(
+        database
+          .prepare("SELECT poll_interval_minutes, next_poll_at FROM feed_sources ORDER BY id")
+          .all(),
+      ).toEqual([
+        { poll_interval_minutes: 720, next_poll_at: "2026-09-28T07:24:59.068Z" },
+        { poll_interval_minutes: 30, next_poll_at: "2026-09-27T12:37:04.922Z" },
+      ]);
+      expect(database.prepare("SELECT title FROM articles ORDER BY id").pluck().all()).toEqual([
+        "Older post",
+        "Latest post",
+        "First import",
+        "Second import",
+      ]);
+      expect(database.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
+
   it("requires browser keys to be re-entered while retaining Mac-protected keys and AI preferences", () => {
     const database = new AppDatabase(":memory:");
     try {
@@ -776,7 +863,7 @@ Return only the summary in plain text.`,
       expect(partner?.user).toMatchObject({ id: 2, username: "partner" });
       expect(database.feeds.listFeeds(2)).toEqual([]);
       expect(database.settings.getSettings(2)).toEqual({
-        pollIntervalMinutes: 20,
+        pollIntervalMinutes: 30,
         duplicateArticleWindowDays: 7,
         singleKeyShortcuts: true,
         markReadOnScroll: true,
@@ -898,21 +985,13 @@ Return only the summary in plain text.`,
           .prepare(
             `SELECT name FROM pragma_table_info('feed_sources')
              WHERE name IN (
-               'source_kind', 'health_status', 'last_error_kind', 'poll_interval_minutes',
-               'activity_rate_per_hour', 'last_scheduled_observation_at'
+               'source_kind', 'health_status', 'last_error_kind', 'poll_interval_minutes'
              )
              ORDER BY name`,
           )
           .pluck()
           .all(),
-      ).toEqual([
-        "activity_rate_per_hour",
-        "health_status",
-        "last_error_kind",
-        "last_scheduled_observation_at",
-        "poll_interval_minutes",
-        "source_kind",
-      ]);
+      ).toEqual(["health_status", "last_error_kind", "poll_interval_minutes", "source_kind"]);
       expect(
         database.connection
           .prepare(

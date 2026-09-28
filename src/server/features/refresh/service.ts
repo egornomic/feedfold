@@ -1,5 +1,6 @@
 import type { RefreshResult } from "../../../shared/types.js";
 import { FeedSourceError, type FeedSourceLoader } from "../../feed-source-loader.js";
+import { FeedRequestDeferred } from "../feeds/polling-policy.js";
 import type { FeedService } from "../feeds/service.js";
 import type { FeedRecord } from "../shared.js";
 
@@ -86,11 +87,14 @@ export class FeedRefreshService {
   }
 
   private async refresh(feed: FeedRecord, scheduled: boolean): Promise<void> {
+    if (this.feeds.listSourceSubscriptions(feed.id).length === 0) return;
     let httpStatus: number | null = null;
     const expectedSelectionRevision =
       feed.sourceKind === "web" ? feed.selectionRevision : undefined;
     try {
-      const result = await this.sourceLoader.load(feed);
+      this.feeds.polling.assertAllowed(feed.id);
+      const result = await this.sourceLoader.load(feed, this.feeds.polling.forSource(feed.id));
+      if (this.feeds.listSourceSubscriptions(feed.id).length === 0) return;
       httpStatus = result.httpStatus;
       this.feeds.completeSourceRefresh(feed.id, {
         ...result,
@@ -99,6 +103,11 @@ export class FeedRefreshService {
         ...(expectedSelectionRevision === undefined ? {} : { expectedSelectionRevision }),
       });
     } catch (error) {
+      if (this.feeds.listSourceSubscriptions(feed.id).length === 0) return;
+      if (error instanceof FeedRequestDeferred) {
+        this.feeds.polling.defer(feed.id, error.until);
+        return;
+      }
       const failure =
         error instanceof FeedSourceError
           ? error.failure
@@ -127,6 +136,7 @@ export class FeedRefreshService {
     this.timer = null;
     for (const { feed } of this.pending.splice(0)) {
       this.requestedIds.delete(feed.id);
+      if (this.feeds.listSourceSubscriptions(feed.id).length === 0) continue;
       this.feeds.failSourceRefresh(feed.id, {
         httpStatus: null,
         error: "The refresh stopped because the server shut down. Refresh the feed again.",

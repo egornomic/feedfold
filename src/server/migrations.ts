@@ -4,6 +4,7 @@ import {
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
   DEFAULT_FACTCHECK_PROMPT,
 } from "../shared/ai-prompts.js";
+import { type FeedPollIntervalMinutes, normalizeFeedPollInterval } from "../shared/types.js";
 import { xFeedUrl } from "../shared/x.js";
 import {
   cleanArticleHtml,
@@ -12,6 +13,7 @@ import {
 } from "./article-html.js";
 import { firstSafeImageUrl } from "./article-image.js";
 import { youtubeMediaFromUrl } from "./article-media.js";
+import { sourcePollInterval, staggeredPollAt } from "./features/feeds/schedule.js";
 import { removeTelegramFeedImages } from "./telegram-feed.js";
 import { xContentHtml, xContentUrl } from "./x-feed.js";
 
@@ -1570,6 +1572,110 @@ const migrations: Migration[] = [
       UPDATE rules SET youtube_generated = 1
       WHERE id IN (SELECT shorts_rule_id FROM youtube_connections WHERE shorts_rule_id IS NOT NULL);
       ALTER TABLE youtube_connections DROP COLUMN shorts_rule_id;`,
+  },
+  {
+    sql: `
+      ALTER TABLE feed_sources RENAME COLUMN poll_interval_minutes TO previous_poll_interval_minutes;
+      ALTER TABLE feed_sources ADD COLUMN poll_interval_minutes INTEGER NOT NULL DEFAULT 30
+        CHECK(poll_interval_minutes IN (5, 10, 30, 180, 360, 720));
+      UPDATE feed_sources SET poll_interval_minutes = CASE previous_poll_interval_minutes
+        WHEN 20 THEN 30 WHEN 60 THEN 180 ELSE previous_poll_interval_minutes END;
+      ALTER TABLE feed_sources DROP COLUMN previous_poll_interval_minutes;
+      ALTER TABLE feed_sources DROP COLUMN activity_rate_per_hour;
+      ALTER TABLE feed_sources DROP COLUMN last_scheduled_observation_at;
+
+      ALTER TABLE articles ADD COLUMN schedule_posted_at TEXT;
+      UPDATE articles SET schedule_posted_at = CASE
+        WHEN published_at IS NOT NULL THEN published_at
+        WHEN discovered_at > (
+          SELECT MIN(initialized_at) FROM feeds WHERE feeds.source_id = articles.source_id
+        ) THEN discovered_at
+        ELSE NULL END;
+      CREATE INDEX articles_source_schedule_posted_idx ON articles(source_id, schedule_posted_at DESC);
+    `,
+    after: (database) => {
+      const completedAt = new Date().toISOString();
+      const updateSettings = database.prepare(
+        "UPDATE settings SET poll_interval_minutes = ? WHERE user_id = ?",
+      );
+      for (const settings of database
+        .prepare("SELECT user_id, poll_interval_minutes FROM settings")
+        .all() as Array<{
+        user_id: number;
+        poll_interval_minutes: number;
+      }>) {
+        updateSettings.run(
+          normalizeFeedPollInterval(settings.poll_interval_minutes),
+          settings.user_id,
+        );
+      }
+
+      const updateSource = database.prepare(
+        "UPDATE feed_sources SET poll_interval_minutes = ?, next_poll_at = ? WHERE id = ?",
+      );
+      for (const source of database
+        .prepare("SELECT id, poll_interval_minutes, last_attempt_at FROM feed_sources")
+        .all() as Array<{
+        id: number;
+        poll_interval_minutes: FeedPollIntervalMinutes;
+        last_attempt_at: string | null;
+      }>) {
+        const interval = sourcePollInterval(
+          database,
+          source.id,
+          source.poll_interval_minutes,
+          completedAt,
+        );
+        const nextPollAt = new Date(
+          Date.parse(source.last_attempt_at ?? completedAt) + interval * 60_000,
+        ).toISOString();
+        updateSource.run(interval, nextPollAt, source.id);
+      }
+    },
+  },
+  {
+    sql: `
+      ALTER TABLE feed_sources ADD COLUMN publisher_hints TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE feed_sources ADD COLUMN publisher_not_before TEXT;
+      ALTER TABLE feed_sources ADD COLUMN retry_after_at TEXT;
+      ALTER TABLE feed_sources ADD COLUMN request_origin TEXT;
+      CREATE TABLE feed_origin_cooldowns (
+        origin TEXT PRIMARY KEY,
+        retry_after_at TEXT NOT NULL
+      );
+    `,
+    after(database) {
+      const update = database.prepare("UPDATE feed_sources SET next_poll_at = ? WHERE id = ?");
+      for (const source of database
+        .prepare(`SELECT id, poll_interval_minutes, next_poll_at
+        FROM feed_sources WHERE last_attempt_at IS NOT NULL AND next_poll_at IS NOT NULL`)
+        .all() as Array<{ id: number; poll_interval_minutes: number; next_poll_at: string }>) {
+        update.run(
+          new Date(
+            staggeredPollAt(
+              source.id,
+              source.poll_interval_minutes,
+              Date.parse(source.next_poll_at),
+            ),
+          ).toISOString(),
+          source.id,
+        );
+      }
+    },
+  },
+  {
+    sql: `
+      CREATE TABLE feed_source_cooldowns (
+        source_id INTEGER NOT NULL REFERENCES feed_sources(id) ON DELETE CASCADE,
+        origin TEXT NOT NULL,
+        retry_after_at TEXT NOT NULL,
+        PRIMARY KEY (source_id, origin)
+      );
+      INSERT INTO feed_source_cooldowns (source_id, origin, retry_after_at)
+        SELECT id, request_origin, retry_after_at FROM feed_sources
+        WHERE request_origin IS NOT NULL AND retry_after_at IS NOT NULL;
+      ALTER TABLE feed_sources DROP COLUMN retry_after_at;
+    `,
   },
 ];
 

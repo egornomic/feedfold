@@ -57,7 +57,13 @@ export interface ParsedArticle {
   feedContentHtml: string | null;
 }
 
-export interface ParsedFeed {
+export interface PublisherHints {
+  ttl?: number;
+  skipHours?: number[];
+  skipDays?: string[];
+}
+
+export interface ParsedFeed extends PublisherHints {
   title: string;
   siteUrl: string | null;
   articles: ParsedArticle[];
@@ -93,7 +99,7 @@ export interface StoredArticleAiTranslation extends ArticleAiTranslation {
 
 export type Row = Record<string, unknown>;
 
-export const WEB_FEED_POLL_INTERVAL_MINUTES = 60;
+export const WEB_FEED_POLL_INTERVAL_MINUTES = 180;
 export const feedPollIntervalSql = "feed_sources.poll_interval_minutes";
 
 export function now(): string {

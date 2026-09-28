@@ -192,6 +192,9 @@ export function useArticleQueue({
     const sameQueue = applied.current?.key === requestKey;
     const reconcile =
       sameQueue && applied.current?.reconciliationRevision !== reconciliationRevision;
+    // A server event can replace the refetch awaited by an explicit change.
+    // Keep that change pending until the replacement delivers fresh articles.
+    if (reconcile && (pages.isFetching || pages.isStale)) return;
     const candidates = appendUnseenArticles(
       [],
       pages.data.pages.flatMap((page) => page.articles),
@@ -250,6 +253,8 @@ export function useArticleQueue({
   }, [
     pages.data,
     pages.dataUpdatedAt,
+    pages.isFetching,
+    pages.isStale,
     reconciliationRevision,
     anchor,
     requestKey,

@@ -8,10 +8,12 @@ import type { FolderRepository } from "../folders/repository.js";
 import type { RuleRepository } from "../rules/repository.js";
 import type { FeedRecord, ParsedFeed } from "../shared.js";
 import { FeedIngestionService, type SuccessfulFeedRefresh } from "./ingestion-service.js";
+import { FeedPollingPolicy } from "./polling-policy.js";
 import type { FeedRepository, SourceSubscription } from "./repository.js";
 
 export class FeedService {
   private readonly ingestion: FeedIngestionService;
+  readonly polling: FeedPollingPolicy;
 
   constructor(
     private readonly sqlite: Sqlite.Database,
@@ -22,6 +24,7 @@ export class FeedService {
     private readonly servicePolicy: ServicePolicy,
     private readonly quotas: QuotaService,
   ) {
+    this.polling = new FeedPollingPolicy(sqlite);
     this.ingestion = new FeedIngestionService(sqlite, repository, articles, rules, this.quotas);
   }
 

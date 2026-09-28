@@ -35,7 +35,7 @@ export class AppDatabase {
   readonly servicePolicy: ServicePolicy;
   readonly quotas: QuotaService;
 
-  constructor(path: string, defaultPollIntervalMinutes = 20, servicePolicy = DESKTOP_POLICY) {
+  constructor(path: string, defaultPollIntervalMinutes = 30, servicePolicy = DESKTOP_POLICY) {
     this.servicePolicy = servicePolicy;
     this.connection = new Sqlite(path);
     this.connection.pragma("busy_timeout = 5000");
@@ -47,7 +47,7 @@ export class AppDatabase {
         .get() === undefined;
     migrateDatabase(this.connection, WEB_FEED_POLL_INTERVAL_MINUTES);
     this.quotas = new QuotaService(this.connection, servicePolicy);
-    if (this.wasNewDatabase && defaultPollIntervalMinutes !== 20) {
+    if (this.wasNewDatabase && defaultPollIntervalMinutes !== 30) {
       this.connection
         .prepare("UPDATE settings SET poll_interval_minutes = ? WHERE user_id = 1")
         .run(normalizeFeedPollInterval(defaultPollIntervalMinutes));
