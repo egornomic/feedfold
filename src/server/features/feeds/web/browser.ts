@@ -691,6 +691,10 @@ export class WebFeedBrowserLoader {
           } catch (error) {
             if (requests.signal.aborted) return;
             fatalError = error instanceof FeedRequestDeferred ? error : browserFailure(error);
+            await devtools.send("Fetch.failRequest", {
+              requestId: event.requestId,
+              errorReason: "BlockedByClient",
+            });
             await page?.close();
           }
         });
