@@ -186,4 +186,57 @@ describe("feed discovery", () => {
       });
     },
   );
+
+  it.each([
+    { scenario: "advertised feed links", oversizedPath: "/large.xml", feedPath: "/published.xml" },
+    { scenario: "common feed paths", oversizedPath: "/feed", feedPath: "/rss.xml" },
+    { scenario: "no published feed", oversizedPath: "/feed", feedPath: null },
+  ])(
+    "continues discovery past oversized sources with $scenario",
+    async ({ oversizedPath, feedPath }) => {
+      const oversized = gzipSync(`<!doctype html><p>${"a".repeat(10 * 1024 * 1024)}</p>`);
+      const requestedPaths: string[] = [];
+      let baseUrl = "";
+      const server = createServer((request, response) => {
+        requestedPaths.push(request.url ?? "");
+        if (request.url === "/") {
+          response.setHeader("Content-Type", "text/html");
+          const links =
+            oversizedPath === "/large.xml"
+              ? `<link rel="alternate" type="application/rss+xml" href="${oversizedPath}">
+             <link rel="alternate" type="application/rss+xml" href="${feedPath}">`
+              : "";
+          response.end(`<!doctype html><title>Example site</title>${links}`);
+        } else if (request.url === oversizedPath) {
+          response.writeHead(200, {
+            "Content-Type": "text/html",
+            "Content-Encoding": "gzip",
+            "Content-Length": oversized.length,
+          });
+          response.end(oversized);
+        } else if (request.url === feedPath) {
+          response.setHeader("Content-Type", "application/rss+xml");
+          response.end(rss(baseUrl));
+        } else {
+          response.writeHead(404).end();
+        }
+      });
+      baseUrl = await listen(server);
+
+      const result = await discoverFeed(baseUrl, 5_000, fetch);
+      expect(requestedPaths).toContain(oversizedPath);
+      if (feedPath) {
+        expect(result).toMatchObject({
+          kind: "published",
+          preview: {
+            feedUrl: `${baseUrl}${feedPath}`,
+            title: "The Example Pond",
+            totalArticles: 4,
+          },
+        });
+      } else {
+        expect(result).toEqual({ kind: "web_page", pageUrl: `${baseUrl}/`, title: "Example site" });
+      }
+    },
+  );
 });
