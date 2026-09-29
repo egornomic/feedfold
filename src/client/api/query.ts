@@ -7,6 +7,7 @@ import {
 import type { Article, ArticlePage, ArticleQuery } from "../../shared/types.js";
 import type { YouTubeStatus } from "../../shared/youtube.js";
 import { ApiError, api } from "../api/api.js";
+import type { ReaderDataInvalidation } from "./api-client.js";
 import { httpRequest } from "./http-request.js";
 
 export function createQueryClient() {
@@ -59,7 +60,26 @@ export const articlePagesQuery = (query: ArticleQuery) =>
     getNextPageParam: (page) => page.nextCursor,
   });
 
-export async function invalidateReader(client: QueryClient) {
+export async function invalidateReader(
+  client: QueryClient,
+  reason: ReaderDataInvalidation = "change",
+) {
+  if (reason === "connected") {
+    // Show initial results without interruption, then reconcile the gap before subscription.
+    await Promise.all(
+      client
+        .getQueryCache()
+        .findAll({ queryKey: readerKeys.all })
+        .map(async (query) => {
+          await Promise.allSettled([query.promise]);
+          await client.invalidateQueries(
+            { queryKey: query.queryKey, exact: true },
+            { cancelRefetch: false },
+          );
+        }),
+    );
+    return;
+  }
   await client.cancelQueries({ queryKey: readerKeys.all });
   await client.invalidateQueries({ queryKey: readerKeys.all });
 }

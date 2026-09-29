@@ -72,7 +72,7 @@ export async function refreshRoutes(
     stream.once("close", cleanup);
     stream.once("finish", cleanup);
     stream.once("error", cleanup);
-    sendChange();
+    writeEvent(stream, "event: connected\ndata: ready\n\n");
   });
 
   app.post("/api/refresh", async (request) => {

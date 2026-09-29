@@ -1,4 +1,4 @@
-import { createApiClient } from "../client/api/api-client.js";
+import { createApiClient, type ReaderDataInvalidation } from "../client/api/api-client.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
 import { DemoStore } from "./store.js";
 
@@ -32,10 +32,12 @@ function request<K extends ApiOperation>(
   });
 }
 
-function subscribeReaderDataInvalidations(listener: () => void): () => void {
+function subscribeReaderDataInvalidations(
+  listener: (reason: ReaderDataInvalidation) => void,
+): () => void {
   let active = true;
   queueMicrotask(() => {
-    if (active) listener();
+    if (active) listener("change");
   });
   return () => {
     active = false;

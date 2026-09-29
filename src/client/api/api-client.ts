@@ -18,6 +18,8 @@ import type {
 } from "../../shared/types.js";
 import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "./api-contract.js";
 
+export type ReaderDataInvalidation = "connected" | "change";
+
 export interface ApiRuntime {
   request<K extends ApiOperation>(
     operation: K,
@@ -26,7 +28,7 @@ export interface ApiRuntime {
     init?: RequestInit,
     aiProvider?: AiProvider | null,
   ): Promise<ApiOutput<K>>;
-  subscribeReaderDataInvalidations(listener: () => void): () => void;
+  subscribeReaderDataInvalidations(listener: (reason: ReaderDataInvalidation) => void): () => void;
   exportOpml(): Promise<void>;
 }
 

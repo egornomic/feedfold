@@ -39,8 +39,8 @@ export function useReaderData() {
 
   useEffect(
     () =>
-      api.subscribeReaderDataInvalidations(() => {
-        void invalidateReader(client);
+      api.subscribeReaderDataInvalidations((reason) => {
+        void invalidateReader(client, reason);
       }),
     [client],
   );
