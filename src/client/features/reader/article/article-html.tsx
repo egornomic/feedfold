@@ -1,4 +1,3 @@
-import renderMathInElement from "katex/contrib/auto-render";
 import {
   createElement,
   Fragment,
@@ -21,6 +20,20 @@ import {
 } from "./image-lightbox.js";
 
 const TRACKING_PIXEL_SIZE = 1;
+
+function hasArticleMath(container: HTMLElement): boolean {
+  const text = container.ownerDocument.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  while (text.nextNode()) {
+    if (
+      /\$\$|\\[([]|\\begin\{/.test(text.currentNode.textContent ?? "") &&
+      !text.currentNode.parentElement?.closest(
+        "script, noscript, style, textarea, pre, code, option, .katex",
+      )
+    )
+      return true;
+  }
+  return false;
+}
 
 function eventElement(target: EventTarget | null): Element | null {
   return target && typeof (target as Element).closest === "function" ? (target as Element) : null;
@@ -83,14 +96,23 @@ export const ArticleHtml = memo(function ArticleHtml({
     Array<{ block: HTMLPreElement; wrapper: HTMLDivElement }>
   >([]);
 
-  useLayoutEffect(() => {
-    if (sanitizedHtml && containerRef.current) {
-      renderMathInElement(containerRef.current, {
-        throwOnError: false,
-        errorColor: "currentColor",
-        ignoredClasses: ["katex"],
-      });
-    }
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!sanitizedHtml || !container || !hasArticleMath(container)) return;
+    let active = true;
+    void Promise.all([import("katex/contrib/auto-render"), import("katex/dist/katex.min.css")])
+      .then(([{ default: renderMathInElement }]) => {
+        if (!active) return;
+        renderMathInElement(container, {
+          throwOnError: false,
+          errorColor: "currentColor",
+          ignoredClasses: ["katex"],
+        });
+      })
+      .catch((error: unknown) => console.error("Could not render article equations", error));
+    return () => {
+      active = false;
+    };
   }, [sanitizedHtml]);
 
   useLayoutEffect(() => {

@@ -3,6 +3,7 @@ import Markdown, { type Components, type ExtraProps, type UrlTransform } from "r
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 import type { AiGrounding } from "../../../../shared/types.js";
 import { CodeBlock } from "./code-block.js";
 

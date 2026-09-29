@@ -138,7 +138,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,png}"],
         globIgnores: [
           "legal/**",
-          "**/{feeds,add-feed,rules,settings,shortcut-help,context-dialog,web-feed-setup,folder-form,rule-form,ai-markdown}-*.{js,css}",
+          "**/{feeds,add-feed,rules,settings,shortcut-help,context-dialog,web-feed-setup,folder-form,rule-form,ai-markdown,auto-render,katex}-*.{js,css}",
         ],
         runtimeCaching: [
           {

@@ -25,6 +25,7 @@ export function exposeBrowserGlobals(window: JSDOM["window"]): () => void {
   expose("Element", window.Element);
   expose("HTMLElement", window.HTMLElement);
   expose("Node", window.Node);
+  expose("NodeFilter", window.NodeFilter);
   expose("Event", window.Event);
   expose("MouseEvent", window.MouseEvent);
   expose("KeyboardEvent", window.KeyboardEvent);
