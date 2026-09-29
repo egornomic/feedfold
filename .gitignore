@@ -3,6 +3,7 @@ node_modules
 dist/
 release/
 coverage/
+test-results/
 data/
 backups/
 *.db
