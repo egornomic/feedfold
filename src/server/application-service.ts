@@ -2,6 +2,7 @@ import type { FeedInput } from "../shared/api/inputs.js";
 import { telegramPostIdentity } from "../shared/telegram.js";
 import type { WebFeedConfig } from "../shared/types.js";
 import { xVideoPostIds } from "../shared/x.js";
+import { type ArticleThumbnailService, thumbnailParams } from "./article-thumbnail.js";
 import type { AppDatabase } from "./database.js";
 import { ApplicationApiError, requireResource } from "./errors.js";
 import type { AiService } from "./features/ai/service.js";
@@ -25,6 +26,7 @@ export interface ApplicationServices {
   aiService: AiService;
   telegramMediaService: TelegramMediaService;
   xMediaService: XMediaService;
+  articleThumbnailService: ArticleThumbnailService;
   feedDiscoveryTimeoutMs?: number;
 }
 
@@ -107,6 +109,19 @@ export class ApplicationService {
     requireResource(database.articles.getArticle(userId, id), "Article");
     if (database.extractions.requestExtraction(userId, id)) extractionQueue.prioritize(id);
     return database.articles.getArticle(userId, id);
+  }
+
+  async articleThumbnail(userId: number, id: number, size: string, density: string) {
+    const options = thumbnailParams.parse({ size, density });
+    const article = requireResource(
+      this.services.database.articles.getArticle(userId, id),
+      "Article",
+    );
+    let url = requireResource(article.imageUrl, "Article image");
+    if (url === `/api/articles/${id}/telegram-media-preview`) {
+      url = await this.telegramPreviewUrl(userId, id);
+    }
+    return this.services.articleThumbnailService.image(url, options);
   }
 
   importOpml(userId: number, source: string) {

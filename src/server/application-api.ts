@@ -299,4 +299,8 @@ export class ApplicationApi {
   telegramPreviewUrl(articleId: number): Promise<string> {
     return this.#application.telegramPreviewUrl(this.#userId, articleId);
   }
+
+  articleThumbnail(articleId: number, size: string, density: string): Promise<Buffer> {
+    return this.#application.articleThumbnail(this.#userId, articleId, size, density);
+  }
 }

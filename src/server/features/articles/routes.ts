@@ -50,6 +50,14 @@ export async function articleRoutes(
     return article ?? missing(reply, "Article");
   });
 
+  app.get("/api/articles/:id/thumbnail/:size/:density", async (request, reply) => {
+    const { id, size, density } = idParams
+      .extend({ size: z.string(), density: z.string() })
+      .parse(request.params);
+    const image = await application.articleThumbnail(userId(request), id, size, density);
+    return reply.type("image/webp").send(image);
+  });
+
   app.get("/api/articles/:id/telegram-media", async (request) => {
     const { id } = idParams.parse(request.params);
     const items = await application.telegramItems(userId(request), id);

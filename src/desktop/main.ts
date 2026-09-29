@@ -375,6 +375,19 @@ async function applicationResource(pathname: string, request: Request): Promise<
     }
   }
   const telegramPreviewMatch = pathname.match(/^\/api\/articles\/(\d+)\/telegram-media-preview$/);
+  const thumbnailMatch = pathname.match(/^\/api\/articles\/(\d+)\/thumbnail\/([^/]+)\/([^/]+)$/);
+  if (thumbnailMatch) {
+    try {
+      const image = await runtime.application.articleThumbnail(
+        Number(thumbnailMatch[1]),
+        thumbnailMatch[2] ?? "",
+        thumbnailMatch[3] ?? "",
+      );
+      return new Response(new Uint8Array(image), { headers: { "Content-Type": "image/webp" } });
+    } catch {
+      return new Response("Article thumbnail is unavailable.", { status: 502 });
+    }
+  }
   if (telegramPreviewMatch) {
     try {
       const url = await runtime.application.telegramPreviewUrl(Number(telegramPreviewMatch[1]));

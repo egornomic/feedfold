@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { ArticleThumbnailService } from "../article-thumbnail.js";
 import { AppDatabase } from "../database.js";
 import type { CredentialCipherLike } from "../features/ai/credential-cipher.js";
 import { AiService } from "../features/ai/service.js";
@@ -24,6 +25,7 @@ export interface ApplicationServicesOptions {
   aiService?: AiService;
   telegramMediaService?: TelegramMediaService;
   xMediaService?: XMediaService;
+  articleThumbnailService?: ArticleThumbnailService;
   feedDiscoveryTimeoutMs?: number;
 }
 
@@ -63,6 +65,7 @@ export function createApplicationServices({
     database.quotas,
   ),
   xMediaService = new XMediaService(feedDiscoveryTimeoutMs, undefined, database.quotas),
+  articleThumbnailService = new ArticleThumbnailService(database.quotas),
 }: ApplicationServicesOptions) {
   return {
     database,
@@ -72,6 +75,7 @@ export function createApplicationServices({
     aiService,
     telegramMediaService,
     xMediaService,
+    articleThumbnailService,
     feedDiscoveryTimeoutMs,
   };
 }
