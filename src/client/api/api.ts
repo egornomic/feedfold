@@ -58,6 +58,12 @@ function subscribeReaderDataInvalidations(listener: () => void): () => void {
       })()
     : (() => {
         const events = new EventSource(appUrl("/api/refresh/events"), { withCredentials: true });
+        let connected = false;
+        events.addEventListener("connected", () => {
+          // Initial queries are already loading; reconnects must recover missed changes.
+          if (connected) invalidate();
+          connected = true;
+        });
         events.addEventListener("message", invalidate);
         events.addEventListener("error", invalidate);
         return () => events.close();

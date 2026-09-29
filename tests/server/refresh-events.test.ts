@@ -176,7 +176,7 @@ describe("feed refresh delivery events", () => {
     const reader = response.body?.getReader();
     if (!reader) throw new Error("The event stream did not return a response body");
     const nextEvent = eventReader(reader);
-    expect(await within(nextEvent())).toBe("data: changed");
+    expect(await within(nextEvent())).toBe("event: connected\ndata: ready");
 
     let ownerNotifications = 0;
     const unsubscribe = refresh.subscribe(accountId, () => {
