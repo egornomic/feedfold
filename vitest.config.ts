@@ -4,6 +4,16 @@ import { BaseSequencer, type TestSpecification } from "vitest/node";
 const coverageShard = process.env.FEEDFOLD_COVERAGE_SHARD === "true";
 
 class DistributedSequencer extends BaseSequencer {
+  override async sort(files: TestSpecification[]) {
+    const sorted = await super.sort(files);
+    // Start slow browser groups first so they do not leave a long tail after other tests finish.
+    return sorted.sort(
+      (a, b) =>
+        Number(b.moduleId.includes("/tests/browser/")) -
+        Number(a.moduleId.includes("/tests/browser/")),
+    );
+  }
+
   override async shard(files: TestSpecification[]) {
     const shard = this.ctx.config.shard;
     if (!shard) return files;

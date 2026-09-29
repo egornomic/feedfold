@@ -182,7 +182,7 @@ async function drag(
   await page.locator("[data-dnd-dragging]").waitFor({ state: "detached" });
 }
 
-for (const surface of ["sidebar", "folders"] as const) {
+export function feedDragScenarios(surface: Surface) {
   describe(`${surface} feed moves`, () => {
     it("keeps the feed in place after a rejected move and allows a subsequent move", async () => {
       const { context, page, source, target, feed, first, second } = await setup(surface, false);
