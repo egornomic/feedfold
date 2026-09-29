@@ -10,9 +10,9 @@ import { AuthService } from "../../src/server/features/auth/service.js";
 import type { BootstrapData } from "../../src/shared/types.js";
 import { createTestApp } from "../helpers/app.js";
 
-it.each([false, true])(
-  "reconciles startup, deliveries, and reconnects (startup delivery: %s)",
-  async (startupDelivery) => {
+it.each(["none", "before-pending", "before-settled", "during"])(
+  "reconciles startup, deliveries, and reconnects (startup change: %s)",
+  async (startupChange) => {
     const database = new AppDatabase(":memory:");
     const auth = new AuthService(database.auth, 20, { registrationMode: "open" });
     const session = await auth.register("events-reader", "reader-password");
@@ -45,7 +45,7 @@ it.each([false, true])(
       class extends EventSource {
         constructor(url: string) {
           super(new URL(url, origin), { node: { dispatcher: events } });
-          this.addEventListener("open", () => {
+          this.addEventListener("connected", () => {
             connections += 1;
           });
         }
@@ -74,17 +74,24 @@ it.each([false, true])(
     };
     try {
       await vi.waitFor(() => expect(snapshots).toBe(1));
-      unsubscribeEvents = api.subscribeReaderDataInvalidations(() => {
-        void invalidateReader(client);
+      if (startupChange === "before-settled") {
+        release();
+        await vi.waitFor(() => expect(observer.getCurrentResult().isSuccess).toBe(true));
+      }
+      if (startupChange.startsWith("before")) await createFolder("Delivered during startup");
+      unsubscribeEvents = api.subscribeReaderDataInvalidations((reason) => {
+        void invalidateReader(client, reason);
       });
       await vi.waitFor(() => expect(connections).toBe(1));
-      if (startupDelivery) await createFolder("Delivered during startup");
+      if (startupChange !== "before-settled") expect(snapshots).toBe(1);
+      if (startupChange === "during") await createFolder("Delivered during startup");
       release();
       await vi.waitFor(() => expect(observer.getCurrentResult().isSuccess).toBe(true));
-      expect(snapshots).toBe(startupDelivery ? 2 : 1);
-      if (startupDelivery)
-        expect(observer.getCurrentResult().data?.folders.map((folder) => folder.name)).toContain(
-          "Delivered during startup",
+      if (startupChange !== "none")
+        await vi.waitFor(() =>
+          expect(observer.getCurrentResult().data?.folders.map((folder) => folder.name)).toContain(
+            "Delivered during startup",
+          ),
         );
 
       await createFolder("Delivered while connected");

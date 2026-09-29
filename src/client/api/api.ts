@@ -1,7 +1,7 @@
 import type { ApiInput, ApiOperation, ApiOutput } from "../../shared/api/operations.js";
 import type { AiProvider } from "../../shared/types.js";
 import { invokeDesktop, isDesktopApp } from "../platform/desktop.js";
-import { createApiClient } from "./api-client.js";
+import { createApiClient, type ReaderDataInvalidation } from "./api-client.js";
 import { ApiError, appUrl } from "./api-contract.js";
 import { createBrowserRequest } from "./browser-api.js";
 import { httpRequest } from "./http-request.js";
@@ -44,10 +44,12 @@ async function request<K extends ApiOperation>(
   }
 }
 
-function subscribeReaderDataInvalidations(listener: () => void): () => void {
+function subscribeReaderDataInvalidations(
+  listener: (reason: ReaderDataInvalidation) => void,
+): () => void {
   let active = true;
   const invalidate = () => {
-    if (active) listener();
+    if (active) listener("change");
   };
   const bridge = window.feedfoldDesktop;
   const unsubscribe = bridge
@@ -60,8 +62,7 @@ function subscribeReaderDataInvalidations(listener: () => void): () => void {
         const events = new EventSource(appUrl("/api/refresh/events"), { withCredentials: true });
         let connected = false;
         events.addEventListener("connected", () => {
-          // Initial queries are already loading; reconnects must recover missed changes.
-          if (connected) invalidate();
+          if (active) listener(connected ? "change" : "connected");
           connected = true;
         });
         events.addEventListener("message", invalidate);
