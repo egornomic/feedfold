@@ -127,6 +127,10 @@ beforeAll(async () => {
     });
     context = desktop.context();
     await (await desktop.firstWindow()).locator(".reader-toolbar").waitFor();
+  } else {
+    // Compile and load the reader during setup, outside the first scenario's time budget.
+    const page = await open("magazine");
+    await page.close();
   }
 }, 30_000);
 
