@@ -1,4 +1,4 @@
-import { fetchFeed } from "./feed-http.js";
+import { fetchFeed, readFeedResponse } from "./feed-http.js";
 import type { QuotaService } from "./quota.js";
 import {
   parseTelegramPostMedia,
@@ -41,7 +41,7 @@ export class TelegramMediaService {
     const response = this.quotas ? await this.quotas.runOutbound(fetchMedia) : await fetchMedia();
     if (!response.ok) throw new Error(`Telegram post returned HTTP ${response.status}`);
 
-    const items = parseTelegramPostMedia(await response.text(), postUrl);
+    const items = parseTelegramPostMedia(await readFeedResponse(response), postUrl);
     this.cache.set(postUrl, { expiresAt: Date.now() + CACHE_TTL_MS, items });
     return items;
   }

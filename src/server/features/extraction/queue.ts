@@ -3,6 +3,7 @@ import { JSDOM, VirtualConsole } from "jsdom";
 import sanitizeHtml from "sanitize-html";
 import { cleanArticleHtml } from "../../article-html.js";
 import { firstSafeImageUrl } from "../../article-image.js";
+import { readResponseText } from "../../http-response.js";
 import { fetchPublic } from "../../public-network.js";
 import type { ExtractionRecord } from "../shared.js";
 import type { ExtractionService } from "./service.js";
@@ -36,26 +37,11 @@ async function readHtmlResponse(response: Response): Promise<string> {
     throw new Error(`The source returned ${contentType} instead of an HTML page.`);
   }
 
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_ARTICLE_BYTES) {
-    await cancelBody(response);
-    throw new Error("The source page is larger than the 5 MiB full-article limit.");
-  }
-  if (!response.body) return "";
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > MAX_ARTICLE_BYTES) {
-      await reader.cancel();
-      throw new Error("The source page is larger than the 5 MiB full-article limit.");
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks, totalBytes).toString("utf8");
+  return readResponseText(
+    response,
+    MAX_ARTICLE_BYTES,
+    "The source page is larger than the 5 MiB full-article limit.",
+  );
 }
 
 export type ExtractionOutcome = {

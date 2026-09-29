@@ -1,9 +1,10 @@
 import { JSDOM } from "jsdom";
 import type { FeedErrorKind } from "../shared/types.js";
 import { xFeedUrl, xPostId } from "../shared/x.js";
+import { ApplicationApiError } from "./errors.js";
 import { FeedRequestDeferred } from "./features/feeds/polling-policy.js";
 import type { ParsedFeed } from "./features/shared.js";
-import { fetchFeed } from "./feed-http.js";
+import { fetchFeed, readFeedResponse } from "./feed-http.js";
 import { parseAndNormalizeFeed } from "./feed-parser.js";
 import { QuotaExceededError } from "./quota.js";
 
@@ -149,7 +150,7 @@ export async function fetchXFeed(
         kind = response.status === 401 || response.status === 403 ? "access_blocked" : "http";
         throw new Error(`HTTP ${response.status}`);
       }
-      const source = await response.text();
+      const source = await readFeedResponse(response);
       kind = "parse";
       const parsed = normalizeXFeed(
         parseAndNormalizeFeed(source, feedUrl),
@@ -161,6 +162,9 @@ export async function fetchXFeed(
       return parsed;
     } catch (error) {
       if (error instanceof QuotaExceededError) throw error;
+      if (error instanceof ApplicationApiError && error.code === "unsupported_content") {
+        kind = "unsupported_content";
+      }
       if (error instanceof FeedRequestDeferred && (!deferred || error.until < deferred.until)) {
         deferred = error;
       }

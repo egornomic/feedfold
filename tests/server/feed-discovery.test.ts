@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import { discoverFeed } from "../../src/server/feed-discovery.js";
 import { githubFeedUrl } from "../../src/server/feed-http.js";
@@ -151,4 +152,38 @@ describe("feed discovery", () => {
     await expect(discoverFeed(baseUrl, 2_000)).rejects.toMatchObject({ kind: "inaccessible" });
     expect(hits).toBe(0);
   });
+
+  it.each(["declared", "chunked", "compressed"])(
+    "rejects oversized %s feeds while ordinary feeds remain readable",
+    async (encoding) => {
+      const oversized = `<rss version="2.0"><channel><title>Large feed</title>
+        <description>${"a".repeat(10 * 1024 * 1024)}</description></channel></rss>`;
+      const server = createServer((request, response) => {
+        response.setHeader("Content-Type", "application/rss+xml");
+        if (request.url === "/ordinary") {
+          response.end(rss("https://example.com"));
+        } else if (encoding === "compressed") {
+          const compressed = gzipSync(oversized);
+          response.setHeader("Content-Encoding", "gzip");
+          response.setHeader("Content-Length", compressed.length);
+          response.end(compressed);
+        } else if (encoding === "declared") {
+          response.setHeader("Content-Length", Buffer.byteLength(oversized));
+          response.end(oversized);
+        } else {
+          response.write(oversized);
+          response.end();
+        }
+      });
+      const baseUrl = await listen(server);
+      await expect(discoverFeed(`${baseUrl}/oversized`, 5_000, fetch)).rejects.toMatchObject({
+        status: 422,
+        code: "unsupported_content",
+      });
+      await expect(discoverFeed(`${baseUrl}/ordinary`, 2_000, fetch)).resolves.toMatchObject({
+        kind: "published",
+        preview: { title: "The Example Pond", totalArticles: 4 },
+      });
+    },
+  );
 });
