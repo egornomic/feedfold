@@ -187,6 +187,59 @@ async function settle(page: Page) {
 }
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it("loads equations on demand without blocking navigation while the renderer downloads", async () => {
+    const sample = seedReaderBacklog(database, "On-demand equations", 2);
+    const articles = database.articles.listArticlePage(1, {
+      feedId: sample.feed.id,
+      state: "all",
+    }).articles;
+    const [plain, formula] = articles;
+    if (!plain || !formula) throw new Error("Equation fixture is incomplete");
+    const update = database.connection.prepare(
+      "UPDATE articles SET feed_content_html = ? WHERE id = ?",
+    );
+    update.run(
+      String.raw`<p>Ordinary prose costs $5.</p><pre><code>\(code\) $$example$$</code></pre>`,
+      plain.id,
+    );
+    update.run(String.raw`<p>An equation: \(E = mc^2\).</p>`, formula.id);
+    const page = await open("magazine");
+    const requests: string[] = [];
+    let release = () => {};
+    const download = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/katex|auto-render/, async (route) => {
+      requests.push(route.request().url());
+      await download;
+      await route.continue();
+    });
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/all`);
+      await page.getByRole("button", { name: `Open ${plain.title}`, exact: true }).click();
+      const content = page.locator(".article-swipe-layer.is-active .article-content");
+      await content.locator("pre").waitFor();
+      expect(requests).toHaveLength(0);
+      expect(await content.textContent()).toContain("Ordinary prose costs $5.");
+      await page.getByRole("button", { name: "Next article (J)", exact: true }).click();
+      await expect.poll(() => requests.length).toBeGreaterThan(0);
+      expect(await content.textContent()).toContain(String.raw`\(E = mc^2\)`);
+      await page.getByRole("button", { name: "Previous article (K)", exact: true }).click();
+      await content.locator("pre").waitFor();
+      release();
+      await page.getByRole("button", { name: "Next article (J)", exact: true }).click();
+      await content.locator("math").waitFor();
+      expect(await content.locator("annotation").textContent()).toBe("E = mc^2");
+      await page.getByRole("button", { name: "Previous article (K)", exact: true }).click();
+      await content.locator("pre").waitFor();
+      expect(await content.locator("math").count()).toBe(0);
+      expect(await content.locator("code").textContent()).toBe(String.raw`\(code\) $$example$$`);
+    } finally {
+      release();
+      await page.close();
+    }
+  });
+
   it("keeps a read article open after refreshing its unread reader context", async () => {
     const sample = seedReaderBacklog(database, "Refreshed unread article", 3);
     const page = await open("magazine");

@@ -5,8 +5,34 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
 import { ArticleHtml } from "../../src/client/features/reader/article/article-html.js";
 import { cleanArticleHtml } from "../../src/server/article-html.js";
+import { waitFor } from "./react-harness.js";
 
 describe("article HTML", () => {
+  it.each([
+    ["encoded delimiters", "<p>&#36;&#36;x^2&#36;&#36;</p>", "x^2"],
+    [
+      "LaTeX environments",
+      String.raw`<p>\begin{align}a&=b\end{align}</p>`,
+      String.raw`\begin{align}a&=b\end{align}`,
+    ],
+  ])("renders %s after loading equation support", async (_name, sanitizedHtml, source) => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const previousActEnvironment = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    try {
+      await act(async () => root.render(createElement(ArticleHtml, { sanitizedHtml })));
+      await waitFor(
+        "equation",
+        () => container.querySelector("annotation")?.textContent === source,
+      );
+      expect(container.querySelector("math")).not.toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", previousActEnvironment);
+    }
+  });
+
   it("renders sanitized article and translation math without changing prices or code", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);
@@ -28,6 +54,7 @@ describe("article HTML", () => {
           );
         });
       await render(html);
+      await waitFor("article equations", () => container.querySelectorAll("math").length === 3);
       expect(container.querySelectorAll("math")).toHaveLength(3);
       expect(container.querySelectorAll(".katex-display")).toHaveLength(2);
       expect(container.querySelector("annotation")?.textContent).toBe("E = mc^2");
@@ -42,6 +69,10 @@ describe("article HTML", () => {
       await render(
         String.raw`<p>Translated \(a^2 + b^2 = c^2\).</p>`,
         "article-content article-translation",
+      );
+      await waitFor(
+        "translated equation",
+        () => container.querySelector("annotation")?.textContent === "a^2 + b^2 = c^2",
       );
       expect(container.querySelectorAll("math")).toHaveLength(1);
       expect(container.querySelector("annotation")?.textContent).toBe("a^2 + b^2 = c^2");
