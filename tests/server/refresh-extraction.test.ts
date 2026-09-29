@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { JSDOM } from "jsdom";
 import katex from "katex";
 import { afterEach, assert, describe, expect, it } from "vitest";
@@ -39,6 +40,56 @@ async function listen(server: Server): Promise<string> {
 }
 
 describe("feed refresh and full-text extraction", () => {
+  it("rejects oversized feed refreshes and recovers when the publisher returns a normal feed", async () => {
+    let oversized = true;
+    const server = createServer((_request, response) => {
+      const content = oversized ? "a".repeat(10 * 1024 * 1024) : "Ordinary article content";
+      const source = `<rss version="2.0"><channel><title>Publisher</title>
+        <item><guid>one</guid><title>Recovered entry</title><description>${content}</description>
+        </item></channel></rss>`;
+      response.writeHead(200, {
+        "Content-Type": "application/rss+xml",
+        "Content-Encoding": "gzip",
+      });
+      response.end(gzipSync(source));
+    });
+    const feedUrl = await listen(server);
+    const database = await temporaryDatabase();
+    const refresh = new FeedRefreshService(
+      database.feeds,
+      new DefaultFeedSourceLoader(
+        (task) => database.feeds.runOutbound(task),
+        5_000,
+        undefined,
+        fetch,
+      ),
+      1,
+    );
+    cleanups.push(async () => {
+      await refresh.stop();
+      database.close();
+    });
+    const feed = database.feeds.createFeed(TEST_USER_ID, { feedUrl });
+
+    refresh.request([feed.id]);
+    await refresh.waitForIdle();
+    expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
+      healthStatus: "failing",
+      lastErrorKind: "unsupported_content",
+    });
+    expect(database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles).toEqual([]);
+
+    oversized = false;
+    refresh.request([feed.id]);
+    await refresh.waitForIdle();
+    expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
+      healthStatus: "healthy",
+    });
+    expect(
+      database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles,
+    ).toMatchObject([{ title: "Recovered entry" }]);
+  });
+
   it("preserves publisher math when extracting a full article over HTTP", async () => {
     const inline = "f(x)=x^2";
     const display = String.raw`\int_0^1 x^2\,dx=\frac{1}{3}`;

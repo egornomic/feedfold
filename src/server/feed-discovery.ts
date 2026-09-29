@@ -2,8 +2,9 @@ import { JSDOM } from "jsdom";
 import { FEED_PREVIEW_ARTICLE_LIMIT } from "../shared/feed-preview.js";
 import type { FeedDiscoveryResult, FeedErrorKind, FeedPreview } from "../shared/types.js";
 import { xFeedUrl } from "../shared/x.js";
+import { ApplicationApiError } from "./errors.js";
 import type { ParsedFeed } from "./features/shared.js";
-import { fetchFeed, githubFeedUrl } from "./feed-http.js";
+import { fetchFeed, githubFeedUrl, readFeedResponse } from "./feed-http.js";
 import { parseAndNormalizeFeed } from "./feed-parser.js";
 import { PublicNetworkError } from "./public-network.js";
 import { parseAndNormalizeTelegramFeed, telegramChannelUrls } from "./telegram-feed.js";
@@ -150,11 +151,17 @@ async function fetchSource(
     }
     return null;
   }
-  return {
-    source: await response.text(),
-    url: response.url || url,
-    contentType: response.headers.get("content-type"),
-  };
+  try {
+    return {
+      source: await readFeedResponse(response),
+      url: response.url || url,
+      contentType: response.headers.get("content-type"),
+    };
+  } catch (error) {
+    if (!required && error instanceof ApplicationApiError && error.code === "unsupported_content")
+      return null;
+    throw error;
+  }
 }
 
 function pageTitle(source: string, pageUrl: string): string {

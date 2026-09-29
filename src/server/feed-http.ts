@@ -1,3 +1,4 @@
+import { readResponseText } from "./http-response.js";
 import { fetchPublic } from "./public-network.js";
 
 const GITHUB_HOST = "github.com";
@@ -29,4 +30,12 @@ export function githubFeedUrl(value: string): string | null {
 
 export function fetchFeed(value: string, options: RequestInit): Promise<Response> {
   return fetchPublic(value, options);
+}
+
+export function readFeedResponse(response: Response): Promise<string> {
+  return readResponseText(
+    response,
+    10 * 1024 * 1024,
+    "The source is larger than the 10 MiB feed limit.",
+  );
 }

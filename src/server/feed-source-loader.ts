@@ -1,5 +1,6 @@
 import type { FeedErrorKind, FeedHealthStatus } from "../shared/types.js";
 import { xFeedUrl } from "../shared/x.js";
+import { ApplicationApiError } from "./errors.js";
 import {
   FeedRequestDeferred,
   type FeedRequestPolicy,
@@ -7,7 +8,7 @@ import {
 } from "./features/feeds/polling-policy.js";
 import { WebFeedError, type WebFeedService } from "./features/feeds/web/service.js";
 import type { FeedRecord, ParsedFeed } from "./features/shared.js";
-import { fetchFeed } from "./feed-http.js";
+import { fetchFeed, readFeedResponse } from "./feed-http.js";
 import { parseAndNormalizeFeed, parseAndNormalizeWordPressPosts } from "./feed-parser.js";
 import { parseAndNormalizeTelegramFeed, telegramChannelUrls } from "./telegram-feed.js";
 import { fetchXFeed, nitterBaseUrls, XFeedError } from "./x-feed.js";
@@ -101,6 +102,9 @@ function failureDetails(
   if (error instanceof FeedHttpError || error instanceof XFeedError) {
     return { httpStatus: error.status, errorKind: error.kind, healthStatus: "failing" };
   }
+  if (error instanceof ApplicationApiError && error.code === "unsupported_content") {
+    return { httpStatus, errorKind: "unsupported_content", healthStatus: "failing" };
+  }
   if (
     error instanceof DOMException &&
     (error.name === "TimeoutError" || error.name === "AbortError")
@@ -189,7 +193,7 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
       ) {
         throw new FeedHttpError(response.status);
       }
-      let source = response.ok ? await response.text() : null;
+      let source = response.ok ? await readFeedResponse(response) : null;
       const verificationProvider = browserVerificationProvider(response, source);
       let parsed: ParsedFeed | null = null;
       if (verificationProvider || response.status === 415) {
@@ -209,7 +213,7 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
       }
       if (!parsed) {
         if (!response.ok) throw new FeedHttpError(response.status);
-        const feedSource = source ?? (await response.text());
+        const feedSource = source ?? (await readFeedResponse(response));
         parsed = telegram
           ? parseAndNormalizeTelegramFeed(feedSource, telegram.channelUrl)
           : parseAndNormalizeFeed(feedSource, response.url || sourceUrl);
@@ -274,7 +278,11 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
     if (!response.ok) return null;
     return {
       response,
-      parsed: parseAndNormalizeWordPressPosts(await response.text(), feedUrl, feed.title),
+      parsed: parseAndNormalizeWordPressPosts(
+        await readFeedResponse(response),
+        feedUrl,
+        feed.title,
+      ),
     };
   }
 }

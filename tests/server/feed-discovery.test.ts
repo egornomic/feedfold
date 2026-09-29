@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import { discoverFeed } from "../../src/server/feed-discovery.js";
 import { githubFeedUrl } from "../../src/server/feed-http.js";
@@ -151,4 +152,91 @@ describe("feed discovery", () => {
     await expect(discoverFeed(baseUrl, 2_000)).rejects.toMatchObject({ kind: "inaccessible" });
     expect(hits).toBe(0);
   });
+
+  it.each(["declared", "chunked", "compressed"])(
+    "rejects oversized %s feeds while ordinary feeds remain readable",
+    async (encoding) => {
+      const oversized = `<rss version="2.0"><channel><title>Large feed</title>
+        <description>${"a".repeat(10 * 1024 * 1024)}</description></channel></rss>`;
+      const server = createServer((request, response) => {
+        response.setHeader("Content-Type", "application/rss+xml");
+        if (request.url === "/ordinary") {
+          response.end(rss("https://example.com"));
+        } else if (encoding === "compressed") {
+          const compressed = gzipSync(oversized);
+          response.setHeader("Content-Encoding", "gzip");
+          response.setHeader("Content-Length", compressed.length);
+          response.end(compressed);
+        } else if (encoding === "declared") {
+          response.setHeader("Content-Length", Buffer.byteLength(oversized));
+          response.end(oversized);
+        } else {
+          response.write(oversized);
+          response.end();
+        }
+      });
+      const baseUrl = await listen(server);
+      await expect(discoverFeed(`${baseUrl}/oversized`, 5_000, fetch)).rejects.toMatchObject({
+        status: 422,
+        code: "unsupported_content",
+      });
+      await expect(discoverFeed(`${baseUrl}/ordinary`, 2_000, fetch)).resolves.toMatchObject({
+        kind: "published",
+        preview: { title: "The Example Pond", totalArticles: 4 },
+      });
+    },
+  );
+
+  it.each([
+    { scenario: "advertised feed links", oversizedPath: "/large.xml", feedPath: "/published.xml" },
+    { scenario: "common feed paths", oversizedPath: "/feed", feedPath: "/rss.xml" },
+    { scenario: "no published feed", oversizedPath: "/feed", feedPath: null },
+  ])(
+    "continues discovery past oversized sources with $scenario",
+    async ({ oversizedPath, feedPath }) => {
+      const oversized = gzipSync(`<!doctype html><p>${"a".repeat(10 * 1024 * 1024)}</p>`);
+      const requestedPaths: string[] = [];
+      let baseUrl = "";
+      const server = createServer((request, response) => {
+        requestedPaths.push(request.url ?? "");
+        if (request.url === "/") {
+          response.setHeader("Content-Type", "text/html");
+          const links =
+            oversizedPath === "/large.xml"
+              ? `<link rel="alternate" type="application/rss+xml" href="${oversizedPath}">
+             <link rel="alternate" type="application/rss+xml" href="${feedPath}">`
+              : "";
+          response.end(`<!doctype html><title>Example site</title>${links}`);
+        } else if (request.url === oversizedPath) {
+          response.writeHead(200, {
+            "Content-Type": "text/html",
+            "Content-Encoding": "gzip",
+            "Content-Length": oversized.length,
+          });
+          response.end(oversized);
+        } else if (request.url === feedPath) {
+          response.setHeader("Content-Type", "application/rss+xml");
+          response.end(rss(baseUrl));
+        } else {
+          response.writeHead(404).end();
+        }
+      });
+      baseUrl = await listen(server);
+
+      const result = await discoverFeed(baseUrl, 5_000, fetch);
+      expect(requestedPaths).toContain(oversizedPath);
+      if (feedPath) {
+        expect(result).toMatchObject({
+          kind: "published",
+          preview: {
+            feedUrl: `${baseUrl}${feedPath}`,
+            title: "The Example Pond",
+            totalArticles: 4,
+          },
+        });
+      } else {
+        expect(result).toEqual({ kind: "web_page", pageUrl: `${baseUrl}/`, title: "Example site" });
+      }
+    },
+  );
 });
