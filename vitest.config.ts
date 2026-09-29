@@ -1,7 +1,22 @@
 import { defineConfig } from "vitest/config";
+import { BaseSequencer, type TestSpecification } from "vitest/node";
+
+const coverageShard = process.env.FEEDFOLD_COVERAGE_SHARD === "true";
+
+class DistributedSequencer extends BaseSequencer {
+  override async shard(files: TestSpecification[]) {
+    const shard = this.ctx.config.shard;
+    if (!shard) return files;
+    // Spread adjacent browser suites across runners instead of hashing them into one shard.
+    return [...files]
+      .sort((a, b) => a.moduleId.localeCompare(b.moduleId))
+      .filter((_, index) => index % shard.count === shard.index - 1);
+  }
+}
 
 export default defineConfig({
   test: {
+    sequence: { sequencer: DistributedSequencer },
     environment: "node",
     include: ["tests/**/*.test.ts"],
     restoreMocks: true,
@@ -19,14 +34,17 @@ export default defineConfig({
         "src/desktop/youtube-player.ts",
       ],
       exclude: ["**/*.d.ts", "src/server/index.ts", "src/server/manage-accounts.ts"],
-      reporter: ["text-summary", "html", "json-summary", "lcov"],
+      reporter: coverageShard ? [] : ["text-summary", "html", "json-summary", "lcov"],
       reportOnFailure: true,
-      thresholds: {
-        statements: 69,
-        branches: 60,
-        functions: 70,
-        lines: 72,
-      },
+      // Enforce the full-suite thresholds after merging every shard's coverage.
+      thresholds: coverageShard
+        ? {}
+        : {
+            statements: 69,
+            branches: 60,
+            functions: 70,
+            lines: 72,
+          },
     },
   },
 });

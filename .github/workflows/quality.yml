@@ -17,10 +17,38 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  quality:
-    name: Quality
+  checks:
+    name: Types, formatting, and builds
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Check types, formatting, and builds
+        run: npm run typecheck && npm run lint && npm run build && npm run build:demo
+
+  tests:
+    name: Tests (${{ matrix.shard }}/3)
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -39,23 +67,103 @@ jobs:
 
       - name: Allow Chromium to create its sandbox
         run: |
-          cat <<EOF | sudo tee /etc/apparmor.d/feedfold-chromium
+          cat <<EOF_PROFILE | sudo tee /etc/apparmor.d/feedfold-chromium
           abi <abi/4.0>,
           include <tunables/global>
           profile feedfold-chromium ${HOME}/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell flags=(unconfined) {
             userns,
           }
-          EOF
+          EOF_PROFILE
           sudo apparmor_parser --replace /etc/apparmor.d/feedfold-chromium
 
-      - name: Check types, formatting, tests, coverage, and builds
-        run: npm run check
+      - name: Run tests with coverage
+        env:
+          FEEDFOLD_COVERAGE_SHARD: "true"
+        run: npm run test:coverage -- --shard=${{ matrix.shard }}/3 --reporter=default --reporter=blob --outputFile.blob=coverage/shard-${{ matrix.shard }}.json
 
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
+      - name: Upload test results and coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.shard }}
+          path: coverage/shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
 
-      - name: Build static demo
-        run: npm run build:demo
+  image:
+    name: Build production image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build production image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: feedfold:${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=feedfold
+          cache-to: type=gha,scope=feedfold,mode=max
+
+      - name: Verify image startup and browser
+        run: |
+          trap 'docker rm --force feedfold-smoke' EXIT
+          docker run --detach --name feedfold-smoke --publish 127.0.0.1:3000:3000 "feedfold:$GITHUB_SHA"
+          curl --fail --retry 10 --retry-all-errors --retry-delay 1 http://127.0.0.1:3000/health
+          docker exec feedfold-smoke node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto("http://127.0.0.1:3000/"); if (await page.title() !== "feedfold") throw new Error("The reader did not load"); await browser.close();'
+
+      - name: Export production image
+        run: docker save "feedfold:$GITHUB_SHA" | gzip -1 > "$RUNNER_TEMP/feedfold-image.tar.gz"
+
+      - name: Upload production image
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-image
+          path: ${{ runner.temp }}/feedfold-image.tar.gz
+          compression-level: 0
+          retention-days: 1
+
+  quality:
+    name: Quality
+    needs: [checks, tests, image]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require all checks to pass
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+          IMAGE_RESULT: ${{ needs.image.result }}
+        run: test "$CHECKS_RESULT" = success && test "$TESTS_RESULT" = success && test "$IMAGE_RESULT" = success
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download test results and coverage
+        uses: actions/download-artifact@v8
+        with:
+          pattern: test-results-*
+          path: test-results
+          merge-multiple: true
+
+      - name: Merge coverage and enforce thresholds
+        run: npm run test:coverage -- --merge-reports=test-results
 
       - name: Upload coverage report
         if: ${{ !cancelled() }}
@@ -78,11 +186,11 @@ jobs:
       name: production
       url: https://feedfold.com/
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Build production image
-        run: docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" --tag "feedfold:$GITHUB_SHA" .
+      - name: Download verified production image
+        uses: actions/download-artifact@v8
+        with:
+          name: production-image
+          path: ${{ runner.temp }}
 
       - name: Install deployment SSH credentials
         env:
@@ -97,7 +205,7 @@ jobs:
       - name: Deploy verified image
         env:
           DEPLOY_HOST: ${{ vars.FEEDFOLD_DEPLOY_HOST }}
-        run: docker save "feedfold:$GITHUB_SHA" | gzip -1 | ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "$GITHUB_SHA"
+        run: ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "$GITHUB_SHA" < "$RUNNER_TEMP/feedfold-image.tar.gz"
 
       - name: Verify public service
         env:

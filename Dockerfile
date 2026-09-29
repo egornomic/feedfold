@@ -25,13 +25,13 @@ WORKDIR /app
 
 COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/dist/client ./dist/client
-COPY --from=build --chown=node:node /app/dist/server ./dist/server
-COPY --from=build --chown=node:node /app/dist/demo ./dist/demo
-
 RUN npx playwright install --with-deps --only-shell chromium \
     && mkdir -p /data \
     && chown -R node:node /data /ms-playwright
+
+COPY --from=build --chown=node:node /app/dist/client ./dist/client
+COPY --from=build --chown=node:node /app/dist/server ./dist/server
+COPY --from=build --chown=node:node /app/dist/demo ./dist/demo
 
 USER node
 
