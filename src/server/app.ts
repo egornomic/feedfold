@@ -97,7 +97,8 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
 
   app.addHook("onSend", async (request, reply) => {
     reply.headers(responsePolicies[request.routeOptions.config.responsePolicy ?? "application"]);
-    if (request.url.startsWith("/api/youtube")) reply.header("Referrer-Policy", "no-referrer");
+    if (request.routeOptions.url?.startsWith("/api/youtube"))
+      reply.header("Referrer-Policy", "no-referrer");
     reply.header(
       "Permissions-Policy",
       "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self)",
@@ -109,9 +110,9 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   });
 
   app.addHook("onRequest", async (request, reply) => {
-    if (!request.url.startsWith("/api/")) return;
+    const path = request.routeOptions.url ?? request.url.split("?", 1)[0] ?? "";
+    if (!path.startsWith("/api/")) return;
     reply.header("Cache-Control", "no-store");
-    const [path = ""] = request.url.split("?", 1);
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
       const expectedOrigin =
         services.publicOrigin ??

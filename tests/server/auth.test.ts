@@ -283,6 +283,57 @@ describe("hosted account authentication", () => {
     ).toBe(200);
   });
 
+  it("requires recent authentication for encoded password-change URLs", async () => {
+    const { app, database } = await authApp();
+    const registration = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { username: "reader", password: "reader-password" },
+    });
+    const cookie = cookieFrom(registration.headers["set-cookie"]);
+    database.connection
+      .prepare("UPDATE sessions SET recent_auth_at = ?")
+      .run("2000-01-01T00:00:00.000Z");
+
+    for (const url of [
+      "/api/auth/password",
+      "/api/auth/%70assword",
+      "/api/%61uth/password",
+      "/%61pi/auth/password",
+    ]) {
+      const response = await app.inject({
+        method: "PUT",
+        url,
+        headers: { cookie },
+        payload: { password: "replacement-password" },
+      });
+      expect(response.statusCode, url).toBe(428);
+      expect(response.json()).toMatchObject({ code: "RECENT_AUTH_REQUIRED" });
+    }
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "reader", password: "reader-password" },
+    });
+    expect(login.statusCode).toBe(200);
+    const changed = await app.inject({
+      method: "PUT",
+      url: "/%61pi/auth/%70assword",
+      headers: { cookie: cookieFrom(login.headers["set-cookie"]) },
+      payload: { password: "replacement-password" },
+    });
+    expect(changed.statusCode).toBe(204);
+  });
+
+  it("requires a session for encoded API URLs", async () => {
+    const { app } = await authApp();
+    for (const url of ["/api/bootstrap", "/%61pi/bootstrap", "/api/%62ootstrap"]) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode, url).toBe(401);
+      expect(response.headers["cache-control"]).toBe("no-store");
+    }
+  });
+
   it("allows removal of the final login method after valid recent authentication", async () => {
     const { app } = await authApp();
     const registration = await app.inject({
@@ -657,34 +708,37 @@ describe("hosted account authentication", () => {
     });
   });
 
-  it("rejects cross-site state changes without ending the session", async () => {
-    const { app } = await authApp("https://reader.example.test");
-    const registration = await app.inject({
-      method: "POST",
-      url: "/api/auth/register",
-      payload: { username: "reader", password: "reader-password" },
-    });
-    const cookie = cookieFrom(registration.headers["set-cookie"]);
-    const rejected = await app.inject({
-      method: "POST",
-      url: "/api/auth/logout",
-      headers: {
-        cookie,
-        origin: "https://attacker.example",
-        "sec-fetch-site": "cross-site",
-      },
-    });
-    expect(rejected.statusCode).toBe(403);
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/api/auth/session",
-          headers: { cookie },
-        })
-      ).statusCode,
-    ).toBe(200);
-  });
+  it.each(["/api/auth/logout", "/%61pi/auth/logout", "/api/%61uth/logout"])(
+    "rejects cross-site state changes at %s without ending the session",
+    async (url) => {
+      const { app } = await authApp("https://reader.example.test");
+      const registration = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "reader", password: "reader-password" },
+      });
+      const cookie = cookieFrom(registration.headers["set-cookie"]);
+      const rejected = await app.inject({
+        method: "POST",
+        url,
+        headers: {
+          cookie,
+          origin: "https://attacker.example",
+          "sec-fetch-site": "cross-site",
+        },
+      });
+      expect(rejected.statusCode).toBe(403);
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: "/api/auth/session",
+            headers: { cookie },
+          })
+        ).statusCode,
+      ).toBe(200);
+    },
+  );
 });
 
 import { mkdtemp, rm } from "node:fs/promises";
