@@ -726,8 +726,10 @@ export class ArticleRepository {
            LIMIT 1`,
     );
     const insert = this.sqlite.prepare(
-      `INSERT INTO feed_articles (feed_id, article_id, delivered_at)
-       VALUES (?, ?, ?)`,
+      `INSERT INTO feed_articles (feed_id, article_id, is_read, delivered_at)
+       VALUES (?, ?, COALESCE((
+         SELECT is_read FROM saved_articles WHERE user_id = ? AND article_id = ?
+       ), 0), ?)`,
     );
     for (const externalId of candidates) {
       if (ignored.get(feedId, externalId)) continue;
@@ -765,7 +767,7 @@ export class ArticleRepository {
           ? duplicate.get(settings.userId, duplicateCutoff, row.url, row.url)
           : duplicate.get(settings.userId, duplicateCutoff, row.url, row.url, row.title, row.title);
       if (isDuplicate) continue;
-      insert.run(feedId, row.id, now());
+      insert.run(feedId, row.id, settings.userId, row.id, now());
       delivered.add(row.id);
     }
     return delivered;

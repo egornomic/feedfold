@@ -393,6 +393,17 @@ AND (
 export function deleteOrphanSources(sqlite: Sqlite.Database): void {
   sqlite
     .prepare(
+      `DELETE FROM articles
+       WHERE source_id IN (
+         SELECT id FROM feed_sources
+         WHERE NOT EXISTS (SELECT 1 FROM feeds WHERE source_id = feed_sources.id)
+       )
+         AND NOT EXISTS (SELECT 1 FROM feed_articles WHERE article_id = articles.id)
+         AND NOT EXISTS (SELECT 1 FROM saved_articles WHERE article_id = articles.id)`,
+    )
+    .run();
+  sqlite
+    .prepare(
       `DELETE FROM feed_sources
        WHERE NOT EXISTS (SELECT 1 FROM feeds WHERE source_id = feed_sources.id)
          AND NOT EXISTS (

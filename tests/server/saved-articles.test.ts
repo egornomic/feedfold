@@ -37,24 +37,25 @@ async function savedReader(path = ":memory:", policy = DESKTOP_POLICY) {
     title: "Collected essays",
     feedUrl: "https://essays.example.test/feed",
   });
+  const parsed = {
+    title: feed.title,
+    siteUrl: null,
+    articles: ["First essay", "Second essay"].map((title) => ({
+      externalId: title,
+      title,
+      url: null,
+      author: "Writer",
+      publishedAt: null,
+      summary: title,
+      imageUrl: null,
+      feedContentHtml: `<p>${title} in full.</p>`,
+    })),
+  };
   completeFeedRefresh(database.feeds, feed.id, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
-    parsed: {
-      title: feed.title,
-      siteUrl: null,
-      articles: ["First essay", "Second essay"].map((title) => ({
-        externalId: title,
-        title,
-        url: null,
-        author: "Writer",
-        publishedAt: null,
-        summary: title,
-        imageUrl: null,
-        feedContentHtml: `<p>${title} in full.</p>`,
-      })),
-    },
+    parsed,
   });
   const articles = ((await (await request("/api/articles?state=all")).json()) as ArticlePage)
     .articles;
@@ -69,10 +70,125 @@ async function savedReader(path = ":memory:", policy = DESKTOP_POLICY) {
         await request("/api/articles?state=starred&includeContent=true")
       ).json()) as ArticlePage
     ).articles;
-  return { database, reader, stranger, feed, articles, request, saved };
+  return { database, reader, stranger, feed, articles, request, saved, parsed };
 }
 
 describe("account-owned Saved", () => {
+  it.each(["unsubscribe", "delete account"])(
+    "prunes unsaved content after the final subscriber leaves through %s",
+    async (action) => {
+      const { database, reader, stranger, feed, articles, request, saved } = await savedReader();
+      const kept = articles[0];
+      const discarded = articles[1];
+      if (!kept || !discarded) throw new Error("Articles were not delivered");
+      expect(
+        (await request(`/api/articles/${discarded.id}/state`, "PATCH", { isStarred: false }))
+          .status,
+      ).toBe(200);
+      const otherFeed = database.feeds.createFeed(stranger.user.id, { feedUrl: feed.feedUrl });
+      const storedIds = () =>
+        database.connection.prepare("SELECT id FROM articles ORDER BY id").pluck().all();
+      const originalIds = storedIds();
+      expect(originalIds).toHaveLength(2);
+      expect((await request(`/api/feeds/${feed.id}`, "DELETE")).status).toBe(204);
+      expect(storedIds()).toEqual(originalIds);
+      expect(
+        (await request(`/api/articles/${discarded.id}`, "GET", undefined, stranger.token)).status,
+      ).toBe(200);
+      if (action === "unsubscribe") {
+        expect(
+          (await request(`/api/feeds/${otherFeed.id}`, "DELETE", undefined, stranger.token)).status,
+        ).toBe(204);
+      } else {
+        expect(database.auth.deleteAccount(stranger.user.id)).toBe(true);
+      }
+      expect(storedIds()).toEqual([kept.id]);
+      expect(database.connection.prepare("SELECT COUNT(*) FROM feed_sources").pluck().get()).toBe(
+        1,
+      );
+      expect((await request(`/api/articles/${discarded.id}`)).status).toBe(404);
+      expect(await saved()).toMatchObject([
+        { id: kept.id, feedContentHtml: `<p>${kept.title} in full.</p>` },
+      ]);
+      expect(database.articles.getStarredCount(reader.user.id)).toBe(1);
+      expect(
+        (await request(`/api/articles/${kept.id}/state`, "PATCH", { isStarred: false })).status,
+      ).toBe(200);
+      expect(storedIds()).toEqual([]);
+      expect(database.connection.prepare("SELECT COUNT(*) FROM feed_sources").pluck().get()).toBe(
+        0,
+      );
+    },
+  );
+
+  it.each(["cached", "refreshed"])(
+    "restores the owner's saved read state on %s redelivery",
+    async (delivery) => {
+      const { database, reader, stranger, feed, articles, request, saved, parsed } =
+        await savedReader();
+      const readArticle = articles[0];
+      const unreadArticle = articles[1];
+      if (!readArticle || !unreadArticle) throw new Error("Articles were not delivered");
+      expect(
+        (await request(`/api/articles/${readArticle.id}/state`, "PATCH", { isRead: true })).status,
+      ).toBe(200);
+      const originalDates = database.connection
+        .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+        .all();
+      const savedStates = async () => (await saved()).map(({ id, isRead }) => ({ id, isRead }));
+      const originalStates = await savedStates();
+      expect((await request(`/api/feeds/${feed.id}`, "DELETE")).status).toBe(204);
+      expect(await savedStates()).toEqual(originalStates);
+      const returnedFeed = database.feeds.createFeed(reader.user.id, {
+        feedUrl: feed.feedUrl,
+        paused: delivery === "refreshed",
+      });
+      if (delivery === "refreshed") {
+        database.feeds.updateFeed(reader.user.id, returnedFeed.id, { paused: false });
+        expect(
+          completeFeedRefresh(database.feeds, returnedFeed.id, {
+            httpStatus: 200,
+            etag: null,
+            lastModified: null,
+            parsed,
+          }),
+        ).toBe(true);
+      }
+      const detail = await request(`/api/articles/${readArticle.id}`);
+      expect(detail.status).toBe(200);
+      expect(await detail.json()).toMatchObject({ feedId: returnedFeed.id, isRead: true });
+      expect(await savedStates()).toEqual(originalStates);
+      expect((await (await request("/api/bootstrap")).json()) as BootstrapData).toMatchObject({
+        counts: { starred: 2, unread: 1, all: 2 },
+      });
+      expect(
+        database.connection
+          .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+          .all(),
+      ).toEqual(originalDates);
+      const otherFeed = database.feeds.createFeed(stranger.user.id, { feedUrl: feed.feedUrl });
+      const otherDetail = await request(
+        `/api/articles/${readArticle.id}`,
+        "GET",
+        undefined,
+        stranger.token,
+      );
+      expect(otherDetail.status).toBe(200);
+      expect(await otherDetail.json()).toMatchObject({
+        feedId: otherFeed.id,
+        isRead: false,
+        isStarred: false,
+      });
+      expect(
+        (await request(`/api/articles/${readArticle.id}/state`, "PATCH", { isRead: false })).status,
+      ).toBe(200);
+      expect((await request(`/api/feeds/${returnedFeed.id}`, "DELETE")).status).toBe(204);
+      expect(await savedStates()).toEqual(
+        originalStates.map((article) => ({ ...article, isRead: false })),
+      );
+    },
+  );
+
   it.each(["hide", "keep"] as const)(
     "bypasses %s rules while ordinary queues still filter",
     async (action) => {
