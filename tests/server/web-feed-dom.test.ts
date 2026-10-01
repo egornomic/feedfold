@@ -16,6 +16,27 @@ function documentFor(body: string, title = "Fixture"): Document {
 }
 
 describe("web-feed DOM analysis", () => {
+  it("selects smaller publisher images for web-feed thumbnails", () => {
+    const document = documentFor(`
+      <section>
+        <article><h2><a href="/one">First</a></h2>
+          <img src="/full.jpg" width="1000" height="666"
+            srcset="/small.jpg 240w, /medium.jpg 480w, /full.jpg 1000w">
+        </article>
+      </section>
+    `);
+    const result = extractWebFeedSelection(document, PAGE_URL, {
+      item: "article",
+      title: "h2",
+      link: "a",
+      image: "img",
+      date: null,
+      author: null,
+      summary: null,
+    });
+    expect(result.articles[0]?.imageUrl).toBe("https://example.com/medium.jpg");
+  });
+
   it("discovers, ranks, and extracts repeated items without duplicate links", () => {
     const document = documentFor(`
       <nav><a href="/account">Account</a><a href="/settings">Settings</a></nav>

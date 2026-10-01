@@ -1677,6 +1677,36 @@ const migrations: Migration[] = [
       ALTER TABLE feed_sources DROP COLUMN retry_after_at;
     `,
   },
+  {
+    sql: "SELECT 1;",
+    after(database) {
+      const select = database.prepare(`
+        SELECT id, url, content_html AS contentHtml, feed_content_html AS feedHtml
+        FROM articles
+        WHERE id > ? AND media_json IS NULL
+          AND (content_html LIKE '%srcset=%' OR feed_content_html LIKE '%srcset=%')
+        ORDER BY id LIMIT 50
+      `);
+      const update = database.prepare("UPDATE articles SET image_url = ? WHERE id = ?");
+      let lastId = 0;
+      while (true) {
+        const rows = select.all(lastId) as Array<{
+          id: number;
+          url: string | null;
+          contentHtml: string | null;
+          feedHtml: string | null;
+        }>;
+        if (rows.length === 0) break;
+        for (const row of rows) {
+          const imageUrl =
+            firstSafeImageUrl(row.contentHtml, row.url ?? undefined) ??
+            firstSafeImageUrl(row.feedHtml, row.url ?? undefined);
+          if (imageUrl) update.run(imageUrl, row.id);
+        }
+        lastId = rows.at(-1)?.id ?? lastId;
+      }
+    },
+  },
 ];
 
 export function migrateDatabase(

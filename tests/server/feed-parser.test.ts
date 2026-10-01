@@ -5,6 +5,20 @@ import {
 } from "../../src/server/feed-parser.js";
 
 describe("feed normalization", () => {
+  it("selects a smaller Retina thumbnail without changing the reader's image", () => {
+    const html = `<img src="/original.jpg" width="1000" height="666"
+      srcset="/tiny.jpg 160w, /thumbnail.jpg 480w, /original.jpg 1000w">`;
+    const parsed = parseAndNormalizeFeed(
+      `<?xml version="1.0"?><rss version="2.0"><channel>
+        <title>Images</title><link>https://example.test/</link><description>Images</description>
+        <item><guid>image</guid><description><![CDATA[${html}]]></description></item>
+      </channel></rss>`,
+      "https://example.test/feed.xml",
+    );
+    expect(parsed.articles[0]?.imageUrl).toBe("https://example.test/thumbnail.jpg");
+    expect(parsed.articles[0]?.feedContentHtml).toBe(html);
+  });
+
   it("preserves titleless entries without promoting their body to a headline", () => {
     const rss = parseAndNormalizeFeed(
       `<?xml version="1.0"?><rss version="2.0"><channel>

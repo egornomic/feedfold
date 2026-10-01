@@ -1,5 +1,7 @@
 import { Buffer } from "node:buffer";
+import parseSrcset from "parse-srcset";
 import sanitizeHtml from "sanitize-html";
+import { thumbnailWidth } from "../shared/thumbnail.js";
 
 const blockedBadgeHosts = new Set(["img.shields.io", "api.star-history.com"]);
 
@@ -38,15 +40,32 @@ function safeHttpUrl(value: string, baseUrl?: string): string | null {
   }
 }
 
+export function imageThumbnailUrl(
+  attributes: Record<string, string | undefined>,
+  baseUrl?: string,
+): string | null {
+  const original = attributes.src ? safeHttpUrl(attributes.src, baseUrl) : null;
+  if (attributes.src && !original) return null;
+  const width = thumbnailWidth(Number(attributes.width), Number(attributes.height));
+  const candidates = parseSrcset(attributes.srcset ?? "")
+    .map((candidate) => ({ ...candidate, url: safeHttpUrl(candidate.url, baseUrl) }))
+    .filter((candidate) => candidate.url !== null)
+    .sort((left, right) => (left.w ?? left.d ?? 1) - (right.w ?? right.d ?? 1));
+  const suitable = candidates.find((candidate) =>
+    candidate.w ? candidate.w >= width : (candidate.d ?? 1) >= 2,
+  );
+  return suitable?.url ?? original ?? candidates.at(-1)?.url ?? null;
+}
+
 export function firstSafeImageUrl(html: string | null, baseUrl?: string): string | null {
   if (!html) return null;
   let imageUrl: string | null = null;
   sanitizeHtml(html, {
     allowedTags: ["img"],
-    allowedAttributes: { img: ["src"] },
+    allowedAttributes: { img: ["src", "srcset", "width", "height"] },
     transformTags: {
       img: (_tagName, attributes) => {
-        if (!imageUrl && attributes.src) imageUrl = safeHttpUrl(attributes.src, baseUrl);
+        if (!imageUrl) imageUrl = imageThumbnailUrl(attributes, baseUrl);
         return { tagName: "img", attribs: {} };
       },
     },
