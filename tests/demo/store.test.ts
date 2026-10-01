@@ -129,6 +129,7 @@ describe("static demo data", () => {
     const store = new DemoStore(new Date("2027-08-12T12:00:00.000Z"));
     const release = store.article(DEMO_RELEASE_ARTICLE_ID);
     expect(release.isStarred).toBe(true);
+    if (release.feedId === null) throw new Error("The release feed is missing");
     expect(release.url).toMatch(/^https:\/\/github\.com\/egornomic\/feedfold\/releases\/tag\/v/);
     expect(store.articles({ state: "all", feedId: release.feedId }).articles).toEqual([release]);
 
@@ -153,5 +154,27 @@ describe("static demo data", () => {
       3,
     );
     expect(store.invoke("article", { id: 1 }).folderId).toBe(folder.id);
+  });
+
+  it("keeps saved demo content after unsubscribe and removes it on unsave", () => {
+    const store = new DemoStore(DEMO_NOW);
+    const article = store.article(DEMO_RELEASE_ARTICLE_ID);
+    if (article.feedId === null) throw new Error("The release feed is missing");
+    store.deleteFeed(article.feedId);
+    expect(store.articles({ state: "starred" }).articles).toContainEqual({
+      ...article,
+      feedId: null,
+      folderId: null,
+    });
+    expect(store.articles({ state: "all" }).articles.map(({ id }) => id)).not.toContain(article.id);
+    expect(store.article(article.id)).toMatchObject({
+      feedTitle: article.feedTitle,
+      isStarred: true,
+    });
+    expect(store.updateArticleState(article.id, { isStarred: false })).toMatchObject({
+      isStarred: false,
+    });
+    expect(store.articles({ state: "starred" }).articles).toHaveLength(0);
+    expect(() => store.article(article.id)).toThrow("no longer exists");
   });
 });

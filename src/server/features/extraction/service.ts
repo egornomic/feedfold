@@ -59,12 +59,7 @@ export class ExtractionService {
       if (this.repository.completeExtraction(id, input)) {
         this.rules.recomputeRulesForArticle(id);
         const users = this.sqlite
-          .prepare(
-            `SELECT DISTINCT feeds.user_id AS userId
-             FROM feed_articles
-             JOIN feeds ON feeds.id = feed_articles.feed_id
-             WHERE feed_articles.article_id = ?`,
-          )
+          .prepare(`SELECT DISTINCT user_id AS userId FROM account_articles WHERE article_id = ?`)
           .all(id) as Array<{ userId: number }>;
         for (const { userId } of users) this.quotas.assertAccountStorage(userId);
         this.quotas.assertGlobalStorage();

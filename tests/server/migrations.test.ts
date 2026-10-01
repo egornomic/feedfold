@@ -33,6 +33,62 @@ afterEach(async () => {
 });
 
 describe("database migrations", () => {
+  it("moves existing saves into the account collection without changing their dates or order", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "feedfold-saved-migration-"));
+    directories.push(directory);
+    const path = join(directory, "reader.db");
+    const sqlite = new Sqlite(path);
+    sqlite.pragma("foreign_keys = ON");
+    try {
+      migrateDatabase(sqlite, 180, 55);
+      sqlite.exec(`
+        INSERT INTO feed_sources (id, feed_url, source_kind, title, created_at, updated_at)
+          VALUES (1, 'https://example.test/essays', 'published', 'Essays', '2026-09-01', '2026-09-01');
+        INSERT INTO feeds (id, user_id, source_id, title, created_at, updated_at)
+          VALUES (1, 1, 1, 'My essays', '2026-09-01', '2026-09-01');
+        INSERT INTO articles (id, source_id, external_id, title, discovered_at, feed_content_html)
+          VALUES (1, 1, 'first', 'First', '2026-09-01', '<p>First essay</p>'),
+                 (2, 1, 'second', 'Second', '2026-09-01', '<p>Second essay</p>');
+        INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read, is_starred, starred_at)
+          VALUES (1, 1, '2026-09-01', 1, 1, '2026-09-03T10:00:00.000Z'),
+                 (1, 2, '2026-09-01', 0, 1, '2026-09-02T10:00:00.000Z');
+      `);
+    } finally {
+      sqlite.close();
+    }
+    const database = new AppDatabase(path);
+    try {
+      expect(
+        database.articles.listArticlePage(1, { state: "starred" }).articles.map(({ id }) => id),
+      ).toEqual([1, 2]);
+      const savedDates = database.connection
+        .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+        .all();
+      expect(savedDates).toEqual([
+        { article_id: 1, starred_at: "2026-09-03T10:00:00.000Z" },
+        { article_id: 2, starred_at: "2026-09-02T10:00:00.000Z" },
+      ]);
+      expect(database.feeds.deleteFeed(1, 1)).toBe(true);
+      expect(database.articles.getArticle(1, 1)).toMatchObject({
+        feedId: null,
+        feedTitle: "My essays",
+        feedContentHtml: "<p>First essay</p>",
+        isRead: true,
+        isStarred: true,
+      });
+      expect(
+        database.connection
+          .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+          .all(),
+      ).toEqual(savedDates);
+      expect(
+        database.articles.listArticlePage(1, { state: "starred" }).articles.map(({ id }) => id),
+      ).toEqual([1, 2]);
+    } finally {
+      database.close();
+    }
+  });
+
   it("preserves an existing publisher delay while allowing a different provider after migration", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-28T12:00:00.000Z"));
@@ -386,7 +442,7 @@ describe("database migrations", () => {
           .prepare(
             `SELECT feeds.user_id AS userId, feed_articles.is_read AS isRead,
                     feed_articles.is_starred AS isStarred
-             FROM feed_articles
+             FROM account_articles AS feed_articles
              JOIN feeds ON feeds.id = feed_articles.feed_id
              ORDER BY feeds.user_id`,
           )
@@ -976,7 +1032,7 @@ Return only the summary in plain text.`,
       ).not.toBe("");
       expect(
         database.connection
-          .prepare("SELECT starred_at FROM feed_articles WHERE article_id = 3")
+          .prepare("SELECT starred_at FROM saved_articles WHERE article_id = 3")
           .pluck()
           .get(),
       ).toBe("2026-07-13T00:00:00.000Z");

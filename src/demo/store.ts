@@ -94,9 +94,10 @@ export class DemoStore {
       settings: this.data.settings,
       aiSettings: this.data.aiSettings,
       counts: {
-        unread: this.data.articles.filter((article) => !article.isRead).length,
+        unread: this.data.articles.filter((article) => article.feedId !== null && !article.isRead)
+          .length,
         starred: this.data.articles.filter((article) => article.isStarred).length,
-        all: this.data.articles.length,
+        all: this.data.articles.filter((article) => article.feedId !== null).length,
       },
       capabilities: {
         manualRefresh: true,
@@ -154,6 +155,9 @@ export class DemoStore {
     const article = this.requireArticle(id);
     if (state.isRead !== undefined) article.isRead = state.isRead;
     if (state.isStarred !== undefined) article.isStarred = state.isStarred;
+    if (article.feedId === null && !article.isStarred) {
+      this.data.articles.splice(this.data.articles.indexOf(article), 1);
+    }
     return clone(article);
   }
 
@@ -308,8 +312,14 @@ export class DemoStore {
     this.data.articles.splice(
       0,
       this.data.articles.length,
-      ...this.data.articles.filter((article) => article.feedId !== id),
+      ...this.data.articles.filter((article) => article.feedId !== id || article.isStarred),
     );
+    for (const article of this.data.articles) {
+      if (article.feedId === id) {
+        article.feedId = null;
+        article.folderId = null;
+      }
+    }
     this.data.rules.splice(
       0,
       this.data.rules.length,
@@ -549,6 +559,7 @@ export class DemoStore {
     const folderIds = query.folderId === undefined ? null : this.folderBranchIds(query.folderId);
     const search = normalizeSearchText(query.search ?? "").toLocaleLowerCase();
     return this.data.articles.filter((article) => {
+      if (query.state !== "starred" && article.feedId === null) return false;
       if (query.state === "unread" && article.isRead) return false;
       if (query.state === "read" && !article.isRead) return false;
       if (query.state === "starred" && !article.isStarred) return false;

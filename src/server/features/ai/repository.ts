@@ -160,9 +160,8 @@ export class AiRepository {
           AND article_ai_summaries.source_revision = articles.content_revision
          WHERE articles.id = ?
            AND EXISTS (
-             SELECT 1 FROM feed_articles
-             JOIN feeds ON feeds.id = feed_articles.feed_id
-             WHERE feed_articles.article_id = articles.id AND feeds.user_id = ?
+             SELECT 1 FROM account_articles
+             WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
       )
       .get(userId, id, userId) as Row | undefined;
@@ -200,9 +199,8 @@ export class AiRepository {
            AND article_ai_summaries.user_id = ?
            AND article_ai_summaries.source_revision = articles.content_revision
            AND EXISTS (
-             SELECT 1 FROM feed_articles
-             JOIN feeds ON feeds.id = feed_articles.feed_id
-             WHERE feed_articles.article_id = articles.id AND feeds.user_id = ?
+             SELECT 1 FROM account_articles
+             WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
       )
       .get(id, userId, userId) as Row | undefined;
@@ -229,9 +227,8 @@ export class AiRepository {
           `SELECT articles.content_revision AS revision
            FROM articles
            WHERE articles.id = ? AND EXISTS (
-             SELECT 1 FROM feed_articles
-             JOIN feeds ON feeds.id = feed_articles.feed_id
-             WHERE feed_articles.article_id = articles.id AND feeds.user_id = ?
+             SELECT 1 FROM account_articles
+             WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
         )
         .get(id, userId) as { revision: number } | undefined;
@@ -299,9 +296,8 @@ export class AiRepository {
            AND article_ai_translations.source_kind = ?
            AND article_ai_translations.source_revision = articles.content_revision
            AND EXISTS (
-             SELECT 1 FROM feed_articles
-             JOIN feeds ON feeds.id = feed_articles.feed_id
-             WHERE feed_articles.article_id = articles.id AND feeds.user_id = ?
+             SELECT 1 FROM account_articles
+             WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
       )
       .get(id, userId, language, sourceKind, userId) as Row | undefined;
@@ -328,9 +324,8 @@ export class AiRepository {
           `SELECT articles.content_revision AS revision
            FROM articles
            WHERE articles.id = ? AND EXISTS (
-             SELECT 1 FROM feed_articles
-             JOIN feeds ON feeds.id = feed_articles.feed_id
-             WHERE feed_articles.article_id = articles.id AND feeds.user_id = ?
+             SELECT 1 FROM account_articles
+             WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
         )
         .get(id, userId) as { revision: number } | undefined;

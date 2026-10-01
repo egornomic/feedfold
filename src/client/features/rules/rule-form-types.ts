@@ -5,14 +5,14 @@ export interface RuleFormDraft {
   name: string;
   article: Article;
   articleIndex: number;
-  feedId: number;
+  feedId: number | null;
   field: RuleField;
   pattern: string;
 }
 
 export interface RuleFormPreset {
   name?: string;
-  feedId?: number;
+  feedId?: number | null;
   folderId?: number;
   field?: RuleField;
   pattern?: string;

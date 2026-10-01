@@ -93,7 +93,7 @@ function titles(database: AppDatabase, state: "all" | "unread" = "all"): string[
 }
 
 describe("article filtering rules", () => {
-  it("keeps unread, saved, and total counts consistent with visible subscriptions", () => {
+  it("keeps Saved independent while unread and total counts follow visible subscriptions", () => {
     const { database, scopedFeedId, outsideFeedId } = seededDatabase();
     const articles = database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles;
     const saved = articles.find((item) => item.title === "Alpha only");
@@ -109,20 +109,20 @@ describe("article filtering rules", () => {
     });
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 5,
-      starred: 1,
+      starred: 2,
       all: 6,
     });
     database.feeds.updateFeed(TEST_USER_ID, scopedFeedId, { paused: true });
     database.feeds.deleteFeed(TEST_USER_ID, outsideFeedId);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 4,
-      starred: 1,
+      starred: 2,
       all: 5,
     });
     database.feeds.deleteFeed(TEST_USER_ID, scopedFeedId);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 0,
-      starred: 0,
+      starred: 2,
       all: 0,
     });
   });

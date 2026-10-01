@@ -544,10 +544,11 @@ describe("hosted account authentication", () => {
     const articleId = Number(database.connection.prepare("SELECT id FROM articles").pluck().get());
     database.connection
       .prepare(
-        `INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read, is_starred)
-         VALUES (?, ?, ?, 1, 1)`,
+        `INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read)
+         VALUES (?, ?, ?, 1)`,
       )
       .run(feedId, articleId, timestamp);
+    database.articles.updateArticleState(userId, articleId, { isStarred: true });
     database.connection
       .prepare(
         `INSERT INTO ignored_feed_articles (feed_id, external_id)
@@ -668,6 +669,7 @@ describe("hosted account authentication", () => {
       "folders",
       "feeds",
       "feed_articles",
+      "saved_articles",
       "ignored_feed_articles",
       "rules",
       "article_rule_matches",

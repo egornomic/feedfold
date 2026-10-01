@@ -267,7 +267,7 @@ export interface WebFeedAnalysis {
 
 export interface Article {
   id: number;
-  feedId: number;
+  feedId: number | null;
   feedTitle: string;
   feedSourceKind: FeedSourceKind;
   folderId: number | null;

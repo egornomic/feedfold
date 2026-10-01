@@ -11,6 +11,7 @@ import type {
 import {
   type ArticleCursor,
   decodeArticleCursor,
+  deleteOrphanSources,
   encodeArticleCursor,
   mapArticle,
   now,
@@ -63,13 +64,7 @@ export class ArticleRepository {
   getStarredCount(userId: number): number {
     return Number(
       this.sqlite
-        .prepare(
-          `SELECT COUNT(*)
-         FROM feed_articles
-         JOIN articles ON articles.id = feed_articles.article_id
-         JOIN feeds ON feeds.id = feed_articles.feed_id
-         WHERE feeds.user_id = ? AND feed_articles.is_starred = 1 AND ${visibleClause}`,
-        )
+        .prepare("SELECT COUNT(*) FROM saved_articles WHERE user_id = ?")
         .pluck()
         .get(userId),
     );
@@ -80,7 +75,7 @@ export class ArticleRepository {
     const sortAtSql = savedOrder
       ? "feed_articles.starred_at"
       : "COALESCE(articles.published_at, articles.discovered_at)";
-    const where = ["feeds.user_id = ?"];
+    const where = [savedOrder ? "feed_articles.user_id = ?" : "feeds.user_id = ?"];
     const values: Array<string | number> = [userId];
     if (query.feedId !== undefined) {
       where.push("feeds.id = ?");
@@ -99,11 +94,10 @@ export class ArticleRepository {
       );
       values.push(query.folderId, userId, userId);
     }
-    const queueWhere = [visibleClause];
+    const queueWhere = savedOrder ? ["feed_articles.is_starred = 1"] : [visibleClause];
     const queueValues: Array<string | number> = [];
     if (query.state === "unread") queueWhere.push("feed_articles.is_read = 0");
     if (query.state === "read") queueWhere.push("feed_articles.is_read = 1");
-    if (query.state === "starred") queueWhere.push("feed_articles.is_starred = 1");
     if (query.search) {
       queueWhere.push(
         `(articles.title LIKE ? ESCAPE '\\' COLLATE NOCASE
@@ -138,7 +132,7 @@ export class ArticleRepository {
           .prepare(
             `SELECT feeds.folder_id AS folderId,
                     COALESCE(folders.sort_direction, 'newest') AS sortDirection
-             FROM feed_articles
+             FROM account_articles AS feed_articles
              JOIN articles ON articles.id = feed_articles.article_id
              JOIN feeds ON feeds.id = feed_articles.feed_id
              LEFT JOIN folders ON folders.id = feeds.folder_id
@@ -181,8 +175,8 @@ export class ArticleRepository {
       const rows = this.sqlite
         .prepare(
           `SELECT articles.id,
-                feeds.id AS feedId,
-                feeds.title AS feedTitle,
+                feed_articles.feed_id AS feedId,
+                feed_articles.feed_title AS feedTitle,
                 feed_sources.source_kind AS feedSourceKind,
                 feeds.folder_id AS folderId,
                 articles.title,
@@ -209,13 +203,13 @@ export class ArticleRepository {
                 feed_articles.is_read AS isRead,
                 feed_articles.is_starred AS isStarred,
                 ${sortAtSql} AS sortAt
-           FROM feed_articles
+           FROM account_articles AS feed_articles
            JOIN articles ON articles.id = feed_articles.article_id
-           JOIN feeds ON feeds.id = feed_articles.feed_id
-           JOIN feed_sources ON feed_sources.id = feeds.source_id
+           LEFT JOIN feeds ON feeds.id = feed_articles.feed_id
+           JOIN feed_sources ON feed_sources.id = articles.source_id
            LEFT JOIN article_ai_summaries
              ON article_ai_summaries.article_id = articles.id
-            AND article_ai_summaries.user_id = feeds.user_id
+            AND article_ai_summaries.user_id = feed_articles.user_id
             AND article_ai_summaries.source_revision = articles.content_revision
            WHERE ${bucketWhere.join(" AND ")}
            ORDER BY ${sortAtSql} ${order},
@@ -293,9 +287,9 @@ export class ArticleRepository {
                   ${bucketKeySql} AS bucketKey,
                   ${sortDirectionSql} AS sortDirection,
                   ${sortAtSql} AS sortAt
-           FROM feed_articles
+           FROM account_articles AS feed_articles
            JOIN articles ON articles.id = feed_articles.article_id
-           JOIN feeds ON feeds.id = feed_articles.feed_id
+           LEFT JOIN feeds ON feeds.id = feed_articles.feed_id
            LEFT JOIN folders ON folders.id = feeds.folder_id
            WHERE ${where.join(" AND ")}
          ),
@@ -393,8 +387,8 @@ export class ArticleRepository {
     const row = this.sqlite
       .prepare(
         `SELECT articles.id,
-                feeds.id AS feedId,
-                feeds.title AS feedTitle,
+                feed_articles.feed_id AS feedId,
+                feed_articles.feed_title AS feedTitle,
                 feed_sources.source_kind AS feedSourceKind,
                 feeds.folder_id AS folderId,
                 articles.title,
@@ -420,15 +414,15 @@ export class ArticleRepository {
                 article_ai_summaries.output_tokens AS aiSummaryOutputTokens,
                 feed_articles.is_read AS isRead,
                 feed_articles.is_starred AS isStarred
-         FROM feed_articles
+         FROM account_articles AS feed_articles
          JOIN articles ON articles.id = feed_articles.article_id
-         JOIN feeds ON feeds.id = feed_articles.feed_id
-         JOIN feed_sources ON feed_sources.id = feeds.source_id
+         LEFT JOIN feeds ON feeds.id = feed_articles.feed_id
+         JOIN feed_sources ON feed_sources.id = articles.source_id
          LEFT JOIN article_ai_summaries
            ON article_ai_summaries.article_id = articles.id
-          AND article_ai_summaries.user_id = feeds.user_id
+          AND article_ai_summaries.user_id = feed_articles.user_id
           AND article_ai_summaries.source_revision = articles.content_revision
-         WHERE articles.id = ? AND feeds.user_id = ?`,
+         WHERE articles.id = ? AND feed_articles.user_id = ?`,
       )
       .get(id, userId) as Row | undefined;
     return row ? mapArticle(row) : null;
@@ -441,50 +435,57 @@ export class ArticleRepository {
   ): Article | null {
     const existing = this.getArticle(userId, id);
     if (!existing) return null;
+    const isRead = input.isRead ?? existing.isRead;
     const isStarred = input.isStarred ?? existing.isStarred;
-    this.sqlite
-      .prepare(
-        `UPDATE feed_articles
-         SET is_read = ?,
-             is_starred = ?,
-             starred_at = CASE
-               WHEN is_starred = 0 AND ? = 1 THEN ?
-               ELSE starred_at
-             END
-         WHERE feed_id = ? AND article_id = ?`,
-      )
-      .run(
-        (input.isRead ?? existing.isRead) ? 1 : 0,
-        isStarred ? 1 : 0,
-        isStarred ? 1 : 0,
-        now(),
-        existing.feedId,
-        id,
-      );
-    return this.getArticle(userId, id);
+    return this.sqlite.transaction(() => {
+      this.sqlite
+        .prepare(
+          `UPDATE feed_articles SET is_read = ?
+           WHERE article_id = ? AND feed_id IN (SELECT id FROM feeds WHERE user_id = ?)`,
+        )
+        .run(isRead ? 1 : 0, id, userId);
+      if (isStarred) {
+        this.sqlite
+          .prepare(
+            `INSERT INTO saved_articles (user_id, article_id, feed_title, is_read, starred_at)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(user_id, article_id) DO UPDATE SET is_read = excluded.is_read`,
+          )
+          .run(userId, id, existing.feedTitle, isRead ? 1 : 0, now());
+      } else if (existing.isStarred) {
+        this.sqlite
+          .prepare("DELETE FROM saved_articles WHERE user_id = ? AND article_id = ?")
+          .run(userId, id);
+        this.sqlite
+          .prepare(
+            `DELETE FROM articles WHERE id = ?
+             AND NOT EXISTS (SELECT 1 FROM feed_articles WHERE article_id = articles.id)
+             AND NOT EXISTS (SELECT 1 FROM saved_articles WHERE article_id = articles.id)`,
+          )
+          .run(id);
+        deleteOrphanSources(this.sqlite);
+      }
+      return this.getArticle(userId, id) ?? { ...existing, isRead, isStarred };
+    })();
   }
 
   markArticlesRead(userId: number, input: MarkReadRequest): number {
     if (input.articleIds?.length === 0) return 0;
-
-    const articleWhere = ["feed_articles.is_read = 0"];
-    const feedWhere = ["feeds.id = feed_articles.feed_id", "feeds.user_id = ?"];
-    const articleValues: Array<number | string> = [];
-    const feedValues: Array<number | string> = [userId];
-
+    const where = ["account_articles.user_id = ?", "account_articles.is_read = 0"];
+    const values: Array<number | string> = [userId];
     if (input.articleIds) {
-      articleWhere.push(
-        `feed_articles.article_id IN (${input.articleIds.map(() => "?").join(", ")})`,
-      );
-      articleValues.push(...input.articleIds);
+      where.push(`articles.id IN (${input.articleIds.map(() => "?").join(", ")})`);
+      values.push(...input.articleIds);
+    } else {
+      where.push("account_articles.feed_id IS NOT NULL");
     }
     if (input.feedId !== undefined) {
-      feedWhere.push("feeds.id = ?");
-      feedValues.push(input.feedId);
+      where.push("account_articles.feed_id = ?");
+      values.push(input.feedId);
     }
     if (input.folderId !== undefined) {
-      feedWhere.push(
-        `feeds.folder_id IN (
+      where.push(
+        `account_articles.folder_id IN (
            WITH RECURSIVE folder_tree(id) AS (
              SELECT id FROM folders WHERE id = ? AND user_id = ?
              UNION ALL
@@ -493,29 +494,36 @@ export class ArticleRepository {
            ) SELECT id FROM folder_tree
          )`,
       );
-      feedValues.push(input.folderId, userId, userId);
+      values.push(input.folderId, userId, userId);
     }
     if (input.olderThanDays !== undefined) {
-      const cutoff = new Date(Date.now() - input.olderThanDays * 86_400_000).toISOString();
-      articleWhere.push(
-        `feed_articles.article_id IN (
-           SELECT id FROM articles
-           WHERE COALESCE(published_at, discovered_at) < ?
-         )`,
-      );
-      articleValues.push(cutoff);
+      where.push("COALESCE(articles.published_at, articles.discovered_at) < ?");
+      values.push(new Date(Date.now() - input.olderThanDays * 86_400_000).toISOString());
     }
-
-    return this.sqlite
-      .prepare(
-        `UPDATE feed_articles SET is_read = 1
-         WHERE ${articleWhere.join(" AND ")}
-           AND EXISTS (
-             SELECT 1 FROM feeds
-             WHERE ${feedWhere.join(" AND ")}
-           )`,
-      )
-      .run(...articleValues, ...feedValues).changes;
+    const selection = `SELECT DISTINCT articles.id FROM account_articles
+      JOIN articles ON articles.id = account_articles.article_id
+      WHERE ${where.join(" AND ")}`;
+    return this.sqlite.transaction(() => {
+      const count = Number(
+        this.sqlite
+          .prepare(`SELECT COUNT(*) FROM (${selection})`)
+          .pluck()
+          .get(...values),
+      );
+      this.sqlite
+        .prepare(
+          `UPDATE feed_articles SET is_read = 1 WHERE article_id IN (${selection})
+           AND feed_id IN (SELECT id FROM feeds WHERE user_id = ?)`,
+        )
+        .run(...values, userId);
+      this.sqlite
+        .prepare(
+          `UPDATE saved_articles SET is_read = 1 WHERE article_id IN (${selection})
+           AND user_id = ?`,
+        )
+        .run(...values, userId);
+      return count;
+    })();
   }
 
   storeParsedFeedArticles(
@@ -734,6 +742,12 @@ export class ArticleRepository {
               | undefined)
           : undefined;
       if (previous && previous.sourceId !== sourceId && previous.articleId !== row.id) {
+        this.sqlite
+          .prepare(
+            `UPDATE saved_articles SET article_id = ?
+             WHERE user_id = ? AND article_id = ?`,
+          )
+          .run(row.id, settings.userId, previous.articleId);
         this.sqlite
           .prepare("DELETE FROM article_rule_matches WHERE feed_id = ? AND article_id = ?")
           .run(feedId, previous.articleId);

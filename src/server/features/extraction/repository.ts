@@ -47,9 +47,8 @@ export class ExtractionRepository {
            WHERE id = ? AND extraction_status != 'processing'
              AND NOT (extraction_status = 'complete' AND content_html IS NOT NULL)
              AND EXISTS (
-               SELECT 1 FROM feed_articles
-               JOIN feeds ON feeds.id = feed_articles.feed_id
-               WHERE feed_articles.article_id = articles.id AND feeds.user_id = ?
+               SELECT 1 FROM account_articles
+             WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
              )`,
         )
         .run(id, userId).changes > 0
