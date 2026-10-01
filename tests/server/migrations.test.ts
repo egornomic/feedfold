@@ -33,15 +33,56 @@ afterEach(async () => {
 });
 
 describe("database migrations", () => {
-  it("moves existing saves into the account collection without changing their dates or order", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "feedfold-saved-migration-"));
-    directories.push(directory);
-    const path = join(directory, "reader.db");
-    const sqlite = new Sqlite(path);
-    sqlite.pragma("foreign_keys = ON");
+  it("updates existing thumbnails while preserving full-size reader images and reading state", () => {
+    const database = new Sqlite(":memory:");
+    database.pragma("foreign_keys = ON");
     try {
-      migrateDatabase(sqlite, 180, 55);
-      sqlite.exec(`
+      migrateDatabase(database, 180, 55);
+      database.exec(`
+        INSERT INTO feed_sources (id, feed_url, source_kind, title, created_at, updated_at)
+        VALUES (1, 'https://example.com/feed', 'published', 'Images',
+          '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z');
+        INSERT INTO feeds (id, user_id, source_id, title, created_at, updated_at)
+        VALUES (1, 1, 1, 'Images', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z');
+        INSERT INTO articles (id, source_id, external_id, title, url, discovered_at,
+          image_url, feed_content_html)
+        VALUES (1, 1, 'image', 'Image', 'https://example.com/post', '2026-10-01T00:00:00.000Z',
+          'https://example.com/full.jpg',
+          '<img src="https://example.com/full.jpg" width="1000" height="666" srcset="https://example.com/medium.jpg 480w, https://example.com/full.jpg 1000w">');
+        INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read, is_starred)
+        VALUES (1, 1, '2026-10-01T00:00:00.000Z', 1, 1);
+      `);
+      const original = database
+        .prepare("SELECT feed_content_html FROM articles WHERE id = 1")
+        .get();
+      migrateDatabase(database, 180);
+      expect(database.prepare("SELECT image_url FROM articles WHERE id = 1").get()).toEqual({
+        image_url: "https://example.com/medium.jpg",
+      });
+      expect(database.prepare("SELECT feed_content_html FROM articles WHERE id = 1").get()).toEqual(
+        original,
+      );
+      expect(
+        database
+          .prepare("SELECT is_read, is_starred FROM account_articles WHERE article_id = 1")
+          .get(),
+      ).toEqual({ is_read: 1, is_starred: 1 });
+    } finally {
+      database.close();
+    }
+  });
+
+  it.each([55, 56])(
+    "moves existing saves from version %i into the account collection without changing their dates or order",
+    async (version) => {
+      const directory = await mkdtemp(join(tmpdir(), "feedfold-saved-migration-"));
+      directories.push(directory);
+      const path = join(directory, "reader.db");
+      const sqlite = new Sqlite(path);
+      sqlite.pragma("foreign_keys = ON");
+      try {
+        migrateDatabase(sqlite, 180, version);
+        sqlite.exec(`
         INSERT INTO feed_sources (id, feed_url, source_kind, title, created_at, updated_at)
           VALUES (1, 'https://example.test/essays', 'published', 'Essays', '2026-09-01', '2026-09-01');
         INSERT INTO feeds (id, user_id, source_id, title, created_at, updated_at)
@@ -53,41 +94,42 @@ describe("database migrations", () => {
           VALUES (1, 1, '2026-09-01', 1, 1, '2026-09-03T10:00:00.000Z'),
                  (1, 2, '2026-09-01', 0, 1, '2026-09-02T10:00:00.000Z');
       `);
-    } finally {
-      sqlite.close();
-    }
-    const database = new AppDatabase(path);
-    try {
-      expect(
-        database.articles.listArticlePage(1, { state: "starred" }).articles.map(({ id }) => id),
-      ).toEqual([1, 2]);
-      const savedDates = database.connection
-        .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
-        .all();
-      expect(savedDates).toEqual([
-        { article_id: 1, starred_at: "2026-09-03T10:00:00.000Z" },
-        { article_id: 2, starred_at: "2026-09-02T10:00:00.000Z" },
-      ]);
-      expect(database.feeds.deleteFeed(1, 1)).toBe(true);
-      expect(database.articles.getArticle(1, 1)).toMatchObject({
-        feedId: null,
-        feedTitle: "My essays",
-        feedContentHtml: "<p>First essay</p>",
-        isRead: true,
-        isStarred: true,
-      });
-      expect(
-        database.connection
+      } finally {
+        sqlite.close();
+      }
+      const database = new AppDatabase(path);
+      try {
+        expect(
+          database.articles.listArticlePage(1, { state: "starred" }).articles.map(({ id }) => id),
+        ).toEqual([1, 2]);
+        const savedDates = database.connection
           .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
-          .all(),
-      ).toEqual(savedDates);
-      expect(
-        database.articles.listArticlePage(1, { state: "starred" }).articles.map(({ id }) => id),
-      ).toEqual([1, 2]);
-    } finally {
-      database.close();
-    }
-  });
+          .all();
+        expect(savedDates).toEqual([
+          { article_id: 1, starred_at: "2026-09-03T10:00:00.000Z" },
+          { article_id: 2, starred_at: "2026-09-02T10:00:00.000Z" },
+        ]);
+        expect(database.feeds.deleteFeed(1, 1)).toBe(true);
+        expect(database.articles.getArticle(1, 1)).toMatchObject({
+          feedId: null,
+          feedTitle: "My essays",
+          feedContentHtml: "<p>First essay</p>",
+          isRead: true,
+          isStarred: true,
+        });
+        expect(
+          database.connection
+            .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+            .all(),
+        ).toEqual(savedDates);
+        expect(
+          database.articles.listArticlePage(1, { state: "starred" }).articles.map(({ id }) => id),
+        ).toEqual([1, 2]);
+      } finally {
+        database.close();
+      }
+    },
+  );
 
   it("preserves an existing publisher delay while allowing a different provider after migration", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
