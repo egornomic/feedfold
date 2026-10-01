@@ -257,9 +257,8 @@ export class QuotaService {
          FROM (
            SELECT articles.id, ${ARTICLE_BYTE_COLUMNS} AS articleBytes
            FROM articles
-           JOIN feed_articles ON feed_articles.article_id = articles.id
-           JOIN feeds ON feeds.id = feed_articles.feed_id
-           WHERE feeds.user_id = ?
+           JOIN account_articles ON account_articles.article_id = articles.id
+           WHERE account_articles.user_id = ?
            GROUP BY articles.id
          )`,
       )
@@ -284,12 +283,7 @@ export class QuotaService {
       return;
     }
     const userIds = this.sqlite
-      .prepare(
-        `SELECT DISTINCT feeds.user_id AS userId
-         FROM feed_articles
-         JOIN feeds ON feeds.id = feed_articles.feed_id
-         WHERE feed_articles.article_id = ?`,
-      )
+      .prepare(`SELECT DISTINCT user_id AS userId FROM account_articles WHERE article_id = ?`)
       .all(articleId) as Array<{ userId: number }>;
     for (const { userId } of userIds) {
       this.assertAccountStorage(userId, 0, additionalBytes);

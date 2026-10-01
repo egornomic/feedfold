@@ -11,6 +11,7 @@ import { accountActivityCutoff } from "../../account-activity.js";
 import { nitterBaseUrls } from "../../x-feed.js";
 import type { FolderRepository } from "../folders/repository.js";
 import {
+  deleteOrphanSources,
   type FeedRecord,
   feedPollIntervalSql,
   feedRecordColumns,
@@ -219,7 +220,7 @@ export class FeedRepository {
           .prepare("UPDATE feed_sources SET next_poll_at = ? WHERE id = ?")
           .run(now(), sourceId);
       }
-      if (sourceChanged) this.deleteOrphanSource(oldSourceId);
+      if (sourceChanged) this.deleteOrphanSources();
     })();
     return this.getFeed(userId, id);
   }
@@ -235,33 +236,8 @@ export class FeedRepository {
     return changed > 0;
   }
 
-  private deleteOrphanSource(sourceId: number): void {
-    this.sqlite
-      .prepare(
-        `DELETE FROM feed_sources
-         WHERE id = ?
-           AND NOT EXISTS (SELECT 1 FROM feeds WHERE source_id = ?)
-           AND NOT EXISTS (
-             SELECT 1 FROM articles
-             JOIN feed_articles ON feed_articles.article_id = articles.id
-             WHERE articles.source_id = feed_sources.id
-           )`,
-      )
-      .run(sourceId, sourceId);
-  }
-
   deleteOrphanSources(): void {
-    this.sqlite
-      .prepare(
-        `DELETE FROM feed_sources
-         WHERE NOT EXISTS (SELECT 1 FROM feeds WHERE source_id = feed_sources.id)
-           AND NOT EXISTS (
-             SELECT 1 FROM articles
-             JOIN feed_articles ON feed_articles.article_id = articles.id
-             WHERE articles.source_id = feed_sources.id
-           )`,
-      )
-      .run();
+    deleteOrphanSources(this.sqlite);
   }
 
   sourceIdForFeed(feedId: number): number {
@@ -457,7 +433,7 @@ export class FeedRepository {
     this.sqlite
       .prepare("UPDATE feeds SET source_id = ?, initialized_at = NULL, updated_at = ? WHERE id = ?")
       .run(newSourceId, now(), feedId);
-    if (oldSourceId !== newSourceId) this.deleteOrphanSource(oldSourceId);
+    if (oldSourceId !== newSourceId) this.deleteOrphanSources();
     return newSourceId;
   }
 

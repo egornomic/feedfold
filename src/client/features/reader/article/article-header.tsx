@@ -12,6 +12,8 @@ function ArticleSourceMenu({
   onFeedAction: (feedId: number, action: FeedManagementAction) => void;
 }) {
   const menuId = `article-${article.id}-source-menu`;
+  const feedId = article.feedId;
+  if (feedId === null) return <span>{article.feedTitle}</span>;
 
   return (
     <Menu.Root modal={false}>
@@ -32,7 +34,7 @@ function ArticleSourceMenu({
         <FeedActionMenuItems
           sourceKind={article.feedSourceKind}
           onAction={(action) => {
-            onFeedAction(article.feedId, action);
+            onFeedAction(feedId, action);
           }}
         />
       </MenuPopup>

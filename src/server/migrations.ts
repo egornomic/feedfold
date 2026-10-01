@@ -1707,6 +1707,58 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    sql: `
+      CREATE TABLE saved_articles (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+        feed_title TEXT NOT NULL,
+        is_read INTEGER NOT NULL,
+        starred_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, article_id)
+      );
+      INSERT INTO saved_articles (user_id, article_id, feed_title, is_read, starred_at)
+        SELECT feeds.user_id, articles.id, feeds.title, feed_articles.is_read,
+               COALESCE(feed_articles.starred_at, articles.discovered_at)
+        FROM feed_articles
+        JOIN feeds ON feeds.id = feed_articles.feed_id
+        JOIN articles ON articles.id = feed_articles.article_id
+        WHERE feed_articles.is_starred = 1
+        ORDER BY feed_articles.starred_at DESC
+        ON CONFLICT(user_id, article_id) DO NOTHING;
+      CREATE INDEX saved_articles_order_idx ON saved_articles(user_id, starred_at DESC);
+      CREATE INDEX saved_articles_article_idx ON saved_articles(article_id);
+      DROP INDEX feed_articles_starred_at_idx;
+      ALTER TABLE feed_articles DROP COLUMN is_starred;
+      ALTER TABLE feed_articles DROP COLUMN starred_at;
+
+      CREATE TRIGGER saved_article_read_state AFTER UPDATE OF is_read ON feed_articles
+      BEGIN
+        UPDATE saved_articles SET is_read = NEW.is_read
+        WHERE article_id = NEW.article_id
+          AND user_id = (SELECT user_id FROM feeds WHERE id = NEW.feed_id);
+      END;
+
+      CREATE VIEW account_articles AS
+        SELECT feeds.user_id, feed_articles.article_id, feeds.id AS feed_id,
+               feeds.title AS feed_title, feeds.folder_id, feed_articles.is_read,
+               saved_articles.article_id IS NOT NULL AS is_starred, saved_articles.starred_at
+        FROM feed_articles
+        JOIN feeds ON feeds.id = feed_articles.feed_id
+        LEFT JOIN saved_articles ON saved_articles.user_id = feeds.user_id
+          AND saved_articles.article_id = feed_articles.article_id
+        UNION ALL
+        SELECT saved_articles.user_id, saved_articles.article_id, NULL,
+               saved_articles.feed_title, NULL, saved_articles.is_read, 1, saved_articles.starred_at
+        FROM saved_articles
+        WHERE NOT EXISTS (
+          SELECT 1 FROM feed_articles
+          JOIN feeds ON feeds.id = feed_articles.feed_id
+          WHERE feeds.user_id = saved_articles.user_id
+            AND feed_articles.article_id = saved_articles.article_id
+        );
+    `,
+  },
 ];
 
 export function migrateDatabase(

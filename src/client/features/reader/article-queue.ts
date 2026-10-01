@@ -143,9 +143,9 @@ export function useArticleQueue({
       const context = route.articleContext();
       const surrounding: ReaderRoute = context?.route ?? {
         kind: "reader",
-        scope: "feed",
+        scope: article.feedId === null ? "all" : "feed",
         scopeId: article.feedId,
-        state: "all",
+        state: article.feedId === null ? "starred" : "all",
         search: "",
       };
       route.setArticleContext(surrounding, context?.articleIndex);

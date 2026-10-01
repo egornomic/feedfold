@@ -1,3 +1,4 @@
+import type Sqlite from "better-sqlite3";
 import { telegramPostIdentity } from "../../shared/telegram.js";
 import type {
   AiArticleSourceKind,
@@ -252,7 +253,7 @@ export function mapArticle(row: Row): Article {
   const url = row.url === null ? null : String(row.url);
   return {
     id,
-    feedId: Number(row.feedId),
+    feedId: row.feedId === null ? null : Number(row.feedId),
     feedTitle: String(row.feedTitle),
     feedSourceKind: row.feedSourceKind as FeedSourceKind,
     folderId: row.folderId === null ? null : Number(row.folderId),
@@ -388,3 +389,33 @@ AND (
       AND matched_keep_rule.action = 'keep'
   )
 )`;
+
+export function deleteOrphanSources(sqlite: Sqlite.Database): void {
+  sqlite
+    .prepare(
+      `DELETE FROM articles
+       WHERE source_id IN (
+         SELECT id FROM feed_sources
+         WHERE NOT EXISTS (SELECT 1 FROM feeds WHERE source_id = feed_sources.id)
+       )
+         AND NOT EXISTS (SELECT 1 FROM feed_articles WHERE article_id = articles.id)
+         AND NOT EXISTS (SELECT 1 FROM saved_articles WHERE article_id = articles.id)`,
+    )
+    .run();
+  sqlite
+    .prepare(
+      `DELETE FROM feed_sources
+       WHERE NOT EXISTS (SELECT 1 FROM feeds WHERE source_id = feed_sources.id)
+         AND NOT EXISTS (
+           SELECT 1 FROM articles
+           JOIN feed_articles ON feed_articles.article_id = articles.id
+           WHERE articles.source_id = feed_sources.id
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM articles
+           JOIN saved_articles ON saved_articles.article_id = articles.id
+           WHERE articles.source_id = feed_sources.id
+         )`,
+    )
+    .run();
+}
