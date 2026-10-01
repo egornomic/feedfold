@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import type { FeedPreviewArticle } from "../../../shared/types";
+import { articleThumbnailUrl } from "../reader/article/article-image-url";
 import { ArticleThumbnailPlaceholder } from "../reader/article/article-thumbnail-placeholder";
 import "./feed-entries-preview.css";
 
@@ -23,7 +24,12 @@ function PreviewArticle({ article }: { article: FeedPreviewArticle }) {
   return (
     <li className="feed-preview-article">
       {article.imageUrl ? (
-        <img className="feed-preview-article-image" src={article.imageUrl} alt="" loading="lazy" />
+        <img
+          className="feed-preview-article-image"
+          src={articleThumbnailUrl(article.imageUrl)}
+          alt=""
+          loading="lazy"
+        />
       ) : (
         <span className="feed-preview-article-image is-placeholder" aria-hidden="true">
           <ArticleThumbnailPlaceholder />

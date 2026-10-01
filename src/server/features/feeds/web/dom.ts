@@ -7,6 +7,7 @@ import type {
   WebFeedField,
   WebFeedSelectors,
 } from "../../../../shared/types.js";
+import { imageThumbnailUrl } from "../../../article-image.js";
 import type { ParsedArticle } from "../../shared.js";
 import { WebFeedError } from "./error.js";
 
@@ -86,10 +87,16 @@ function imageUrl(element: Element | null, baseUrl: string): string | null {
     element.getAttribute("data-lazy-src") ??
     element.getAttribute("data-original") ??
     element.getAttribute("content");
-  if (direct) return normalizedHttpUrl(direct, baseUrl);
   const srcset = element.getAttribute("srcset") ?? element.getAttribute("data-srcset");
-  const first = srcset?.split(",", 1)[0]?.trim().split(/\s+/, 1)[0];
-  return first ? normalizedHttpUrl(first, baseUrl) : null;
+  return imageThumbnailUrl(
+    {
+      src: direct ?? undefined,
+      srcset: srcset ?? undefined,
+      width: element.getAttribute("width") ?? undefined,
+      height: element.getAttribute("height") ?? undefined,
+    },
+    baseUrl,
+  );
 }
 
 function parsedDate(element: Element | null): string | null {

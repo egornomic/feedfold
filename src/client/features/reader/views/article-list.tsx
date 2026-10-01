@@ -2,7 +2,7 @@ import { CheckCircle2, Circle, Star } from "lucide-react";
 import type { Article } from "../../../../shared/types";
 import { shouldShowArticleDescription } from "../article/article-content";
 import { articleDate, articleLabel, mediaTypeLabel } from "../article/article-format";
-import { articleImageUrl } from "../article/article-image-url";
+import { articleThumbnailUrl } from "../article/article-image-url";
 import { ArticleThumbnailPlaceholder } from "../article/article-thumbnail-placeholder";
 import { LinkifiedText } from "../article/linkified-text";
 import { VirtualArticles } from "./virtual-articles";
@@ -65,7 +65,7 @@ export function ArticleList({
             {article.imageUrl ? (
               <img
                 className="article-card-image"
-                src={articleImageUrl(article.imageUrl)}
+                src={articleThumbnailUrl(article.imageUrl)}
                 alt=""
                 loading="lazy"
               />

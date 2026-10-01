@@ -33,6 +33,45 @@ afterEach(async () => {
 });
 
 describe("database migrations", () => {
+  it("updates existing thumbnails while preserving full-size reader images and reading state", () => {
+    const database = new Sqlite(":memory:");
+    database.pragma("foreign_keys = ON");
+    try {
+      migrateDatabase(database, 180, 55);
+      database.exec(`
+        INSERT INTO feed_sources (id, feed_url, source_kind, title, created_at, updated_at)
+        VALUES (1, 'https://example.com/feed', 'published', 'Images',
+          '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z');
+        INSERT INTO feeds (id, user_id, source_id, title, created_at, updated_at)
+        VALUES (1, 1, 1, 'Images', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z');
+        INSERT INTO articles (id, source_id, external_id, title, url, discovered_at,
+          image_url, feed_content_html)
+        VALUES (1, 1, 'image', 'Image', 'https://example.com/post', '2026-10-01T00:00:00.000Z',
+          'https://example.com/full.jpg',
+          '<img src="https://example.com/full.jpg" width="1000" height="666" srcset="https://example.com/medium.jpg 480w, https://example.com/full.jpg 1000w">');
+        INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read, is_starred)
+        VALUES (1, 1, '2026-10-01T00:00:00.000Z', 1, 1);
+      `);
+      const original = database
+        .prepare("SELECT feed_content_html FROM articles WHERE id = 1")
+        .get();
+      migrateDatabase(database, 180);
+      expect(database.prepare("SELECT image_url FROM articles WHERE id = 1").get()).toEqual({
+        image_url: "https://example.com/medium.jpg",
+      });
+      expect(database.prepare("SELECT feed_content_html FROM articles WHERE id = 1").get()).toEqual(
+        original,
+      );
+      expect(
+        database
+          .prepare("SELECT is_read, is_starred FROM feed_articles WHERE article_id = 1")
+          .get(),
+      ).toEqual({ is_read: 1, is_starred: 1 });
+    } finally {
+      database.close();
+    }
+  });
+
   it("preserves an existing publisher delay while allowing a different provider after migration", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-28T12:00:00.000Z"));
