@@ -99,8 +99,8 @@ describe("article filtering rules", () => {
     const saved = articles.find((item) => item.title === "Alpha only");
     const hidden = articles.find((item) => item.title === "Rust only");
     if (!saved || !hidden) throw new Error("The seed articles were not delivered");
-    database.articles.updateArticleState(TEST_USER_ID, saved.id, { isRead: true, isStarred: true });
-    database.articles.updateArticleState(TEST_USER_ID, hidden.id, { isStarred: true });
+    database.articles.updateArticleState(TEST_USER_ID, saved.id, { isRead: true, isSaved: true });
+    database.articles.updateArticleState(TEST_USER_ID, hidden.id, { isSaved: true });
     database.rules.createRule(TEST_USER_ID, {
       name: "Hide one saved article",
       conditions: [{ field: "title", pattern: "Rust only" }],
@@ -109,20 +109,20 @@ describe("article filtering rules", () => {
     });
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 5,
-      starred: 2,
+      saved: 2,
       all: 6,
     });
     database.feeds.updateFeed(TEST_USER_ID, scopedFeedId, { paused: true });
     database.feeds.deleteFeed(TEST_USER_ID, outsideFeedId);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 4,
-      starred: 2,
+      saved: 2,
       all: 5,
     });
     database.feeds.deleteFeed(TEST_USER_ID, scopedFeedId);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 0,
-      starred: 2,
+      saved: 2,
       all: 0,
     });
   });
@@ -212,7 +212,7 @@ describe("article filtering rules", () => {
     expect(titles(database)).toEqual(["Alpha Rust", "Outside unmatched"]);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 2,
-      starred: 0,
+      saved: 0,
       all: 2,
     });
     expect(database.feeds.getFeed(TEST_USER_ID, scopedFeedId)).toMatchObject({
@@ -237,7 +237,7 @@ describe("article filtering rules", () => {
     ]);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 5,
-      starred: 0,
+      saved: 0,
       all: 5,
     });
     expect(database.feeds.getFeed(TEST_USER_ID, scopedFeedId)).toMatchObject({
@@ -285,7 +285,7 @@ describe("article filtering rules", () => {
     expect(titles(database)).toEqual(["Alpha only", "Outside unmatched", "Other"]);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 3,
-      starred: 0,
+      saved: 0,
       all: 3,
     });
     expect(database.feeds.getFeed(TEST_USER_ID, scopedFeedId)).toMatchObject({
@@ -310,7 +310,7 @@ describe("article filtering rules", () => {
     expect(titles(database)).toEqual(["Alpha only", "Outside unmatched", "Other", "Plain"]);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 4,
-      starred: 0,
+      saved: 0,
       all: 4,
     });
   });
@@ -348,7 +348,7 @@ describe("article filtering rules", () => {
     ]);
     expect(database.bootstrap.getBootstrap(TEST_USER_ID).counts).toEqual({
       unread: 5,
-      starred: 0,
+      saved: 0,
       all: 7,
     });
   });

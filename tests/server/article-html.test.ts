@@ -22,7 +22,7 @@ describe("article HTML rendering", () => {
     },
   );
 
-  it("preserves starred code and distinguishes their data and layout tables", () => {
+  it("preserves asterisk-prefixed code and distinguishes their data and layout tables", () => {
     const html = cleanArticleHtml(
       `<p>Views are declarative markup in <code>.native</code> files.</p>
        <pre><code>native init my_app
@@ -55,7 +55,7 @@ native dev
     expect(cleanedAgain.querySelectorAll(".article-table-scroll")).toHaveLength(1);
   });
 
-  it("associates the starred Torvalds attribution without absorbing Daring Fireball commentary", () => {
+  it("associates the marked Torvalds attribution without absorbing Daring Fireball commentary", () => {
     const html = cleanArticleHtml(
       `<blockquote><p>I realize that some people really dislike AI, but this is an area where I'm willing to absolutely put my foot down as the top-level maintainer.</p></blockquote>
        <p>— <a href="https://lore.kernel.org/example">Linus Torvalds</a>, Linux Media Mailing List</p>

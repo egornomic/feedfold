@@ -64,15 +64,15 @@ describe("database migrations", () => {
       );
       expect(
         database
-          .prepare("SELECT is_read, is_starred FROM account_articles WHERE article_id = 1")
+          .prepare("SELECT is_read, is_saved FROM account_articles WHERE article_id = 1")
           .get(),
-      ).toEqual({ is_read: 1, is_starred: 1 });
+      ).toEqual({ is_read: 1, is_saved: 1 });
     } finally {
       database.close();
     }
   });
 
-  it.each([55, 56])(
+  it.each([55, 56, 57])(
     "moves existing saves from version %i into the account collection without changing their dates or order",
     async (version) => {
       const directory = await mkdtemp(join(tmpdir(), "feedfold-saved-migration-"));
@@ -90,24 +90,32 @@ describe("database migrations", () => {
         INSERT INTO articles (id, source_id, external_id, title, discovered_at, feed_content_html)
           VALUES (1, 1, 'first', 'First', '2026-09-01', '<p>First essay</p>'),
                  (2, 1, 'second', 'Second', '2026-09-01', '<p>Second essay</p>');
-        INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read, is_starred, starred_at)
-          VALUES (1, 1, '2026-09-01', 1, 1, '2026-09-03T10:00:00.000Z'),
-                 (1, 2, '2026-09-01', 0, 1, '2026-09-02T10:00:00.000Z');
       `);
+        sqlite.exec(
+          version === 57
+            ? `INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read)
+                 VALUES (1, 1, '2026-09-01', 1), (1, 2, '2026-09-01', 0);
+               INSERT INTO saved_articles (user_id, article_id, feed_title, is_read, starred_at)
+                 VALUES (1, 1, 'My essays', 1, '2026-09-03T10:00:00.000Z'),
+                        (1, 2, 'My essays', 0, '2026-09-02T10:00:00.000Z');`
+            : `INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read, is_starred, starred_at)
+                 VALUES (1, 1, '2026-09-01', 1, 1, '2026-09-03T10:00:00.000Z'),
+                        (1, 2, '2026-09-01', 0, 1, '2026-09-02T10:00:00.000Z');`,
+        );
       } finally {
         sqlite.close();
       }
       const database = new AppDatabase(path);
       try {
         expect(
-          database.articles.listArticlePage(1, { state: "starred" }).articles.map(({ id }) => id),
+          database.articles.listArticlePage(1, { state: "saved" }).articles.map(({ id }) => id),
         ).toEqual([1, 2]);
         const savedDates = database.connection
-          .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+          .prepare("SELECT article_id, saved_at FROM saved_articles ORDER BY article_id")
           .all();
         expect(savedDates).toEqual([
-          { article_id: 1, starred_at: "2026-09-03T10:00:00.000Z" },
-          { article_id: 2, starred_at: "2026-09-02T10:00:00.000Z" },
+          { article_id: 1, saved_at: "2026-09-03T10:00:00.000Z" },
+          { article_id: 2, saved_at: "2026-09-02T10:00:00.000Z" },
         ]);
         expect(database.feeds.deleteFeed(1, 1)).toBe(true);
         expect(database.articles.getArticle(1, 1)).toMatchObject({
@@ -115,21 +123,110 @@ describe("database migrations", () => {
           feedTitle: "My essays",
           feedContentHtml: "<p>First essay</p>",
           isRead: true,
-          isStarred: true,
+          isSaved: true,
         });
         expect(
           database.connection
-            .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+            .prepare("SELECT article_id, saved_at FROM saved_articles ORDER BY article_id")
             .all(),
         ).toEqual(savedDates);
         expect(
-          database.articles.listArticlePage(1, { state: "starred" }).articles.map(({ id }) => id),
+          database.articles.listArticlePage(1, { state: "saved" }).articles.map(({ id }) => id),
         ).toEqual([1, 2]);
       } finally {
         database.close();
       }
     },
   );
+
+  it("preserves separate owners, read states, and detached saves when renaming save dates", () => {
+    const sqlite = new Sqlite(":memory:");
+    sqlite.pragma("foreign_keys = ON");
+    try {
+      migrateDatabase(sqlite, 180, 57);
+      sqlite.exec(`
+        INSERT INTO users (id, username, password_hash, enabled, created_at, updated_at, webauthn_user_id)
+          VALUES (2, 'second-reader', '', 1, '2026-09-01', '2026-09-01', randomblob(32));
+        INSERT INTO feed_sources (id, feed_url, source_kind, title, created_at, updated_at)
+          VALUES (1, 'https://example.test/essays', 'published', 'Essays', '2026-09-01', '2026-09-01');
+        INSERT INTO feeds (id, user_id, source_id, title, created_at, updated_at)
+          VALUES (1, 1, 1, 'My essays', '2026-09-01', '2026-09-01');
+        INSERT INTO articles (id, source_id, external_id, title, discovered_at, feed_content_html)
+          VALUES (1, 1, 'shared', 'Shared essay', '2026-09-01', '<p>Shared essay</p>'),
+                 (2, 1, 'detached', 'Detached essay', '2026-09-01', '<p>Detached essay</p>');
+        INSERT INTO feed_articles (feed_id, article_id, delivered_at, is_read)
+          VALUES (1, 1, '2026-09-01', 1);
+        INSERT INTO saved_articles (user_id, article_id, feed_title, is_read, starred_at)
+          VALUES (1, 1, 'My essays', 1, '2026-09-03T10:00:00.000Z'),
+                 (2, 1, 'Other essays', 0, '2026-09-02T10:00:00.000Z'),
+                 (2, 2, 'Unsubscribed essays', 1, '2026-09-04T10:00:00.000Z');
+      `);
+      const savedRows = sqlite
+        .prepare(`SELECT user_id, article_id, feed_title, is_read, starred_at AS saved_at
+                  FROM saved_articles ORDER BY user_id, article_id`)
+        .all();
+      migrateDatabase(sqlite, 180);
+      expect(
+        sqlite.prepare("SELECT * FROM saved_articles ORDER BY user_id, article_id").all(),
+      ).toEqual(savedRows);
+      expect(
+        sqlite.prepare("SELECT * FROM account_articles ORDER BY user_id, article_id").all(),
+      ).toEqual([
+        {
+          user_id: 1,
+          article_id: 1,
+          feed_id: 1,
+          feed_title: "My essays",
+          folder_id: null,
+          is_read: 1,
+          is_saved: 1,
+          saved_at: "2026-09-03T10:00:00.000Z",
+        },
+        {
+          user_id: 2,
+          article_id: 1,
+          feed_id: null,
+          feed_title: "Other essays",
+          folder_id: null,
+          is_read: 0,
+          is_saved: 1,
+          saved_at: "2026-09-02T10:00:00.000Z",
+        },
+        {
+          user_id: 2,
+          article_id: 2,
+          feed_id: null,
+          feed_title: "Unsubscribed essays",
+          folder_id: null,
+          is_read: 1,
+          is_saved: 1,
+          saved_at: "2026-09-04T10:00:00.000Z",
+        },
+      ]);
+      sqlite.exec("UPDATE feed_articles SET is_read = 0 WHERE feed_id = 1 AND article_id = 1");
+      expect(
+        sqlite
+          .prepare("SELECT is_read FROM saved_articles WHERE article_id = 1 ORDER BY user_id")
+          .pluck()
+          .all(),
+      ).toEqual([0, 0]);
+      sqlite.exec("UPDATE feed_articles SET is_read = 1 WHERE feed_id = 1 AND article_id = 1");
+      expect(
+        sqlite
+          .prepare("SELECT is_read FROM saved_articles WHERE article_id = 1 ORDER BY user_id")
+          .pluck()
+          .all(),
+      ).toEqual([1, 0]);
+      migrateDatabase(sqlite, 180);
+      expect(
+        sqlite.prepare("SELECT * FROM saved_articles ORDER BY user_id, article_id").all(),
+      ).toEqual(savedRows);
+      expect(sqlite.pragma("foreign_key_check")).toEqual([]);
+      expect(sqlite.pragma("integrity_check", { simple: true })).toBe("ok");
+    } finally {
+      sqlite.close();
+    }
+  });
 
   it("preserves an existing publisher delay while allowing a different provider after migration", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -279,7 +376,7 @@ describe("database migrations", () => {
       });
       const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
       if (!article) throw new Error("Expected the existing X post");
-      database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
+      database.articles.updateArticleState(1, article.id, { isRead: true, isSaved: true });
       database.connection
         .prepare("UPDATE articles SET content_html = feed_content_html WHERE id = ?")
         .run(article.id);
@@ -292,7 +389,7 @@ describe("database migrations", () => {
         id: article.id,
         url: article.url,
         isRead: true,
-        isStarred: true,
+        isSaved: true,
         summary: "Interesting",
       });
       for (const html of [migrated?.feedContentHtml, migrated?.contentHtml]) {
@@ -335,7 +432,7 @@ describe("database migrations", () => {
       });
       const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
       if (!article) throw new Error("Expected the existing X post");
-      database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
+      database.articles.updateArticleState(1, article.id, { isRead: true, isSaved: true });
       database.connection
         .prepare("UPDATE articles SET content_html = feed_content_html WHERE id = ?")
         .run(article.id);
@@ -350,7 +447,7 @@ describe("database migrations", () => {
         id: article.id,
         imageUrl: directImageUrl,
         isRead: true,
-        isStarred: true,
+        isSaved: true,
         url: article.url,
         summary: article.summary,
       });
@@ -397,7 +494,7 @@ describe("database migrations", () => {
       });
       const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
       if (!article) throw new Error("Expected the existing X post");
-      database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
+      database.articles.updateArticleState(1, article.id, { isRead: true, isSaved: true });
       database.connection.prepare("DELETE FROM migrations WHERE version = 42").run();
 
       migrateDatabase(database.connection, 180, 42);
@@ -411,7 +508,7 @@ describe("database migrations", () => {
       expect(migrated).toMatchObject({
         id: article.id,
         isRead: true,
-        isStarred: true,
+        isSaved: true,
         title: "",
         url: "https://x.com/person/status/2095678312773554533#m",
         imageUrl: "https://pbs.twimg.com/media/poster.jpg",
@@ -483,15 +580,15 @@ describe("database migrations", () => {
         sqlite
           .prepare(
             `SELECT feeds.user_id AS userId, feed_articles.is_read AS isRead,
-                    feed_articles.is_starred AS isStarred
+                    feed_articles.is_saved AS isSaved
              FROM account_articles AS feed_articles
              JOIN feeds ON feeds.id = feed_articles.feed_id
              ORDER BY feeds.user_id`,
           )
           .all(),
       ).toEqual([
-        { userId: 1, isRead: 1, isStarred: 0 },
-        { userId: 2, isRead: 0, isStarred: 1 },
+        { userId: 1, isRead: 1, isSaved: 0 },
+        { userId: 2, isRead: 0, isSaved: 1 },
       ]);
     } finally {
       sqlite.close();
@@ -1074,7 +1171,7 @@ Return only the summary in plain text.`,
       ).not.toBe("");
       expect(
         database.connection
-          .prepare("SELECT starred_at FROM saved_articles WHERE article_id = 3")
+          .prepare("SELECT saved_at FROM saved_articles WHERE article_id = 3")
           .pluck()
           .get(),
       ).toBe("2026-07-13T00:00:00.000Z");

@@ -29,7 +29,7 @@ export function ExpandedStream({
   onActivate,
   onMarkPassedRead,
   onToggleRead,
-  onToggleStar,
+  onToggleSave,
   onCopy,
   onOpenSource,
   onFeedAction,
@@ -58,7 +58,7 @@ export function ExpandedStream({
   onActivate: (article: Article) => void;
   onMarkPassedRead: (articles: Article[]) => Promise<unknown>;
   onToggleRead: (article: Article) => void;
-  onToggleStar: (article: Article) => void;
+  onToggleSave: (article: Article) => void;
   onCopy: (article: Article) => void;
   onOpenSource: (article: Article) => void;
   onFeedAction: (feedId: number, action: FeedManagementAction) => void;
@@ -101,7 +101,7 @@ export function ExpandedStream({
               translationLanguage={translationLanguage}
               customPrompts={customPrompts}
               onToggleRead={onToggleRead}
-              onToggleStar={onToggleStar}
+              onToggleSave={onToggleSave}
               onCopy={onCopy}
               onOpenSource={onOpenSource}
               onToggleFullContent={onToggleFullContent}

@@ -225,7 +225,7 @@ describe("X RSS instances", () => {
     );
   });
 
-  it("keeps article identities and read/starred state through fallback and instance-list changes", async () => {
+  it("keeps article identities and read/saved state through fallback and instance-list changes", async () => {
     let primaryAvailable = true;
     const requests: string[] = [];
     let primary = "";
@@ -267,7 +267,7 @@ describe("X RSS instances", () => {
     expect(requests).toEqual(["primary"]);
     const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
     if (!article) throw new Error("Expected the initial X post");
-    database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
+    database.articles.updateArticleState(1, article.id, { isRead: true, isSaved: true });
 
     primaryAvailable = false;
     refresh.request([feed.id]);
@@ -280,7 +280,7 @@ describe("X RSS instances", () => {
     });
     expect(database.articles.getArticle(1, article.id)).toMatchObject({
       isRead: true,
-      isStarred: true,
+      isSaved: true,
     });
 
     vi.stubEnv("NITTER_BASE_URLS", replacement);
@@ -294,7 +294,7 @@ describe("X RSS instances", () => {
     });
     expect(database.articles.getArticle(1, article.id)).toMatchObject({
       isRead: true,
-      isStarred: true,
+      isSaved: true,
     });
     const exported = database.opml.export(1);
     expect(exported).toContain(`${replacement}/banteg/rss`);

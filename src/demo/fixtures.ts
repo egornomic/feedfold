@@ -20,7 +20,7 @@ interface DemoArticleBase {
   url?: string;
   imageUrl?: string;
   isRead?: boolean;
-  isStarred?: boolean;
+  isSaved?: boolean;
 }
 
 type DemoArticleSpec = DemoArticleBase &
@@ -129,7 +129,7 @@ function createArticle(spec: DemoArticleSpec, feed: Feed, now: Date): Article {
           }
         : null,
     isRead: spec.isRead ?? false,
-    isStarred: spec.isStarred ?? false,
+    isSaved: spec.isSaved ?? false,
   };
 }
 
@@ -210,7 +210,7 @@ export function createDemoData(now = new Date()): DemoData {
 <li>Feed refresh intervals adapt to each source’s publishing pace, while long article lists stay responsive.</li>
 <li>Enjoy more consistent navigation, unread filters, menus, and reading transitions.</li>
 </ul>`,
-      isStarred: true,
+      isSaved: true,
     },
     {
       id: 1,

@@ -452,7 +452,7 @@ describe("YouTube data retention", () => {
       });
       const article = database.articles.listArticlePage(1, { state: "all" }).articles[0];
       if (!article) throw new Error("Missing video");
-      database.articles.updateArticleState(1, article.id, { isRead: true, isStarred: true });
+      database.articles.updateArticleState(1, article.id, { isRead: true, isSaved: true });
       const articles = database.articles.listArticlePage(1, { state: "all" }).articles;
       const rules = database.rules.listRules(1);
       service["removeConnection"](1, removeFeeds);

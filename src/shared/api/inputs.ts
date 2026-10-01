@@ -85,7 +85,7 @@ export const inputs = {
   url: z.object({ url: httpUrl }).strict(),
   articles: z
     .object({
-      state: z.enum(["all", "unread", "read", "starred"]).default("unread"),
+      state: z.enum(["all", "unread", "read", "saved"]).default("unread"),
       feedId: resourceId.exactOptional(),
       folderId: resourceId.exactOptional(),
       search: z.string().trim().max(300).exactOptional(),
@@ -98,11 +98,11 @@ export const inputs = {
   updateArticleState: z
     .object({
       isRead: z.boolean().exactOptional(),
-      isStarred: z.boolean().exactOptional(),
+      isSaved: z.boolean().exactOptional(),
     })
     .strict()
     .refine(
-      (state) => state.isRead !== undefined || state.isStarred !== undefined,
+      (state) => state.isRead !== undefined || state.isSaved !== undefined,
       "Choose whether to update read state or saved state.",
     ),
   markRead: z

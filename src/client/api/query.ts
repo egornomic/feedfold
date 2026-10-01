@@ -87,7 +87,7 @@ export async function invalidateReader(
 export function updateCachedArticleStates(
   client: QueryClient,
   ids: ReadonlySet<number>,
-  change: { isRead?: boolean; isStarred?: boolean },
+  change: { isRead?: boolean; isSaved?: boolean },
 ) {
   client.setQueriesData<InfiniteData<ArticlePage>>({ queryKey: readerKeys.lists }, (data) =>
     data

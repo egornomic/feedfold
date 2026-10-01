@@ -47,7 +47,7 @@ describe("static demo data", () => {
       hasPassword: false,
     });
     await expect(demoApi.bootstrap()).resolves.toMatchObject({
-      counts: { unread: 15, starred: 1, all: 17 },
+      counts: { unread: 15, saved: 1, all: 17 },
       capabilities: { manualRefresh: true },
     });
     await expect(demoApi.authConfig()).resolves.toEqual({
@@ -64,17 +64,17 @@ describe("static demo data", () => {
 
     expect(store.invoke("bootstrap", undefined).counts).toEqual({
       unread: 15,
-      starred: 1,
+      saved: 1,
       all: 17,
     });
     expect(store.invoke("articles", {}).articles).toHaveLength(15);
-    expect(store.invoke("articles", { state: "starred" }).articles).toHaveLength(1);
+    expect(store.invoke("articles", { state: "saved" }).articles).toHaveLength(1);
 
-    store.invoke("updateArticleState", { id: 1, state: { isRead: true, isStarred: true } });
+    store.invoke("updateArticleState", { id: 1, state: { isRead: true, isSaved: true } });
 
     expect(store.invoke("bootstrap", undefined).counts).toEqual({
       unread: 14,
-      starred: 2,
+      saved: 2,
       all: 17,
     });
     expect(store.invoke("articles", {}).articles.map((article) => article.id)).not.toContain(1);
@@ -128,12 +128,12 @@ describe("static demo data", () => {
   it("keeps the linked feedfold release saved and first in the demo", () => {
     const store = new DemoStore(new Date("2027-08-12T12:00:00.000Z"));
     const release = store.article(DEMO_RELEASE_ARTICLE_ID);
-    expect(release.isStarred).toBe(true);
+    expect(release.isSaved).toBe(true);
     if (release.feedId === null) throw new Error("The release feed is missing");
     expect(release.url).toMatch(/^https:\/\/github\.com\/egornomic\/feedfold\/releases\/tag\/v/);
     expect(store.articles({ state: "all", feedId: release.feedId }).articles).toEqual([release]);
 
-    for (const state of ["all", "unread", "starred"] as const) {
+    for (const state of ["all", "unread", "saved"] as const) {
       expect(store.articles({ state }).articles[0]?.id).toBe(release.id);
     }
   });
@@ -161,7 +161,7 @@ describe("static demo data", () => {
     const article = store.article(DEMO_RELEASE_ARTICLE_ID);
     if (article.feedId === null) throw new Error("The release feed is missing");
     store.deleteFeed(article.feedId);
-    expect(store.articles({ state: "starred" }).articles).toContainEqual({
+    expect(store.articles({ state: "saved" }).articles).toContainEqual({
       ...article,
       feedId: null,
       folderId: null,
@@ -169,12 +169,12 @@ describe("static demo data", () => {
     expect(store.articles({ state: "all" }).articles.map(({ id }) => id)).not.toContain(article.id);
     expect(store.article(article.id)).toMatchObject({
       feedTitle: article.feedTitle,
-      isStarred: true,
+      isSaved: true,
     });
-    expect(store.updateArticleState(article.id, { isStarred: false })).toMatchObject({
-      isStarred: false,
+    expect(store.updateArticleState(article.id, { isSaved: false })).toMatchObject({
+      isSaved: false,
     });
-    expect(store.articles({ state: "starred" }).articles).toHaveLength(0);
+    expect(store.articles({ state: "saved" }).articles).toHaveLength(0);
     expect(() => store.article(article.id)).toThrow("no longer exists");
   });
 });

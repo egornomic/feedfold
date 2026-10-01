@@ -35,11 +35,11 @@ export function useArticleActions({
   const loadArticles = queue.loadArticles;
 
   const changeArticleState = useCallback(
-    async (article: Article, change: { isRead?: boolean; isStarred?: boolean }) => {
+    async (article: Article, change: { isRead?: boolean; isSaved?: boolean }) => {
       const nextRead = change.isRead ?? article.isRead;
-      const nextStarred = change.isStarred ?? article.isStarred;
+      const nextSaved = change.isSaved ?? article.isSaved;
       const unreadDelta = nextRead === article.isRead ? 0 : nextRead ? -1 : 1;
-      const starredDelta = nextStarred === article.isStarred ? 0 : nextStarred ? 1 : -1;
+      const savedDelta = nextSaved === article.isSaved ? 0 : nextSaved ? 1 : -1;
       const wasManuallyUnread = manuallyUnreadArticleIds.current.has(article.id);
 
       if (change.isRead === false) manuallyUnreadArticleIds.current.add(article.id);
@@ -47,11 +47,11 @@ export function useArticleActions({
 
       queue.setArticles((current) =>
         current.map((item) =>
-          item.id === article.id ? { ...item, isRead: nextRead, isStarred: nextStarred } : item,
+          item.id === article.id ? { ...item, isRead: nextRead, isSaved: nextSaved } : item,
         ),
       );
       dataResource.mutateBootstrap((current) =>
-        updateBootstrapCounts(current, article, unreadDelta, starredDelta),
+        updateBootstrapCounts(current, article, unreadDelta, savedDelta),
       );
 
       try {
@@ -74,16 +74,16 @@ export function useArticleActions({
                     change.isRead !== undefined && item.isRead === nextRead
                       ? article.isRead
                       : item.isRead,
-                  isStarred:
-                    change.isStarred !== undefined && item.isStarred === nextStarred
-                      ? article.isStarred
-                      : item.isStarred,
+                  isSaved:
+                    change.isSaved !== undefined && item.isSaved === nextSaved
+                      ? article.isSaved
+                      : item.isSaved,
                 }
               : item,
           ),
         );
         dataResource.mutateBootstrap((current) =>
-          updateBootstrapCounts(current, article, -unreadDelta, -starredDelta),
+          updateBootstrapCounts(current, article, -unreadDelta, -savedDelta),
         );
         showToast(`Could not update the article: ${errorMessage(caught)}`);
         await loadBootstrap();

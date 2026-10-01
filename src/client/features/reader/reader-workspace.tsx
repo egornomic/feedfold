@@ -125,7 +125,7 @@ export function ReaderWorkspace({
             search={displayedReaderRoute.search}
             state={displayedReaderRoute.state}
             onAddFeed={openAddFeed}
-            onShowSaved={() => selectScope(null, null, "starred")}
+            onShowSaved={() => selectScope(null, null, "saved")}
             onShowAll={() =>
               route.navigate(
                 readerRouteForSelection(
@@ -165,9 +165,9 @@ export function ReaderWorkspace({
               onToggleRead={(article) =>
                 void articleActions.changeArticleState(article, { isRead: !article.isRead })
               }
-              onToggleStar={(article) =>
+              onToggleSave={(article) =>
                 void articleActions.changeArticleState(article, {
-                  isStarred: !article.isStarred,
+                  isSaved: !article.isSaved,
                 })
               }
             />
@@ -216,9 +216,9 @@ export function ReaderWorkspace({
               onToggleRead={(article) =>
                 void articleActions.changeArticleState(article, { isRead: !article.isRead })
               }
-              onToggleStar={(article) =>
+              onToggleSave={(article) =>
                 void articleActions.changeArticleState(article, {
-                  isStarred: !article.isStarred,
+                  isSaved: !article.isSaved,
                 })
               }
               onCopy={(article) => void articleActions.copyArticleUrl(article)}
@@ -263,9 +263,9 @@ export function ReaderWorkspace({
             onToggleRead={(article) =>
               void articleActions.changeArticleState(article, { isRead: !article.isRead })
             }
-            onToggleStar={(article) =>
+            onToggleSave={(article) =>
               void articleActions.changeArticleState(article, {
-                isStarred: !article.isStarred,
+                isSaved: !article.isSaved,
               })
             }
             onCopy={(article) => void articleActions.copyArticleUrl(article)}

@@ -316,12 +316,12 @@ describe("local application API", () => {
         await client.articles({ state: "all", feedId: feed.id, limit: 1, includeContent: true })
       ).articles[0];
       assert.isDefined(article);
-      expect(article).toMatchObject({ title: "Contract story", isRead: false, isStarred: false });
-      expect(await client.updateArticleState(article.id, { isStarred: true })).toMatchObject({
-        isStarred: true,
+      expect(article).toMatchObject({ title: "Contract story", isRead: false, isSaved: false });
+      expect(await client.updateArticleState(article.id, { isSaved: true })).toMatchObject({
+        isSaved: true,
       });
       await expect(client.updateArticleState(article.id, {})).rejects.toThrow();
-      expect((await client.article(article.id)).isStarred).toBe(true);
+      expect((await client.article(article.id)).isSaved).toBe(true);
 
       const rule = await client.createRule({
         name: "Read updates",

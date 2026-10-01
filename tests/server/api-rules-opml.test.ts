@@ -777,13 +777,13 @@ describe("live API, OPML, and filtering rules", () => {
     expect(expanded.articles[0]?.contentHtml).toBeNull();
     const updated = await asReader<Article>(`/api/articles/${keep.id}/state`, {
       method: "PATCH",
-      body: JSON.stringify({ isRead: true, isStarred: true }),
+      body: JSON.stringify({ isRead: true, isSaved: true }),
     });
-    expect(updated).toMatchObject({ isRead: true, isStarred: true });
+    expect(updated).toMatchObject({ isRead: true, isSaved: true });
     expect(await asReader<Article>(`/api/articles/${keep.id}`)).toMatchObject({
       id: keep.id,
       isRead: true,
-      isStarred: true,
+      isSaved: true,
       imageUrl: `${feedBase}/keep.jpg`,
     });
     expect((await asReader<Article>(`/api/articles/${keep.id}`)).feedContentHtml).toContain(

@@ -17,7 +17,7 @@ export interface InvitationOverview {
   invitations: InvitationSummary[];
 }
 
-export type ArticleState = "all" | "unread" | "read" | "starred";
+export type ArticleState = "all" | "unread" | "read" | "saved";
 export type FolderSortDirection = "newest" | "oldest";
 export type ReadingMode = "magazine" | "expanded";
 type ExtractionStatus = "pending" | "processing" | "complete" | "failed" | "feed";
@@ -286,7 +286,7 @@ export interface Article {
   extractionError: string | null;
   aiSummary: ArticleAiSummary | null;
   isRead: boolean;
-  isStarred: boolean;
+  isSaved: boolean;
 }
 
 export interface Rule {
@@ -322,7 +322,7 @@ export interface BootstrapData {
   aiSettings: AiSettings;
   counts: {
     unread: number;
-    starred: number;
+    saved: number;
     all: number;
   };
   capabilities: {

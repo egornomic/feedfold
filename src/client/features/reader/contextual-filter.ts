@@ -23,7 +23,7 @@ export function articlesWithContextReturn(
     nextArticles[currentIndex] = {
       ...returnTarget.article,
       isRead: currentArticle.isRead,
-      isStarred: currentArticle.isStarred,
+      isSaved: currentArticle.isSaved,
     };
   }
   return nextArticles;

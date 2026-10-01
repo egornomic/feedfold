@@ -1759,6 +1759,31 @@ const migrations: Migration[] = [
         );
     `,
   },
+  {
+    sql: `
+      DROP VIEW account_articles;
+      ALTER TABLE saved_articles RENAME COLUMN starred_at TO saved_at;
+
+      CREATE VIEW account_articles AS
+        SELECT feeds.user_id, feed_articles.article_id, feeds.id AS feed_id,
+               feeds.title AS feed_title, feeds.folder_id, feed_articles.is_read,
+               saved_articles.article_id IS NOT NULL AS is_saved, saved_articles.saved_at
+        FROM feed_articles
+        JOIN feeds ON feeds.id = feed_articles.feed_id
+        LEFT JOIN saved_articles ON saved_articles.user_id = feeds.user_id
+          AND saved_articles.article_id = feed_articles.article_id
+        UNION ALL
+        SELECT saved_articles.user_id, saved_articles.article_id, NULL,
+               saved_articles.feed_title, NULL, saved_articles.is_read, 1, saved_articles.saved_at
+        FROM saved_articles
+        WHERE NOT EXISTS (
+          SELECT 1 FROM feed_articles
+          JOIN feeds ON feeds.id = feed_articles.feed_id
+          WHERE feeds.user_id = saved_articles.user_id
+            AND feed_articles.article_id = saved_articles.article_id
+        );
+    `,
+  },
 ];
 
 export function migrateDatabase(

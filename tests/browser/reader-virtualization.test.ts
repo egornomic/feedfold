@@ -197,7 +197,7 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
         });
         await settle(page);
         const before = await anchor(page);
-        database.articles.updateArticleState(1, Number(before.id), { isStarred: true });
+        database.articles.updateArticleState(1, Number(before.id), { isSaved: true });
         database.feeds.updateFeed(1, backlog.feed.id, { paused: false });
         const firstArticle = backlog.articles[0];
         if (!firstArticle) throw new Error("The populated backlog must have an article");

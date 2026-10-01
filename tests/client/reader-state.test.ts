@@ -81,7 +81,7 @@ function bootstrap(): BootstrapData {
       providers: [],
       features: { articleSummary: null },
     },
-    counts: { unread: 1, starred: 0, all: 4 },
+    counts: { unread: 1, saved: 0, all: 4 },
     capabilities: { manualRefresh: true },
   };
 }
@@ -107,7 +107,7 @@ const article: Article = {
   extractionError: null,
   aiSummary: null,
   isRead: false,
-  isStarred: false,
+  isSaved: false,
 };
 
 function summarizedArticle(id: number, promptId: string | null): Article {
@@ -129,12 +129,12 @@ function summarizedArticle(id: number, promptId: string | null): Article {
 
 describe("reader state", () => {
   it("builds one canonical route and API query for each reader scope", () => {
-    const route = readerRouteForSelection("starred", null, 2, "design systems");
+    const route = readerRouteForSelection("saved", null, 2, "design systems");
     expect(route).toEqual({
       kind: "reader",
       scope: "folder",
       scopeId: 2,
-      state: "starred",
+      state: "saved",
       search: "design systems",
     });
     expect(
@@ -144,7 +144,7 @@ describe("reader state", () => {
         cursor: "next-page",
       }),
     ).toEqual({
-      state: "starred",
+      state: "saved",
       folderId: 2,
       search: "design systems",
       limit: 20,
@@ -166,7 +166,7 @@ describe("reader state", () => {
   it("adds newly delivered articles after the current reading sequence", () => {
     const current = [
       { ...article, id: 1, isRead: true },
-      { ...article, id: 2, isRead: true, isStarred: true },
+      { ...article, id: 2, isRead: true, isSaved: true },
       { ...article, id: 3 },
     ];
     const delivered = { ...article, id: 4 };
@@ -177,7 +177,7 @@ describe("reader state", () => {
     expect(result.appended.map(({ id }) => id)).toEqual([4]);
     expect(result.articles.findIndex(({ id }) => id === 2)).toBe(1);
     expect(result.articles.slice(2).map(({ id }) => id)).toEqual([3, 4]);
-    expect(result.articles[1]).toMatchObject({ id: 2, isRead: true, isStarred: true });
+    expect(result.articles[1]).toMatchObject({ id: 2, isRead: true, isSaved: true });
   });
 
   it("updates stored read and saved state without replacing the active queue's content or order", () => {
@@ -189,24 +189,24 @@ describe("reader state", () => {
         contentHtml: "<p>Extracted text</p>",
         isRead: true,
       },
-      { ...article, id: 2, isStarred: true },
+      { ...article, id: 2, isSaved: true },
     ];
     const refreshed = [
       { ...article, id: 2, title: "Refreshed two" },
-      { ...article, id: 1, title: "Refreshed one", isStarred: true },
+      { ...article, id: 1, title: "Refreshed one", isSaved: true },
       { ...article, id: 3, title: "Delivered three" },
     ];
 
     expect(
-      articlesWithUpdatedState(current, refreshed).map(({ id, title, isRead, isStarred }) => ({
+      articlesWithUpdatedState(current, refreshed).map(({ id, title, isRead, isSaved }) => ({
         id,
         title,
         isRead,
-        isStarred,
+        isSaved,
       })),
     ).toEqual([
-      { id: 1, title: "Full article", isRead: false, isStarred: true },
-      { id: 2, title: article.title, isRead: false, isStarred: false },
+      { id: 1, title: "Full article", isRead: false, isSaved: true },
+      { id: 2, title: article.title, isRead: false, isSaved: false },
     ]);
     expect(articlesWithUpdatedState(current, refreshed)[0]?.contentHtml).toBe(
       "<p>Extracted text</p>",
@@ -275,7 +275,7 @@ describe("reader state", () => {
 
   it("updates only the affected counters and never makes a count negative", () => {
     const updated = updateBootstrapCounts(bootstrap(), article, -2, 1);
-    expect(updated.counts).toEqual({ unread: 0, starred: 1, all: 4 });
+    expect(updated.counts).toEqual({ unread: 0, saved: 1, all: 4 });
     expect(updated.feeds.map(({ id, unreadCount }) => [id, unreadCount])).toEqual([
       [10, 1],
       [11, 0],
@@ -374,11 +374,11 @@ describe("reader state", () => {
   it("derives stable labels for reader scopes and generated filter rules", () => {
     const data = bootstrap();
     expect(readerScopeLabel(data, 11, null, "unread")).toBe("Interfaces");
-    expect(readerScopeLabel(data, null, 1, "starred")).toBe("Engineering");
+    expect(readerScopeLabel(data, null, 1, "saved")).toBe("Engineering");
     expect(readerScopeLabel(data, null, null, "unread")).toBe("Feed");
     expect(readerScopeLabel(data, null, null, "all")).toBe("Feed");
     expect(readerScopeLabel(data, null, null, "read")).toBe("Read");
-    expect(readerScopeLabel(data, null, null, "starred")).toBe("Saved");
+    expect(readerScopeLabel(data, null, null, "saved")).toBe("Saved");
     expect(readerScopeLabel(data, 999, null, "all")).toBe("Feed");
     expect(filterRuleName("x".repeat(100))).toBe(`Filter: ${"x".repeat(71)}…`);
   });

@@ -35,7 +35,7 @@ interface ArticleActionsProps {
   canNext?: boolean;
   navigationPending?: boolean;
   onToggleRead: (article: Article) => void;
-  onToggleStar: (article: Article) => void;
+  onToggleSave: (article: Article) => void;
   onCopy: (article: Article) => void;
   onOpenSource: (article: Article) => void;
   onToggleFullContent: (article: Article) => void;
@@ -56,7 +56,7 @@ export function ArticleActions({
   canNext = true,
   navigationPending = false,
   onToggleRead,
-  onToggleStar,
+  onToggleSave,
   onCopy,
   onOpenSource,
   onToggleFullContent,
@@ -98,7 +98,7 @@ export function ArticleActions({
         ? `Retry ${translationLanguage} translation`
         : `Translate to ${translationLanguage}`;
   const readTooltip = article.isRead ? "Mark as unread (U)" : "Mark as read (U)";
-  const savedTooltip = article.isStarred ? "Remove from Saved (S)" : "Save article (S)";
+  const savedTooltip = article.isSaved ? "Remove from Saved (S)" : "Save article (S)";
   return (
     <div className="article-actions" role="toolbar" aria-label="Article actions">
       {onPrevious ? (
@@ -226,14 +226,14 @@ export function ArticleActions({
         )}
       </button>
       <button
-        className={`star-state-action${article.isStarred ? " is-starred" : ""}`}
+        className={`save-state-action${article.isSaved ? " is-saved" : ""}`}
         type="button"
-        aria-pressed={article.isStarred}
-        onClick={() => onToggleStar(article)}
+        aria-pressed={article.isSaved}
+        onClick={() => onToggleSave(article)}
         aria-label={savedTooltip}
         data-tooltip={savedTooltip}
       >
-        <Star aria-hidden="true" size={16} fill={article.isStarred ? "currentColor" : "none"} />
+        <Star aria-hidden="true" size={16} fill={article.isSaved ? "currentColor" : "none"} />
       </button>
       <button
         className="copy-action"

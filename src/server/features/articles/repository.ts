@@ -61,7 +61,7 @@ export class ArticleRepository {
     sqlite.function("article_text", { deterministic: true }, articleSearchText);
   }
 
-  getStarredCount(userId: number): number {
+  getSavedCount(userId: number): number {
     return Number(
       this.sqlite
         .prepare("SELECT COUNT(*) FROM saved_articles WHERE user_id = ?")
@@ -71,9 +71,9 @@ export class ArticleRepository {
   }
 
   listArticlePage(userId: number, query: ArticleQuery): ArticlePage {
-    const savedOrder = query.state === "starred";
+    const savedOrder = query.state === "saved";
     const sortAtSql = savedOrder
-      ? "feed_articles.starred_at"
+      ? "feed_articles.saved_at"
       : "COALESCE(articles.published_at, articles.discovered_at)";
     const where = [savedOrder ? "feed_articles.user_id = ?" : "feeds.user_id = ?"];
     const values: Array<string | number> = [userId];
@@ -94,7 +94,7 @@ export class ArticleRepository {
       );
       values.push(query.folderId, userId, userId);
     }
-    const queueWhere = savedOrder ? ["feed_articles.is_starred = 1"] : [visibleClause];
+    const queueWhere = savedOrder ? ["feed_articles.is_saved = 1"] : [visibleClause];
     const queueValues: Array<string | number> = [];
     if (query.state === "unread") queueWhere.push("feed_articles.is_read = 0");
     if (query.state === "read") queueWhere.push("feed_articles.is_read = 1");
@@ -201,7 +201,7 @@ export class ArticleRepository {
                 ${query.includeContent ? "article_ai_summaries.input_tokens" : "NULL"} AS aiSummaryInputTokens,
                 ${query.includeContent ? "article_ai_summaries.output_tokens" : "NULL"} AS aiSummaryOutputTokens,
                 feed_articles.is_read AS isRead,
-                feed_articles.is_starred AS isStarred,
+                feed_articles.is_saved AS isSaved,
                 ${sortAtSql} AS sortAt
            FROM account_articles AS feed_articles
            JOIN articles ON articles.id = feed_articles.article_id
@@ -278,7 +278,7 @@ export class ArticleRepository {
          END`;
     const sortDirectionSql = savedOrder ? "'newest'" : "COALESCE(folders.sort_direction, 'newest')";
     const sortAtSql = savedOrder
-      ? "feed_articles.starred_at"
+      ? "feed_articles.saved_at"
       : "COALESCE(articles.published_at, articles.discovered_at)";
     const rows = this.sqlite
       .prepare(
@@ -413,7 +413,7 @@ export class ArticleRepository {
                 article_ai_summaries.input_tokens AS aiSummaryInputTokens,
                 article_ai_summaries.output_tokens AS aiSummaryOutputTokens,
                 feed_articles.is_read AS isRead,
-                feed_articles.is_starred AS isStarred
+                feed_articles.is_saved AS isSaved
          FROM account_articles AS feed_articles
          JOIN articles ON articles.id = feed_articles.article_id
          LEFT JOIN feeds ON feeds.id = feed_articles.feed_id
@@ -431,12 +431,12 @@ export class ArticleRepository {
   updateArticleState(
     userId: number,
     id: number,
-    input: { isRead?: boolean; isStarred?: boolean },
+    input: { isRead?: boolean; isSaved?: boolean },
   ): Article | null {
     const existing = this.getArticle(userId, id);
     if (!existing) return null;
     const isRead = input.isRead ?? existing.isRead;
-    const isStarred = input.isStarred ?? existing.isStarred;
+    const isSaved = input.isSaved ?? existing.isSaved;
     return this.sqlite.transaction(() => {
       this.sqlite
         .prepare(
@@ -444,15 +444,15 @@ export class ArticleRepository {
            WHERE article_id = ? AND feed_id IN (SELECT id FROM feeds WHERE user_id = ?)`,
         )
         .run(isRead ? 1 : 0, id, userId);
-      if (isStarred) {
+      if (isSaved) {
         this.sqlite
           .prepare(
-            `INSERT INTO saved_articles (user_id, article_id, feed_title, is_read, starred_at)
+            `INSERT INTO saved_articles (user_id, article_id, feed_title, is_read, saved_at)
              VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(user_id, article_id) DO UPDATE SET is_read = excluded.is_read`,
           )
           .run(userId, id, existing.feedTitle, isRead ? 1 : 0, now());
-      } else if (existing.isStarred) {
+      } else if (existing.isSaved) {
         this.sqlite
           .prepare("DELETE FROM saved_articles WHERE user_id = ? AND article_id = ?")
           .run(userId, id);
@@ -465,7 +465,7 @@ export class ArticleRepository {
           .run(id);
         deleteOrphanSources(this.sqlite);
       }
-      return this.getArticle(userId, id) ?? { ...existing, isRead, isStarred };
+      return this.getArticle(userId, id) ?? { ...existing, isRead, isSaved };
     })();
   }
 

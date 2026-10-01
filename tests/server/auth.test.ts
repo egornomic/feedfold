@@ -548,7 +548,7 @@ describe("hosted account authentication", () => {
          VALUES (?, ?, ?, 1)`,
       )
       .run(feedId, articleId, timestamp);
-    database.articles.updateArticleState(userId, articleId, { isStarred: true });
+    database.articles.updateArticleState(userId, articleId, { isSaved: true });
     database.connection
       .prepare(
         `INSERT INTO ignored_feed_articles (feed_id, external_id)

@@ -29,7 +29,7 @@ export interface ArticlePageBatch {
 export function articleMatchesState(article: Article, state: ArticleState): boolean {
   if (state === "unread") return !article.isRead;
   if (state === "read") return article.isRead;
-  if (state === "starred") return article.isStarred;
+  if (state === "saved") return article.isSaved;
   return true;
 }
 
@@ -50,7 +50,7 @@ export function articlesWithUpdatedState(articles: Article[], candidates: Articl
   const updatedById = new Map(candidates.map((article) => [article.id, article]));
   return articles.map((article) => {
     const updated = updatedById.get(article.id);
-    return updated ? { ...article, isRead: updated.isRead, isStarred: updated.isStarred } : article;
+    return updated ? { ...article, isRead: updated.isRead, isSaved: updated.isSaved } : article;
   });
 }
 
@@ -132,7 +132,7 @@ export function readerScopeLabel(
     return bootstrap.folders.find((folder) => folder.id === folderId)?.name ?? "Folder";
   }
   if (state === "read") return "Read";
-  if (state === "starred") return "Saved";
+  if (state === "saved") return "Saved";
   return "Feed";
 }
 
@@ -216,7 +216,7 @@ export function updateBootstrapCounts(
   bootstrap: BootstrapData,
   article: Article,
   unreadDelta: number,
-  starredDelta: number,
+  savedDelta: number,
 ): BootstrapData {
   const affectedFolderIds = new Set(
     folderPath(article.folderId, bootstrap.folders).map((folder) => folder.id),
@@ -226,7 +226,7 @@ export function updateBootstrapCounts(
     counts: {
       ...bootstrap.counts,
       unread: Math.max(0, bootstrap.counts.unread + unreadDelta),
-      starred: Math.max(0, bootstrap.counts.starred + starredDelta),
+      saved: Math.max(0, bootstrap.counts.saved + savedDelta),
     },
     feeds: bootstrap.feeds.map((feed) =>
       feed.id === article.feedId

@@ -20,7 +20,7 @@ export function ArticleList({
   onOpen,
   onMarkPassedRead,
   onToggleRead,
-  onToggleStar,
+  onToggleSave,
 }: {
   enabled: boolean;
   loadMoreError: boolean;
@@ -34,7 +34,7 @@ export function ArticleList({
   onOpen: (article: Article, openReader?: boolean) => void;
   onMarkPassedRead: (articles: Article[]) => Promise<unknown>;
   onToggleRead: (article: Article) => void;
-  onToggleStar: (article: Article) => void;
+  onToggleSave: (article: Article) => void;
 }) {
   return (
     <VirtualArticles
@@ -123,22 +123,18 @@ export function ArticleList({
               )}
             </button>
             <button
-              className={`list-star-button${article.isStarred ? " is-starred" : ""}`}
+              className={`list-save-button${article.isSaved ? " is-saved" : ""}`}
               type="button"
               aria-label={
-                article.isStarred
+                article.isSaved
                   ? `Remove ${articleLabel(article)} from Saved`
                   : `Save ${articleLabel(article)}`
               }
-              title={article.isStarred ? "Remove from Saved" : "Save"}
-              aria-pressed={article.isStarred}
-              onClick={() => onToggleStar(article)}
+              title={article.isSaved ? "Remove from Saved" : "Save"}
+              aria-pressed={article.isSaved}
+              onClick={() => onToggleSave(article)}
             >
-              <Star
-                aria-hidden="true"
-                size={15}
-                fill={article.isStarred ? "currentColor" : "none"}
-              />
+              <Star aria-hidden="true" size={15} fill={article.isSaved ? "currentColor" : "none"} />
             </button>
           </div>
         </div>

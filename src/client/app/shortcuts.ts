@@ -77,7 +77,7 @@ export function useAppShortcuts({
         sequence.current = null;
         const destinations: Record<string, () => void> = {
           u: () => selectScope(null, null, "unread"),
-          s: () => selectScope(null, null, "starred"),
+          s: () => selectScope(null, null, "saved"),
           a: () => selectScope(null, null, "all"),
           f: () => navigateTo("feeds"),
           r: () => navigateTo("rules"),
@@ -127,11 +127,10 @@ export function useAppShortcuts({
           if (!activeArticle) return;
           void articleActions
             .changeArticleState(activeArticle, {
-              isStarred: !activeArticle.isStarred,
+              isSaved: !activeArticle.isSaved,
             })
             .then((saved) => {
-              if (saved)
-                showToast(activeArticle.isStarred ? "Removed from Saved" : "Article saved");
+              if (saved) showToast(activeArticle.isSaved ? "Removed from Saved" : "Article saved");
             });
         },
         c: () => void articleActions.copyArticleUrl(activeArticle),

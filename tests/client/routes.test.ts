@@ -29,7 +29,7 @@ describe("application routes", () => {
     [{ kind: "settings", category: "ai" }, "/settings/ai"],
     [{ kind: "settings", category: "account" }, "/settings/account"],
     [
-      { kind: "reader", scope: "all", scopeId: null, state: "starred", search: "" },
+      { kind: "reader", scope: "all", scopeId: null, state: "saved", search: "" },
       "/articles/saved",
     ],
     [
@@ -86,7 +86,7 @@ describe("application routes", () => {
       kind: "reader",
       scope: "feed",
       scopeId: 7,
-      state: "starred",
+      state: "saved",
       search: "sqlite",
     } satisfies AppRoute;
 
@@ -94,7 +94,7 @@ describe("application routes", () => {
       kind: "reader",
       scope: "all",
       scopeId: null,
-      state: "starred",
+      state: "saved",
       search: "sqlite",
     });
     expect(routeAfterFeedDeletion(DEFAULT_READER_ROUTE, DEFAULT_READER_ROUTE, 7)).toBeNull();

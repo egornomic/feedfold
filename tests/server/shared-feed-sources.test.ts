@@ -111,20 +111,20 @@ describe("shared feed sources", () => {
       .articles[0];
     const secondArticle = database.articles.listArticlePage(secondUser.id, { state: "all" })
       .articles[0];
-    expect(firstArticle).toMatchObject({ id: secondArticle?.id, isRead: false, isStarred: false });
+    expect(firstArticle).toMatchObject({ id: secondArticle?.id, isRead: false, isSaved: false });
 
     if (!firstArticle) throw new Error("Shared article was not delivered");
     database.articles.updateArticleState(firstUser.id, firstArticle.id, {
       isRead: true,
-      isStarred: true,
+      isSaved: true,
     });
     expect(database.articles.getArticle(firstUser.id, firstArticle.id)).toMatchObject({
       isRead: true,
-      isStarred: true,
+      isSaved: true,
     });
     expect(database.articles.getArticle(secondUser.id, firstArticle.id)).toMatchObject({
       isRead: false,
-      isStarred: false,
+      isSaved: false,
     });
 
     const firstAiArticle = database.ai.getArticleForAi(firstUser.id, firstArticle.id);

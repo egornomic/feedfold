@@ -61,19 +61,42 @@ async function savedReader(path = ":memory:", policy = DESKTOP_POLICY) {
     .articles;
   for (const article of articles) {
     expect(
-      (await request(`/api/articles/${article.id}/state`, "PATCH", { isStarred: true })).status,
+      (await request(`/api/articles/${article.id}/state`, "PATCH", { isSaved: true })).status,
     ).toBe(200);
   }
   const saved = async () =>
-    (
-      (await (
-        await request("/api/articles?state=starred&includeContent=true")
-      ).json()) as ArticlePage
-    ).articles;
+    ((await (await request("/api/articles?state=saved&includeContent=true")).json()) as ArticlePage)
+      .articles;
   return { database, reader, stranger, feed, articles, request, saved, parsed };
 }
 
 describe("account-owned Saved", () => {
+  it("updates saved membership and returns matching collection counts over HTTP", async () => {
+    const { articles, request } = await savedReader();
+    const article = articles[0];
+    if (!article) throw new Error("Articles were not delivered");
+    const unsaved = await request(`/api/articles/${article.id}/state`, "PATCH", {
+      isSaved: false,
+    });
+    expect(unsaved.status).toBe(200);
+    expect(await unsaved.json()).toMatchObject({ id: article.id, isSaved: false });
+    const collection = (await (await request("/api/articles?state=saved")).json()) as ArticlePage;
+    expect(collection.articles.map(({ id }) => id)).not.toContain(article.id);
+    expect(collection.articles).toHaveLength(1);
+    expect(await (await request("/api/bootstrap")).json()).toMatchObject({
+      counts: { saved: 1 },
+    });
+    const saved = await request(`/api/articles/${article.id}/state`, "PATCH", { isSaved: true });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ id: article.id, isSaved: true });
+    expect(await (await request("/api/articles?state=saved")).json()).toMatchObject({
+      articles: [{ id: article.id, isSaved: true }, { isSaved: true }],
+    });
+    expect(await (await request("/api/bootstrap")).json()).toMatchObject({
+      counts: { saved: 2 },
+    });
+  });
+
   it.each(["unsubscribe", "delete account"])(
     "prunes unsaved content after the final subscriber leaves through %s",
     async (action) => {
@@ -82,8 +105,7 @@ describe("account-owned Saved", () => {
       const discarded = articles[1];
       if (!kept || !discarded) throw new Error("Articles were not delivered");
       expect(
-        (await request(`/api/articles/${discarded.id}/state`, "PATCH", { isStarred: false }))
-          .status,
+        (await request(`/api/articles/${discarded.id}/state`, "PATCH", { isSaved: false })).status,
       ).toBe(200);
       const otherFeed = database.feeds.createFeed(stranger.user.id, { feedUrl: feed.feedUrl });
       const storedIds = () =>
@@ -110,9 +132,9 @@ describe("account-owned Saved", () => {
       expect(await saved()).toMatchObject([
         { id: kept.id, feedContentHtml: `<p>${kept.title} in full.</p>` },
       ]);
-      expect(database.articles.getStarredCount(reader.user.id)).toBe(1);
+      expect(database.articles.getSavedCount(reader.user.id)).toBe(1);
       expect(
-        (await request(`/api/articles/${kept.id}/state`, "PATCH", { isStarred: false })).status,
+        (await request(`/api/articles/${kept.id}/state`, "PATCH", { isSaved: false })).status,
       ).toBe(200);
       expect(storedIds()).toEqual([]);
       expect(database.connection.prepare("SELECT COUNT(*) FROM feed_sources").pluck().get()).toBe(
@@ -133,7 +155,7 @@ describe("account-owned Saved", () => {
         (await request(`/api/articles/${readArticle.id}/state`, "PATCH", { isRead: true })).status,
       ).toBe(200);
       const originalDates = database.connection
-        .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+        .prepare("SELECT article_id, saved_at FROM saved_articles ORDER BY article_id")
         .all();
       const savedStates = async () => (await saved()).map(({ id, isRead }) => ({ id, isRead }));
       const originalStates = await savedStates();
@@ -159,11 +181,11 @@ describe("account-owned Saved", () => {
       expect(await detail.json()).toMatchObject({ feedId: returnedFeed.id, isRead: true });
       expect(await savedStates()).toEqual(originalStates);
       expect((await (await request("/api/bootstrap")).json()) as BootstrapData).toMatchObject({
-        counts: { starred: 2, unread: 1, all: 2 },
+        counts: { saved: 2, unread: 1, all: 2 },
       });
       expect(
         database.connection
-          .prepare("SELECT article_id, starred_at FROM saved_articles ORDER BY article_id")
+          .prepare("SELECT article_id, saved_at FROM saved_articles ORDER BY article_id")
           .all(),
       ).toEqual(originalDates);
       const otherFeed = database.feeds.createFeed(stranger.user.id, { feedUrl: feed.feedUrl });
@@ -177,7 +199,7 @@ describe("account-owned Saved", () => {
       expect(await otherDetail.json()).toMatchObject({
         feedId: otherFeed.id,
         isRead: false,
-        isStarred: false,
+        isSaved: false,
       });
       expect(
         (await request(`/api/articles/${readArticle.id}/state`, "PATCH", { isRead: false })).status,
@@ -207,10 +229,10 @@ describe("account-owned Saved", () => {
       ]);
       expect(
         (await (await request(`/api/articles/${articles[0]?.id}`)).json()) as Article,
-      ).toMatchObject({ isStarred: true });
+      ).toMatchObject({ isSaved: true });
       expect(await saved()).toHaveLength(2);
       expect((await (await request("/api/bootstrap")).json()) as BootstrapData).toMatchObject({
-        counts: { starred: 2, all: 1 },
+        counts: { saved: 2, all: 1 },
       });
     },
   );
@@ -221,7 +243,7 @@ describe("account-owned Saved", () => {
     const dates = () =>
       database.connection
         .prepare(
-          "SELECT article_id, starred_at FROM saved_articles WHERE user_id = ? ORDER BY article_id",
+          "SELECT article_id, saved_at FROM saved_articles WHERE user_id = ? ORDER BY article_id",
         )
         .all(reader.user.id);
     const originalDates = dates();
@@ -259,39 +281,39 @@ describe("account-owned Saved", () => {
       feedTitle: "Collected essays",
       feedContentHtml: `<p>${article.title} in full.</p>`,
       contentHtml: "<p>The complete collected essay.</p>",
-      isStarred: true,
+      isSaved: true,
       isRead: true,
     });
     expect(dates()).toEqual(originalDates);
     expect((await (await request("/api/bootstrap")).json()) as BootstrapData).toMatchObject({
-      counts: { starred: 2, all: 0, unread: 0 },
+      counts: { saved: 2, all: 0, unread: 0 },
       feeds: [],
     });
     expect(database.feeds.getRefreshCandidates()).toEqual([]);
     const firstPage = (await (
-      await request("/api/articles?state=starred&limit=1")
+      await request("/api/articles?state=saved&limit=1")
     ).json()) as ArticlePage;
     expect(firstPage.articles[0]?.id).toBe(before[0]?.id);
     expect(firstPage.nextCursor).not.toBeNull();
     const secondPage = (await (
-      await request(`/api/articles?state=starred&limit=1&cursor=${firstPage.nextCursor}`)
+      await request(`/api/articles?state=saved&limit=1&cursor=${firstPage.nextCursor}`)
     ).json()) as ArticlePage;
     expect(secondPage.articles[0]?.id).toBe(before[1]?.id);
     expect(secondPage.nextCursor).toBeNull();
     const anchored = (await (
-      await request(`/api/articles?state=starred&limit=1&anchorId=${article.id}`)
+      await request(`/api/articles?state=saved&limit=1&anchorId=${article.id}`)
     ).json()) as ArticlePage;
     expect(anchored.articles[0]?.id).toBe(article.id);
     expect(anchored.anchorIndex).toBe(0);
     expect(
-      ((await (await request("/api/articles?state=starred&search=First")).json()) as ArticlePage)
+      ((await (await request("/api/articles?state=saved&search=First")).json()) as ArticlePage)
         .articles,
     ).toHaveLength(1);
     expect(
       (
         await request(`/api/articles/${article.id}/state`, "PATCH", {
           isRead: false,
-          isStarred: true,
+          isSaved: true,
         })
       ).status,
     ).toBe(200);
@@ -315,23 +337,22 @@ describe("account-owned Saved", () => {
         await request(
           `/api/articles/${article.id}/state`,
           "PATCH",
-          { isStarred: true },
+          { isSaved: true },
           stranger.token,
         )
       ).status,
     ).toBe(404);
     const unsaved = await request(`/api/articles/${article.id}/state`, "PATCH", {
-      isStarred: false,
+      isSaved: false,
     });
     expect(unsaved.status).toBe(200);
-    expect(await unsaved.json()).toMatchObject({ isStarred: false });
+    expect(await unsaved.json()).toMatchObject({ isSaved: false });
     expect(await saved()).toHaveLength(1);
     expect((await request(`/api/articles/${article.id}`)).status).toBe(404);
     expect(database.ai.getArticleForAi(reader.user.id, article.id)).toBeNull();
     for (const remaining of await saved()) {
       expect(
-        (await request(`/api/articles/${remaining.id}/state`, "PATCH", { isStarred: false }))
-          .status,
+        (await request(`/api/articles/${remaining.id}/state`, "PATCH", { isSaved: false })).status,
       ).toBe(200);
     }
     expect(await saved()).toHaveLength(0);
@@ -371,17 +392,17 @@ describe("account-owned Saved", () => {
     const { database, reader, feed, saved, request } = await savedReader(path);
     const before = await saved();
     const dates = database.connection
-      .prepare("SELECT article_id, starred_at FROM saved_articles")
+      .prepare("SELECT article_id, saved_at FROM saved_articles")
       .all();
     expect((await request(`/api/feeds/${feed.id}`, "DELETE")).status).toBe(204);
     const reopened = new AppDatabase(path);
     cleanups.push(() => reopened.close());
     expect(
-      reopened.articles.listArticlePage(reader.user.id, { state: "starred", includeContent: true })
+      reopened.articles.listArticlePage(reader.user.id, { state: "saved", includeContent: true })
         .articles,
     ).toEqual(before.map((article) => ({ ...article, feedId: null, folderId: null })));
     expect(
-      reopened.connection.prepare("SELECT article_id, starred_at FROM saved_articles").all(),
+      reopened.connection.prepare("SELECT article_id, saved_at FROM saved_articles").all(),
     ).toEqual(dates);
   });
 
@@ -398,7 +419,7 @@ describe("account-owned Saved", () => {
         await request(
           `/api/articles/${article.id}/state`,
           "PATCH",
-          { isStarred: true },
+          { isSaved: true },
           stranger.token,
         )
       ).status,
@@ -408,11 +429,11 @@ describe("account-owned Saved", () => {
       (await request(`/api/feeds/${otherFeed.id}`, "DELETE", undefined, stranger.token)).status,
     ).toBe(204);
     expect(database.auth.deleteAccount(reader.user.id)).toBe(true);
-    expect(database.articles.getStarredCount(reader.user.id)).toBe(0);
+    expect(database.articles.getSavedCount(reader.user.id)).toBe(0);
     expect((await request(`/api/articles/${article.id}`)).status).toBe(401);
     const detail = await request(`/api/articles/${article.id}`, "GET", undefined, stranger.token);
     expect(detail.status).toBe(200);
-    expect(await detail.json()).toMatchObject({ feedTitle: "Other label", isStarred: true });
+    expect(await detail.json()).toMatchObject({ feedTitle: "Other label", isSaved: true });
     expect(database.auth.deleteAccount(stranger.user.id)).toBe(true);
     expect(database.connection.prepare("SELECT COUNT(*) FROM saved_articles").pluck().get()).toBe(
       0,

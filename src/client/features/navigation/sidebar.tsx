@@ -229,7 +229,7 @@ function SidebarContent({
               className="nav-item"
               aria-current={
                 currentView === "reader" &&
-                currentState !== "starred" &&
+                currentState !== "saved" &&
                 selectedFeedId === null &&
                 selectedFolderId === null
                   ? "page"
@@ -248,17 +248,17 @@ function SidebarContent({
               className="nav-item"
               aria-current={
                 currentView === "reader" &&
-                currentState === "starred" &&
+                currentState === "saved" &&
                 selectedFeedId === null &&
                 selectedFolderId === null
                   ? "page"
                   : undefined
               }
               type="button"
-              onClick={() => onSelectState("starred")}
+              onClick={() => onSelectState("saved")}
             >
               <span>Saved</span>
-              <ArticleCount count={bootstrap.counts.starred} />
+              <ArticleCount count={bootstrap.counts.saved} />
               <Kbd>g s</Kbd>
             </button>
           </li>
