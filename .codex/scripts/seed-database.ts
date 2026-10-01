@@ -57,7 +57,7 @@ if (!existsSync(path)) {
           const stored = findArticle.get(sourceId, String(article.id)) as { id: number };
           database.articles.updateArticleState(userId, stored.id, {
             isRead: article.isRead,
-            isStarred: article.isStarred,
+            isSaved: article.isSaved,
           });
         }
         database.feeds.updateFeed(userId, feed.id, { paused: true });

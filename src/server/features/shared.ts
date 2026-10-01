@@ -278,7 +278,7 @@ export function mapArticle(row: Row): Article {
     extractionError: row.extractionError === null ? null : String(row.extractionError),
     aiSummary: mapArticleAiSummary(row),
     isRead: toBoolean(row.isRead),
-    isStarred: toBoolean(row.isStarred),
+    isSaved: toBoolean(row.isSaved),
   };
 }
 

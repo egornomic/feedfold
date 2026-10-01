@@ -96,7 +96,7 @@ export class DemoStore {
       counts: {
         unread: this.data.articles.filter((article) => article.feedId !== null && !article.isRead)
           .length,
-        starred: this.data.articles.filter((article) => article.isStarred).length,
+        saved: this.data.articles.filter((article) => article.isSaved).length,
         all: this.data.articles.filter((article) => article.feedId !== null).length,
       },
       capabilities: {
@@ -151,11 +151,11 @@ export class DemoStore {
     return clone(this.requireArticle(id));
   }
 
-  updateArticleState(id: number, state: { isRead?: boolean; isStarred?: boolean }): Article {
+  updateArticleState(id: number, state: { isRead?: boolean; isSaved?: boolean }): Article {
     const article = this.requireArticle(id);
     if (state.isRead !== undefined) article.isRead = state.isRead;
-    if (state.isStarred !== undefined) article.isStarred = state.isStarred;
-    if (article.feedId === null && !article.isStarred) {
+    if (state.isSaved !== undefined) article.isSaved = state.isSaved;
+    if (article.feedId === null && !article.isSaved) {
       this.data.articles.splice(this.data.articles.indexOf(article), 1);
     }
     return clone(article);
@@ -312,7 +312,7 @@ export class DemoStore {
     this.data.articles.splice(
       0,
       this.data.articles.length,
-      ...this.data.articles.filter((article) => article.feedId !== id || article.isStarred),
+      ...this.data.articles.filter((article) => article.feedId !== id || article.isSaved),
     );
     for (const article of this.data.articles) {
       if (article.feedId === id) {
@@ -559,10 +559,10 @@ export class DemoStore {
     const folderIds = query.folderId === undefined ? null : this.folderBranchIds(query.folderId);
     const search = normalizeSearchText(query.search ?? "").toLocaleLowerCase();
     return this.data.articles.filter((article) => {
-      if (query.state !== "starred" && article.feedId === null) return false;
+      if (query.state !== "saved" && article.feedId === null) return false;
       if (query.state === "unread" && article.isRead) return false;
       if (query.state === "read" && !article.isRead) return false;
-      if (query.state === "starred" && !article.isStarred) return false;
+      if (query.state === "saved" && !article.isSaved) return false;
       if (query.feedId !== undefined && article.feedId !== query.feedId) return false;
       if (folderIds && (article.folderId === null || !folderIds.has(article.folderId))) {
         return false;

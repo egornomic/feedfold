@@ -247,7 +247,7 @@ export function createApiClient(runtime: ApiRuntime) {
         provider,
       ),
 
-    updateArticleState: (id: number, state: { isRead?: boolean; isStarred?: boolean }) =>
+    updateArticleState: (id: number, state: { isRead?: boolean; isSaved?: boolean }) =>
       request("updateArticleState", { id, state }, `/api/articles/${id}/state`, {
         method: "PATCH",
         body: JSON.stringify(state),

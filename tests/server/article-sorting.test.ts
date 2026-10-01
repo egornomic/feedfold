@@ -167,18 +167,18 @@ describe("folder article sorting", () => {
       const response = await request({
         method: "PATCH",
         url: `/api/articles/${articleId}/state`,
-        payload: { isStarred: true },
+        payload: { isSaved: true },
       });
       expect(response.statusCode).toBe(200);
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    expect(await articleTitles("/api/articles?state=starred")).toEqual([
+    expect(await articleTitles("/api/articles?state=saved")).toEqual([
       "News older",
       "Social older",
       "News newer",
     ]);
     const firstSavedPage = (
-      await request({ method: "GET", url: "/api/articles?state=starred&limit=2" })
+      await request({ method: "GET", url: "/api/articles?state=saved&limit=2" })
     ).json<ArticlePage>();
     expect(firstSavedPage.articles.map(({ title }) => title)).toEqual([
       "News older",
@@ -188,7 +188,7 @@ describe("folder article sorting", () => {
     const secondSavedPage = (
       await request({
         method: "GET",
-        url: `/api/articles?state=starred&limit=2&cursor=${firstSavedPage.nextCursor}`,
+        url: `/api/articles?state=saved&limit=2&cursor=${firstSavedPage.nextCursor}`,
       })
     ).json<ArticlePage>();
     expect(secondSavedPage.articles.map(({ title }) => title)).toEqual(["News newer"]);

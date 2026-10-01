@@ -61,7 +61,7 @@ function openArticleButton(container: HTMLElement, title: string): HTMLButtonEle
 function articleSavedButton(container: HTMLElement, title: string): HTMLButtonElement {
   const button = openArticleButton(container, title)
     .closest(".article-list-item")
-    ?.querySelector<HTMLButtonElement>(".list-star-button");
+    ?.querySelector<HTMLButtonElement>(".list-save-button");
   if (!button) throw new Error(`The article list did not render the Saved action for ${title}`);
   return button;
 }
@@ -351,7 +351,7 @@ describe("live article delivery", () => {
 
       await application.invoke({
         operation: "updateArticleState",
-        payload: { id: delivered?.id, state: { isStarred: true } },
+        payload: { id: delivered?.id, state: { isSaved: true } },
       });
       await act(async () => dom.window.dispatchEvent(new dom.window.Event("online")));
       await waitFor("the open read article to reflect a save from another client", () =>
@@ -379,7 +379,7 @@ describe("live article delivery", () => {
 
       await application.invoke({
         operation: "updateArticleState",
-        payload: { id: delivered?.id, state: { isStarred: false } },
+        payload: { id: delivered?.id, state: { isSaved: false } },
       });
       await act(async () => dom.window.dispatchEvent(new dom.window.Event("online")));
       await waitFor(
@@ -396,7 +396,7 @@ describe("live article delivery", () => {
       await act(async () => articleSavedButton(container, "Delivered while reading").click());
       await waitFor(
         "the local save to persist",
-        () => database.articles.getArticle(TEST_USER_ID, delivered?.id ?? 0)?.isStarred === true,
+        () => database.articles.getArticle(TEST_USER_ID, delivered?.id ?? 0)?.isSaved === true,
       );
       releaseArticleResponse();
       await waitFor(
@@ -425,7 +425,7 @@ describe("live article delivery", () => {
 
       await application.invoke({
         operation: "updateArticleState",
-        payload: { id: delivered?.id, state: { isStarred: false } },
+        payload: { id: delivered?.id, state: { isSaved: false } },
       });
       await act(async () => dom.window.dispatchEvent(new dom.window.Event("online")));
       await waitFor(
@@ -489,7 +489,7 @@ describe("live article delivery", () => {
 
       await application.invoke({
         operation: "updateArticleState",
-        payload: { id: delivered?.id, state: { isStarred: true } },
+        payload: { id: delivered?.id, state: { isSaved: true } },
       });
       const navigationButton = (label: string) => {
         const button = [...container.querySelectorAll<HTMLButtonElement>(".nav-item")].find(

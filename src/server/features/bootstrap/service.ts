@@ -23,7 +23,7 @@ export class BootstrapService {
       counts: {
         unread: feeds.reduce((count, feed) => count + feed.unreadCount, 0),
         all: feeds.reduce((count, feed) => count + feed.totalCount, 0),
-        starred: this.articles.getStarredCount(userId),
+        saved: this.articles.getSavedCount(userId),
       },
       capabilities: { manualRefresh: this.servicePolicy.manualRefresh },
     };

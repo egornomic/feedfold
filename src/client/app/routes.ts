@@ -53,13 +53,10 @@ function positiveId(segment: string | undefined): number | null {
 }
 
 function articleState(segment: string | undefined): ArticleState | null {
-  if (segment === "saved") return "starred";
-  if (segment === "unread" || segment === "all" || segment === "read") return segment;
+  if (segment === "unread" || segment === "all" || segment === "read" || segment === "saved") {
+    return segment;
+  }
   return null;
-}
-
-function articleStateSegment(state: ArticleState): string {
-  return state === "starred" ? "saved" : state;
 }
 
 function readerRoute(
@@ -154,11 +151,10 @@ export function appRoutePath(route: AppRoute): string {
   }
   if (route.kind !== "reader") return `/${route.kind}`;
 
-  const stateSegment = articleStateSegment(route.state);
   const path =
     route.scope === "all"
-      ? `/articles/${stateSegment}`
-      : `/${route.scope === "feed" ? "feeds" : "folders"}/${route.scopeId}/${stateSegment}`;
+      ? `/articles/${route.state}`
+      : `/${route.scope === "feed" ? "feeds" : "folders"}/${route.scopeId}/${route.state}`;
   const query = new URLSearchParams();
   if (route.search.trim()) query.set("q", route.search.trim());
   const queryString = query.toString();

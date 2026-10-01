@@ -410,7 +410,7 @@ describe("feed refresh and full-text extraction", () => {
 
     database.articles.updateArticleState(TEST_USER_ID, extracted.id, {
       isRead: true,
-      isStarred: true,
+      isSaved: true,
     });
     forceFullResponse = true;
     revised = true;
@@ -422,7 +422,7 @@ describe("feed refresh and full-text extraction", () => {
       title: "Extract me (corrected)",
       summary: "Corrected feed summary",
       isRead: true,
-      isStarred: true,
+      isSaved: true,
       extractionStatus: "feed",
       contentHtml: null,
     });

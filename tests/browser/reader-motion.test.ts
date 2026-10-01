@@ -146,7 +146,7 @@ describe("reader motion with touch input and the live API", () => {
       await expect.poll(title).toContain("0006");
       await settled();
       await page.keyboard.press("s");
-      await expect.poll(() => database.articles.getArticle(1, 7)?.isStarred).toBe(true);
+      await expect.poll(() => database.articles.getArticle(1, 7)?.isSaved).toBe(true);
       await page.keyboard.press("k");
       await expect.poll(title).toContain("0005");
     } finally {

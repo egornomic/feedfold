@@ -24,7 +24,7 @@ function article(id: number, contentHtml: string | null = null): Article {
     extractionError: null,
     aiSummary: null,
     isRead: false,
-    isStarred: false,
+    isSaved: false,
   };
 }
 
@@ -39,15 +39,15 @@ describe("returning from a contextual filter", () => {
     ).toEqual([1, 2, 3]);
   });
 
-  it("keeps loaded article content while using its refreshed read and star state", () => {
+  it("keeps loaded article content while using its refreshed read and saved state", () => {
     const source = article(2, "<p>Full source article</p>");
-    const refreshed = { ...article(2), isRead: true, isStarred: true };
+    const refreshed = { ...article(2), isRead: true, isSaved: true };
 
     expect(articlesWithContextReturn([refreshed], { article: source, index: 0 })[0]).toMatchObject({
       id: 2,
       contentHtml: "<p>Full source article</p>",
       isRead: true,
-      isStarred: true,
+      isSaved: true,
     });
   });
 });

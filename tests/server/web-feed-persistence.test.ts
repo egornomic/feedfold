@@ -227,7 +227,7 @@ describe("web feed persistence", () => {
       if (!first) throw new Error("Expected the first web article");
       database.articles.updateArticleState(TEST_USER_ID, first.id, {
         isRead: true,
-        isStarred: true,
+        isSaved: true,
       });
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)?.lastPostAt).toBe(
         initialArticles[0]?.publishedAt,
@@ -274,7 +274,7 @@ describe("web feed persistence", () => {
         title: "Corrected title",
         summary: "Corrected summary",
         isRead: true,
-        isStarred: true,
+        isSaved: true,
       });
       expect(
         database.articles

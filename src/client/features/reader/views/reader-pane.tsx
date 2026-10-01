@@ -120,7 +120,7 @@ export function ReaderPane({
   onPrevious,
   onNext,
   onToggleRead,
-  onToggleStar,
+  onToggleSave,
   onCopy,
   onOpenSource,
   onFeedAction,
@@ -147,7 +147,7 @@ export function ReaderPane({
   onPrevious: ArticleNavigationHandler;
   onNext: ArticleNavigationHandler;
   onToggleRead: (article: Article) => void;
-  onToggleStar: (article: Article) => void;
+  onToggleSave: (article: Article) => void;
   onCopy: (article: Article) => void;
   onOpenSource: (article: Article) => void;
   onFeedAction: (feedId: number, action: FeedManagementAction) => void;
@@ -614,7 +614,7 @@ export function ReaderPane({
             canNext={canNext}
             navigationPending={navigationPending || activeSurface.article.id !== article?.id}
             onToggleRead={onToggleRead}
-            onToggleStar={onToggleStar}
+            onToggleSave={onToggleSave}
             onCopy={onCopy}
             onOpenSource={onOpenSource}
             onToggleFullContent={onToggleFullContent}

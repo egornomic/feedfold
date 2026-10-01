@@ -102,7 +102,7 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
       expect(await page.locator(".virtual-article-row").count()).toBeLessThan(25);
       const id = Number(await active.locator("..").getAttribute("data-article-id"));
       await page.keyboard.press("s");
-      await expect.poll(() => database.articles.getArticle(1, id)?.isStarred).toBe(true);
+      await expect.poll(() => database.articles.getArticle(1, id)?.isSaved).toBe(true);
       await page.keyboard.press("u");
       await expect.poll(() => database.articles.getArticle(1, id)?.isRead).toBe(false);
       await page.keyboard.press("k");
@@ -110,7 +110,7 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
       await expect
         .poll(() =>
           page
-            .locator(".expanded-article.is-active .star-state-action")
+            .locator(".expanded-article.is-active .save-state-action")
             .getAttribute("aria-pressed"),
         )
         .toBe("true");

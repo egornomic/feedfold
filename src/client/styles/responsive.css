@@ -1023,7 +1023,7 @@
   .view-switcher button:active:not(:focus-visible),
   .theme-options button:active:not(:focus-visible),
   .list-read-button:active:not(:disabled, :focus-visible),
-  .list-star-button:active:not(:disabled, :focus-visible),
+  .list-save-button:active:not(:disabled, :focus-visible),
   .reader-back-button:active:not(:disabled, :focus-visible),
   .article-actions button:active:not(:disabled, :focus-visible),
   .article-source-trigger:active:not(:focus-visible),

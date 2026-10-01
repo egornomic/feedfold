@@ -301,7 +301,7 @@
 }
 
 .list-read-button,
-.list-star-button {
+.list-save-button {
   display: inline-flex;
   width: var(--control-size-compact);
   height: var(--control-size-compact);
@@ -326,12 +326,12 @@
   .article-list-item:hover .article-card-state-actions,
   .article-list-item:focus-within .article-card-state-actions,
   .article-list-item.is-active .article-card-state-actions,
-  .article-card-state-actions:has(.is-starred) {
+  .article-card-state-actions:has(.is-saved) {
     opacity: 1;
   }
 
   .list-read-button:hover:not(:disabled),
-  .list-star-button:hover:not(:disabled) {
+  .list-save-button:hover:not(:disabled) {
     background: var(--surface-raised);
     color: var(--text);
   }
@@ -346,7 +346,7 @@
 }
 
 .list-read-button:active:not(:disabled, :focus-visible),
-.list-star-button:active:not(:disabled, :focus-visible) {
+.list-save-button:active:not(:disabled, :focus-visible) {
   transform: scale(0.95);
 }
 
@@ -472,7 +472,7 @@
   transform: scale(0.97);
 }
 
-.list-star-button.is-starred {
+.list-save-button.is-saved {
   color: var(--warning);
 }
 

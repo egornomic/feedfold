@@ -29,7 +29,7 @@ function linkedArticle(): Article {
     extractionError: null,
     aiSummary: null,
     isRead: false,
-    isStarred: false,
+    isSaved: false,
   };
 }
 

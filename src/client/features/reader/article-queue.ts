@@ -145,7 +145,7 @@ export function useArticleQueue({
         kind: "reader",
         scope: article.feedId === null ? "all" : "feed",
         scopeId: article.feedId,
-        state: article.feedId === null ? "starred" : "all",
+        state: article.feedId === null ? "saved" : "all",
         search: "",
       };
       route.setArticleContext(surrounding, context?.articleIndex);
@@ -215,7 +215,7 @@ export function useArticleQueue({
         : matchingCandidates.map((article) => {
             const complete = current.find((item) => item.id === article.id);
             return complete && fullContentLoadedIds.current.has(article.id)
-              ? { ...complete, isRead: article.isRead, isStarred: article.isStarred }
+              ? { ...complete, isRead: article.isRead, isSaved: article.isSaved }
               : article;
           });
     next = articlesWithContextReturn(next, returnTarget);
@@ -326,7 +326,7 @@ export function useArticleQueue({
       setArticles((current) =>
         current.map((article) =>
           article.id === updated.id
-            ? { ...updated, isRead: article.isRead, isStarred: article.isStarred }
+            ? { ...updated, isRead: article.isRead, isSaved: article.isSaved }
             : article,
         ),
       );

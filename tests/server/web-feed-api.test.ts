@@ -319,7 +319,7 @@ describe("authenticated web-feed API", () => {
     const stateResponse = await request(readerCookie, {
       method: "PATCH",
       url: `/api/articles/${initialAlpha.id}/state`,
-      payload: { isRead: true, isStarred: true },
+      payload: { isRead: true, isSaved: true },
     });
     expect(stateResponse.statusCode).toBe(200);
 
@@ -348,7 +348,7 @@ describe("authenticated web-feed API", () => {
       title: "Alpha release revised",
       summary: "Alpha metadata was updated.",
       isRead: true,
-      isStarred: true,
+      isSaved: true,
     });
     expect(refreshedArticles.some(({ url }) => url === `${pageUrl}/updates/beta`)).toBe(true);
     expect(database.feeds.getFeed(1, created.id)).toMatchObject({
@@ -412,7 +412,7 @@ describe("authenticated web-feed API", () => {
     expect(repairedArticles.find(({ url }) => url === `${pageUrl}/updates/alpha`)).toMatchObject({
       id: initialAlpha.id,
       isRead: true,
-      isStarred: true,
+      isSaved: true,
     });
   }, 30_000);
 });

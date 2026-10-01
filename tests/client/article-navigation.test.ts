@@ -180,7 +180,7 @@ describe("reader navigation", () => {
           }).articles) {
             await fixture.application.invoke({
               operation: "updateArticleState",
-              payload: { id: article.id, state: { isStarred: true } },
+              payload: { id: article.id, state: { isSaved: true } },
             });
           }
         }
@@ -245,7 +245,7 @@ describe("reader navigation", () => {
         if (!selected) throw new Error("The fixture has no article");
         await fixture.application.invoke({
           operation: "updateArticleState",
-          payload: { id: selected.id, state: { isRead: true, isStarred: true } },
+          payload: { id: selected.id, state: { isRead: true, isSaved: true } },
         });
         await fixture.mount();
         const row = () =>
@@ -280,7 +280,7 @@ describe("reader navigation", () => {
           operation: "article",
           payload: { id: selected.id },
         });
-        expect(persisted.isStarred).toBe(true);
+        expect(persisted.isSaved).toBe(true);
         expect(persisted.isRead).toBe(true);
         await waitFor("the restored article", () => row()?.textContent === "Open Article 1");
       } finally {
@@ -366,7 +366,7 @@ describe("reader navigation", () => {
       );
       await waitFor(
         "persisted save",
-        () => fixture.database.bootstrap.getBootstrap(1).counts.starred === 1,
+        () => fixture.database.bootstrap.getBootstrap(1).counts.saved === 1,
       );
       await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
       await act(async () => detail.release());
@@ -380,7 +380,7 @@ describe("reader navigation", () => {
         fixture.container.querySelector('[aria-label="Remove from Saved (S)"]'),
       ).not.toBeNull();
       expect(
-        fixture.database.articles.listArticlePage(1, { state: "starred" }).articles,
+        fixture.database.articles.listArticlePage(1, { state: "saved" }).articles,
       ).toHaveLength(1);
     } finally {
       await fixture.close();
@@ -415,7 +415,7 @@ describe("reader navigation", () => {
         );
         await waitFor("persisted state change", () => {
           const counts = fixture.database.bootstrap.getBootstrap(1).counts;
-          return state === "read" ? counts.unread === 10 : counts.starred === 1;
+          return state === "read" ? counts.unread === 10 : counts.saved === 1;
         });
         await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
         await act(async () => detail.release());
@@ -423,7 +423,7 @@ describe("reader navigation", () => {
         const expectedLabel = state === "read" ? "Mark as read (U)" : "Remove from Saved (S)";
         expect(fixture.container.querySelector(`[aria-label="${expectedLabel}"]`)).not.toBeNull();
         const counts = fixture.database.bootstrap.getBootstrap(1).counts;
-        expect(state === "read" ? counts.unread : counts.starred).toBe(state === "read" ? 10 : 1);
+        expect(state === "read" ? counts.unread : counts.saved).toBe(state === "read" ? 10 : 1);
       } finally {
         await fixture.close();
       }
@@ -461,7 +461,7 @@ describe("reader navigation", () => {
       await act(async () => save.click());
       await waitFor(
         "the article to be saved",
-        () => fixture.database.articles.getArticle(1, selected.id)?.isStarred === true,
+        () => fixture.database.articles.getArticle(1, selected.id)?.isSaved === true,
       );
       await act(async () => articles.release());
       await waitFor(
