@@ -66,7 +66,10 @@ export function ArticleHeader({
             {article.media.viewCount !== null ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span>{formatViewCount(article.media.viewCount)} views</span>
+                <span>
+                  {formatViewCount(article.media.viewCount)}{" "}
+                  {article.media.viewCount === 1 ? "view" : "views"}
+                </span>
               </>
             ) : null}
           </>
