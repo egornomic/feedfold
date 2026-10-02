@@ -56,6 +56,8 @@ import "./feeds.css";
 
 type FeedsPageTab = "subscriptions" | "folders";
 
+const feedTitleSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
 function feedFaviconUrl(value: string): string {
   return new URL("/favicon.ico", value).toString();
 }
@@ -521,7 +523,9 @@ function FeedSourceIcon({
 }) {
   const faviconUrl = feedFaviconUrl(sourceUrl);
   const [failedFavicon, setFailedFavicon] = useState<string | null>(null);
-  const fallbackLabel = Array.from(feed.title.trim())[0]?.toLocaleUpperCase() ?? "•";
+  const firstGrapheme = feedTitleSegmenter.segment(feed.title.trim())[Symbol.iterator]().next()
+    .value?.segment;
+  const fallbackLabel = firstGrapheme?.toLocaleUpperCase() ?? "•";
 
   return (
     <span className="feed-source-icon">
