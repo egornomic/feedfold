@@ -160,6 +160,10 @@
   object-fit: cover;
 }
 
+img.article-card-image {
+  background: white;
+}
+
 .article-card-image-placeholder {
   display: flex;
   align-items: center;
