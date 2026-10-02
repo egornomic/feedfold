@@ -31,23 +31,41 @@ Install the Apple silicon build with Homebrew:
 brew install --cask egornomic/tap/feedfold
 ```
 
-For local development:
+For local development, use Node.js 24.18.0 and npm 12.1.0:
 
 ```sh
-npm run dev:desktop
+npm run install:profile -- desktop && npm run dev:desktop
 ```
 
 To build and open the desktop app:
 
 ```sh
-npm run build && npm run desktop
+npm run install:profile -- desktop && npm run build:desktop && npm run desktop
 ```
 
 To create distributable DMG and ZIP artifacts in `release/`:
 
 ```sh
-npm run desktop:package
+npm run install:profile -- desktop && npm run build:desktop && npm run install:profile -- packaging && npm run desktop:package
 ```
+
+Packaging consumes the built files in `dist/` and creates unsigned artifacts. macOS receives only an ad-hoc signature, which needs no signing key. Sign or deploy tested artifacts in a separate step; do not rebuild them with release credentials.
+
+### Choose a dependency installation
+
+Use Node.js 24.18.0 and npm 12.1.0. Install the pinned npm once with `npm install --global npm@12.1.0 --ignore-scripts`.
+
+| Purpose | Clean install | Available commands |
+| :--- | :--- | :--- |
+| Server and browser development, tests | `npm run install:profile -- main` | `npm run check`, `npm run dev` |
+| Server build | `npm run install:profile -- server` | `npm run build:server`, `npm start` |
+| Browser and PWA build | `npm run install:profile -- web` | `npm run build:client`, `npm run build:demo` |
+| Desktop development | `npm run install:profile -- desktop` | `npm run typecheck:desktop`, `npm run dev:desktop`, `npm run build:desktop` |
+| Desktop packaging | `npm run install:profile -- packaging` | `npm run desktop:package`, `npm run desktop:smoke:packaged` |
+
+Each installation uses a committed lockfile. The profile command links the selected dependencies at the project root; application source stays in place. Switch profiles with the same command. Server and browser installs exclude Electron tools. Desktop development includes Electron and the native rebuild tool. Packaging includes the packager and consumes files built with the desktop installation.
+
+npm blocks unreviewed dependency lifecycle scripts. The exact reviewed versions of Argon2, SQLite, and esbuild are approved in each manifest. File-watcher scripts and the Windows installer hook are denied. A new install hook makes the install fail until it is reviewed. Electron's separate runtime installer checks the checksums supplied by its pinned package. CI checks registry signatures and vulnerability advisories. Docker installs server build, browser build, and production dependencies in separate stages.
 
 Desktop data is stored at `~/Library/Application Support/feedfold/feedfold.db`. Provider API keys are encrypted using secure storage in macOS before they enter SQLite. Feed refreshes continue while the app is running; use **feedfold → Quit feedfold** or <kbd>⌘Q</kbd> to stop it completely.
 

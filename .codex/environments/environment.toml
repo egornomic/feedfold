@@ -3,7 +3,7 @@ version = 1
 name = "Feedfold"
 
 [setup]
-script = "npm ci --ignore-scripts=false"
+script = "npm install --global npm@12.1.0 --ignore-scripts && npm run install:profile -- main"
 
 [cleanup]
 script = "node .codex/scripts/dev-server.mjs stop"
