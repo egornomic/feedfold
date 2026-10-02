@@ -78,7 +78,7 @@ export function ArticleList({
               </span>
             )}
             <span className="article-list-copy">
-              <span className="article-list-title">{article.title || article.summary}</span>
+              <span className="article-list-title">{articleLabel(article)}</span>
               <span className="article-list-meta">
                 <span className="article-feed-identity">
                   <span className="feed-name truncate">{article.feedTitle}</span>
