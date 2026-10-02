@@ -150,7 +150,9 @@ export async function fetchXFeed(
         kind = response.status === 401 || response.status === 403 ? "access_blocked" : "http";
         throw new Error(`HTTP ${response.status}`);
       }
-      const source = await readFeedResponse(response);
+      const source = (await readFeedResponse(response))
+        .replaceAll("piped.video/watch?", "www.youtube.com/watch?")
+        .replaceAll("piped.video/", "youtu.be/");
       kind = "parse";
       const parsed = normalizeXFeed(
         parseAndNormalizeFeed(source, feedUrl),
