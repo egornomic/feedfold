@@ -1,4 +1,4 @@
-import type { Article } from "../../../../shared/types";
+import type { Article } from "../../../../shared/types.js";
 
 function formatRelativeDate(value: string | null): string {
   if (!value) return "No date";
@@ -24,7 +24,7 @@ export function articleDate(article: Article): string {
 }
 
 export function articleLabel(article: Article): string {
-  return article.title || article.summary || "article";
+  return article.title.trim() || article.summary.trim() || "Untitled article";
 }
 
 export function formatViewCount(value: number): string {
