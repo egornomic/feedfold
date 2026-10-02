@@ -187,7 +187,8 @@ function FeedSettingsPanel({
             {status}
           </span>
           <span>
-            <strong>{details.totalCount}</strong> articles
+            <strong>{details.totalCount}</strong>{" "}
+            {details.totalCount === 1 ? "article" : "articles"}
           </span>
           <span>
             <strong>{details.unreadCount}</strong> unread
