@@ -23,19 +23,24 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
           cache: npm
 
+      - name: Set up pinned npm
+        run: npm install --global npm@12.1.0 --ignore-scripts
+
       - name: Install dependencies
-        run: npm ci
+        run: npm run install:profile -- main
 
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: npm audit signatures && npm audit --audit-level=high
 
       - name: Check types, formatting, and builds
         run: npm run typecheck && npm run lint && npm run build && npm run build:demo
@@ -50,22 +55,27 @@ jobs:
         shard: [1, 2, 3]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
           cache: npm
 
+      - name: Set up pinned npm
+        run: npm install --global npm@12.1.0 --ignore-scripts
+
       - name: Install dependencies
-        run: npm ci
+        run: npm run install:profile -- main
 
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: npm audit signatures && npm audit --audit-level=high
 
       - name: Install Chromium
-        run: npx playwright install --with-deps --only-shell chromium
+        run: node node_modules/playwright/cli.js install --with-deps --only-shell chromium
 
       - name: Allow Chromium to create its sandbox
         run: |
@@ -81,11 +91,11 @@ jobs:
       - name: Run tests with coverage
         env:
           FEEDFOLD_COVERAGE_SHARD: "true"
-        run: npm run test:coverage -- --shard=${{ matrix.shard }}/3 --reporter=default --reporter=blob --outputFile.blob=coverage/shard-${{ matrix.shard }}.json
+        run: npm run test:coverage -- --shard=${{ matrix.shard }}/3 --maxWorkers=1 --reporter=default --reporter=blob --outputFile.blob=coverage/shard-${{ matrix.shard }}.json
 
       - name: Upload test results and coverage
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: test-results-${{ matrix.shard }}
           path: coverage/shard-${{ matrix.shard }}.json
@@ -93,19 +103,69 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  desktop:
+    name: Desktop development and unsigned packaging
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: environments/*/package-lock.json
+      - name: Set up pinned npm
+        run: npm install --global npm@12.1.0 --ignore-scripts
+      - name: Build and test desktop development installation
+        run: |
+          npm run install:profile -- desktop
+          npm audit signatures --prefix environments/desktop
+          npm audit --audit-level=high --prefix environments/desktop
+          npm run typecheck:desktop
+          npm run build:desktop
+          node scripts/smoke-packaged-desktop.mjs --development
+      - name: Create unsigned package from built source
+        run: |
+          npm run install:profile -- packaging
+          npm audit signatures --prefix environments/packaging
+          npm audit --audit-level=high --prefix environments/packaging
+          npm run desktop:package
+          npm run desktop:smoke:packaged
+          cd release
+          shasum -a 256 ./*.dmg ./*.zip > SHA256SUMS
+      - name: Upload tested unsigned desktop artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: unsigned-desktop
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
   image:
     name: Build production image
+    outputs:
+      checksum: ${{ steps.identity.outputs.checksum }}
+      image-id: ${{ steps.identity.outputs.image-id }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build production image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           load: true
@@ -121,11 +181,18 @@ jobs:
           curl --fail --retry 10 --retry-all-errors --retry-delay 1 http://127.0.0.1:3000/health
           docker exec feedfold-smoke node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto("http://127.0.0.1:3000/"); if (await page.title() !== "feedfold") throw new Error("The reader did not load"); await browser.close();'
 
-      - name: Export production image
-        run: docker save "feedfold:$GITHUB_SHA" | gzip -1 > "$RUNNER_TEMP/feedfold-image.tar.gz"
+      - name: Audit installed image dependencies
+        run: docker run --rm --user root --entrypoint sh "feedfold:$GITHUB_SHA" -c 'node scripts/verify-dependencies.mjs server --omit-dev && npm audit signatures && npm audit --omit=dev --audit-level=high'
+
+      - name: Export production image and record identity
+        id: identity
+        run: |
+          docker save "feedfold:$GITHUB_SHA" | gzip -1 > "$RUNNER_TEMP/feedfold-image.tar.gz"
+          echo "checksum=$(sha256sum "$RUNNER_TEMP/feedfold-image.tar.gz" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          echo "image-id=$(docker image inspect --format '{{.Id}}' "feedfold:$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
 
       - name: Upload production image
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: production-image
           path: ${{ runner.temp }}/feedfold-image.tar.gz
@@ -134,7 +201,7 @@ jobs:
 
   quality:
     name: Quality
-    needs: [checks, tests, image]
+    needs: [checks, tests, image, desktop]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -144,22 +211,28 @@ jobs:
           CHECKS_RESULT: ${{ needs.checks.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
-        run: test "$CHECKS_RESULT" = success && test "$TESTS_RESULT" = success && test "$IMAGE_RESULT" = success
+          DESKTOP_RESULT: ${{ needs.desktop.result }}
+        run: test "$CHECKS_RESULT" = success && test "$TESTS_RESULT" = success && test "$IMAGE_RESULT" = success && test "$DESKTOP_RESULT" = success
 
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
           cache: npm
 
+      - name: Set up pinned npm
+        run: npm install --global npm@12.1.0 --ignore-scripts
+
       - name: Install dependencies
-        run: npm ci
+        run: npm run install:profile -- main
 
       - name: Download test results and coverage
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: test-results-*
           path: test-results
@@ -170,7 +243,7 @@ jobs:
 
       - name: Upload coverage report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
           path: coverage/
@@ -178,7 +251,7 @@ jobs:
 
   deploy:
     name: Deploy to DigitalOcean
-    needs: quality
+    needs: [quality, image]
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -190,10 +263,20 @@ jobs:
       url: https://feedfold.com/
     steps:
       - name: Download verified production image
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: production-image
           path: ${{ runner.temp }}
+
+      - name: Verify artifact bytes and tested image identity
+        env:
+          EXPECTED_CHECKSUM: ${{ needs.image.outputs.checksum }}
+          EXPECTED_IMAGE_ID: ${{ needs.image.outputs.image-id }}
+        run: |
+          echo "$EXPECTED_CHECKSUM  $RUNNER_TEMP/feedfold-image.tar.gz" | sha256sum --check --strict
+          gzip -dc "$RUNNER_TEMP/feedfold-image.tar.gz" | docker load
+          test "$(docker image inspect --format '{{.Id}}' "feedfold:$GITHUB_SHA")" = "$EXPECTED_IMAGE_ID"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "feedfold:$GITHUB_SHA")" = "$GITHUB_SHA"
 
       - name: Install deployment SSH credentials
         env:

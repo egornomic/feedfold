@@ -9,6 +9,8 @@
       "!coverage",
       "!test-results",
       "!node_modules",
+      "!**/node_modules",
+      "!**/.npm-cache",
       "!.codex/runtime"
     ]
   },

@@ -1,5 +1,5 @@
-import { readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, realpath, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { run } from "./run-command.mjs";
 
 function sqliteBinary(projectPath) {
@@ -28,12 +28,12 @@ export async function rebuildSqliteForElectron(projectPath) {
     [
       "--force",
       "--build-from-source",
-      "--which-module",
+      "--only",
       "better-sqlite3",
       "--version",
       electronPackage.version,
     ],
-    { cwd: projectPath, env: { ...process.env, npm_config_ignore_scripts: "false" } },
+    { cwd: projectPath },
   );
 }
 
@@ -43,7 +43,6 @@ export async function rebuildSqliteForNode(projectPath) {
   await rm(sqliteBinary(projectPath), { force: true });
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   await run(npm, ["rebuild", "better-sqlite3"], {
-    cwd: projectPath,
-    env: { ...process.env, npm_config_ignore_scripts: "false" },
+    cwd: dirname(await realpath(join(projectPath, "node_modules"))),
   });
 }

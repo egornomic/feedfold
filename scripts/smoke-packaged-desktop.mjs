@@ -4,15 +4,18 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const application = join(
-  process.cwd(),
-  "release",
-  `mac-${process.arch}`,
-  "feedfold.app",
-  "Contents",
-  "MacOS",
-  "feedfold",
-);
+const development = process.argv.includes("--development");
+const application = development
+  ? process.execPath
+  : join(
+      process.cwd(),
+      "release",
+      `mac-${process.arch}`,
+      "feedfold.app",
+      "Contents",
+      "MacOS",
+      "feedfold",
+    );
 const smokeDirectory = await mkdtemp(join(tmpdir(), "feedfold-packaged-smoke-"));
 const userData = join(smokeDirectory, "feedfold");
 await mkdir(userData);
@@ -51,7 +54,7 @@ async function runPackagedApp(userDataPath) {
       FEEDFOLD_DESKTOP_SMOKE_WEB_FEED_URL: `http://127.0.0.1:${address.port}/`,
       FEEDFOLD_DESKTOP_USER_DATA: userDataPath,
     };
-    const child = spawn(application, [], {
+    const child = spawn(application, development ? ["scripts/run-desktop.mjs"] : [], {
       env,
       stdio: "inherit",
     });
