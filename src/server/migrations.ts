@@ -4,6 +4,7 @@ import {
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
   DEFAULT_FACTCHECK_PROMPT,
 } from "../shared/ai-prompts.js";
+import { articleSearchText } from "../shared/article-search.js";
 import { type FeedPollIntervalMinutes, normalizeFeedPollInterval } from "../shared/types.js";
 import { xFeedUrl } from "../shared/x.js";
 import {
@@ -1784,6 +1785,33 @@ const migrations: Migration[] = [
         );
     `,
   },
+
+  {
+    sql: `
+      CREATE VIRTUAL TABLE article_search USING fts5(
+        title, author, summary, feed_text, content_text, tokenize='trigram'
+      );
+      INSERT INTO article_search(rowid, title, author, summary, feed_text, content_text)
+        SELECT id, title, author, summary, article_text(feed_content_html), article_text(content_html)
+        FROM articles;
+
+      CREATE TRIGGER articles_search_insert AFTER INSERT ON articles BEGIN
+        INSERT INTO article_search(rowid, title, author, summary, feed_text, content_text)
+          VALUES (NEW.id, NEW.title, NEW.author, NEW.summary,
+                  article_text(NEW.feed_content_html), article_text(NEW.content_html));
+      END;
+      CREATE TRIGGER articles_search_update
+      AFTER UPDATE OF title, author, summary, feed_content_html, content_html ON articles BEGIN
+        UPDATE article_search SET title = NEW.title, author = NEW.author, summary = NEW.summary,
+          feed_text = article_text(NEW.feed_content_html), content_text = article_text(NEW.content_html)
+        WHERE rowid = NEW.id;
+      END;
+      CREATE TRIGGER articles_search_delete AFTER DELETE ON articles BEGIN
+        DELETE FROM article_search WHERE rowid = OLD.id;
+      END;
+      ANALYZE;
+    `,
+  },
 ];
 
 export function migrateDatabase(
@@ -1791,6 +1819,7 @@ export function migrateDatabase(
   webFeedPollIntervalMinutes: number,
   throughVersion = migrations.length,
 ): void {
+  database.function("article_text", { deterministic: true }, articleSearchText);
   database.exec(
     "CREATE TABLE IF NOT EXISTS migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
   );

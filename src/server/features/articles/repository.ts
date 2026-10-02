@@ -1,5 +1,5 @@
 import type Sqlite from "better-sqlite3";
-import { articleSearchText, normalizeSearchText } from "../../../shared/article-search.js";
+import { normalizeSearchText } from "../../../shared/article-search.js";
 import type {
   Article,
   ArticlePage,
@@ -56,10 +56,16 @@ function initialArticles(
   };
 }
 
+// Ordinary collections contain subscriptions only. Keep detached saved articles in the saved view.
+const subscriptionArticles = `(SELECT f.user_id, fa.article_id, f.id AS feed_id,
+  f.title AS feed_title, f.folder_id, fa.is_read,
+  sa.article_id IS NOT NULL AS is_saved, sa.saved_at
+  FROM feeds f
+  JOIN feed_articles fa INDEXED BY feed_articles_read_idx ON fa.feed_id = f.id
+  LEFT JOIN saved_articles sa ON sa.user_id = f.user_id AND sa.article_id = fa.article_id)`;
+
 export class ArticleRepository {
-  constructor(private readonly sqlite: Sqlite.Database) {
-    sqlite.function("article_text", { deterministic: true }, articleSearchText);
-  }
+  constructor(private readonly sqlite: Sqlite.Database) {}
 
   getSavedCount(userId: number): number {
     return Number(
@@ -75,7 +81,7 @@ export class ArticleRepository {
     const sortAtSql = savedOrder
       ? "feed_articles.saved_at"
       : "COALESCE(articles.published_at, articles.discovered_at)";
-    const where = [savedOrder ? "feed_articles.user_id = ?" : "feeds.user_id = ?"];
+    const where = ["feed_articles.user_id = ?"];
     const values: Array<string | number> = [userId];
     if (query.feedId !== undefined) {
       where.push("feeds.id = ?");
@@ -99,15 +105,37 @@ export class ArticleRepository {
     if (query.state === "unread") queueWhere.push("feed_articles.is_read = 0");
     if (query.state === "read") queueWhere.push("feed_articles.is_read = 1");
     if (query.search) {
-      queueWhere.push(
-        `(articles.title LIKE ? ESCAPE '\\' COLLATE NOCASE
-          OR COALESCE(articles.author, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-          OR articles.summary LIKE ? ESCAPE '\\' COLLATE NOCASE
-          OR article_text(articles.feed_content_html) LIKE ? ESCAPE '\\' COLLATE NOCASE
-          OR article_text(articles.content_html) LIKE ? ESCAPE '\\' COLLATE NOCASE)`,
-      );
-      const escaped = normalizeSearchText(query.search).replace(/[\\%_]/g, "\\$&");
-      queueValues.push(...Array<string>(5).fill(`%${escaped}%`));
+      const search = normalizeSearchText(query.search);
+      const indexedSearch = search.split("\0", 1)[0] ?? "";
+      const escaped = search.replace(/[\\%_]/g, "\\$&");
+      const textMatch = `(title LIKE ? ESCAPE '\\' COLLATE NOCASE
+        OR COALESCE(author, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+        OR summary LIKE ? ESCAPE '\\' COLLATE NOCASE
+        OR feed_text LIKE ? ESCAPE '\\' COLLATE NOCASE
+        OR content_text LIKE ? ESCAPE '\\' COLLATE NOCASE)`;
+      // Trigrams find candidates; LIKE preserves SQLite case rules and literal substrings.
+      const patterns = Array<string>(5).fill(`%${escaped}%`);
+      if ([...indexedSearch].length >= 3) {
+        // Compute matches once, then reuse them for every folder and the anchor query.
+        const access = savedOrder
+          ? `EXISTS (SELECT 1 FROM saved_articles
+              WHERE user_id = ? AND article_id = article_search.rowid)`
+          : `EXISTS (SELECT 1 FROM feed_articles
+              JOIN feeds ON feeds.id = feed_articles.feed_id
+              WHERE feeds.user_id = ? AND feed_articles.article_id = article_search.rowid)`;
+        const ids = this.sqlite
+          .prepare(`SELECT rowid FROM article_search
+            WHERE article_search MATCH ? AND ${access} AND ${textMatch}`)
+          .pluck()
+          .all(`"${indexedSearch.replaceAll('"', '""')}"`, userId, ...patterns);
+        queueWhere.push("articles.id IN (SELECT value FROM json_each(?))");
+        queueValues.push(JSON.stringify(ids));
+      } else {
+        queueWhere.push(`EXISTS (
+          SELECT 1 FROM article_search WHERE rowid = articles.id AND ${textMatch}
+        )`);
+        queueValues.push(...patterns);
+      }
     }
     if (query.anchorId === undefined) {
       where.push(...queueWhere);
@@ -132,7 +160,7 @@ export class ArticleRepository {
           .prepare(
             `SELECT feeds.folder_id AS folderId,
                     COALESCE(folders.sort_direction, 'newest') AS sortDirection
-             FROM account_articles AS feed_articles
+             FROM ${savedOrder ? "account_articles" : subscriptionArticles} AS feed_articles
              JOIN articles ON articles.id = feed_articles.article_id
              JOIN feeds ON feeds.id = feed_articles.feed_id
              LEFT JOIN folders ON folders.id = feeds.folder_id
@@ -203,7 +231,7 @@ export class ArticleRepository {
                 feed_articles.is_read AS isRead,
                 feed_articles.is_saved AS isSaved,
                 ${sortAtSql} AS sortAt
-           FROM account_articles AS feed_articles
+           FROM ${savedOrder ? "account_articles" : subscriptionArticles} AS feed_articles
            JOIN articles ON articles.id = feed_articles.article_id
            LEFT JOIN feeds ON feeds.id = feed_articles.feed_id
            JOIN feed_sources ON feed_sources.id = articles.source_id
@@ -287,7 +315,7 @@ export class ArticleRepository {
                   ${bucketKeySql} AS bucketKey,
                   ${sortDirectionSql} AS sortDirection,
                   ${sortAtSql} AS sortAt
-           FROM account_articles AS feed_articles
+           FROM ${savedOrder ? "account_articles" : subscriptionArticles} AS feed_articles
            JOIN articles ON articles.id = feed_articles.article_id
            LEFT JOIN feeds ON feeds.id = feed_articles.feed_id
            LEFT JOIN folders ON folders.id = feeds.folder_id
