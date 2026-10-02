@@ -29,6 +29,7 @@ import { useInterfaceState, useReaderPreferences } from "../../app/session-state
 import { BrandIdentity } from "../../ui/brand";
 import { IconButton, Kbd } from "../../ui/controls";
 import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
+import { formatNumber } from "../../ui/number-format";
 import {
   FeedDragProvider,
   type FeedDragState,
@@ -65,7 +66,7 @@ function selectedFolderPath(
 }
 
 function ArticleCount({ count }: { count: number }) {
-  const exactCount = count.toLocaleString();
+  const exactCount = formatNumber(count);
 
   return (
     <span className="nav-count" title={exactCount}>

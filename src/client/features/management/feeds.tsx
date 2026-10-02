@@ -19,6 +19,7 @@ import type { BootstrapData, Feed, Folder } from "../../../shared/types";
 import { useInterfaceState } from "../../app/session-state";
 import { DropdownSelect } from "../../ui/dropdown";
 import { Menu, MenuPopup } from "../../ui/menu";
+import { formatNumber } from "../../ui/number-format";
 import {
   FeedDragProvider,
   type FeedDragState,
@@ -256,7 +257,7 @@ function FeedsPageContent({
           >
             <Rss aria-hidden="true" size={15} />
             Subscriptions
-            <span className="management-tab-count">{bootstrap.feeds.length}</span>
+            <span className="management-tab-count">{formatNumber(bootstrap.feeds.length)}</span>
           </button>
           <button
             id="folders-tab"
@@ -269,7 +270,7 @@ function FeedsPageContent({
           >
             <FolderIcon aria-hidden="true" size={15} />
             Folders
-            <span className="management-tab-count">{bootstrap.folders.length}</span>
+            <span className="management-tab-count">{formatNumber(bootstrap.folders.length)}</span>
           </button>
         </div>
       </div>
@@ -328,9 +329,15 @@ function FeedsPageContent({
                       ariaLabel="Feed type"
                       value={feedTypeFilter}
                       options={[
-                        { value: "all", label: `All types (${bootstrap.feeds.length})` },
-                        { value: "published", label: `Published (${publishedFeedCount})` },
-                        { value: "web", label: `Web (${webFeedCount})` },
+                        {
+                          value: "all",
+                          label: `All types (${formatNumber(bootstrap.feeds.length)})`,
+                        },
+                        {
+                          value: "published",
+                          label: `Published (${formatNumber(publishedFeedCount)})`,
+                        },
+                        { value: "web", label: `Web (${formatNumber(webFeedCount)})` },
                       ]}
                       onChange={(value) => setFeedTypeFilter(value as FeedTypeFilter)}
                     />
@@ -341,14 +348,23 @@ function FeedsPageContent({
                       ariaLabel="Feed status"
                       value={feedStatusFilter}
                       options={[
-                        { value: "all", label: `All statuses (${bootstrap.feeds.length})` },
-                        { value: "healthy", label: `Healthy (${statusCounts.healthy})` },
+                        {
+                          value: "all",
+                          label: `All statuses (${formatNumber(bootstrap.feeds.length)})`,
+                        },
+                        {
+                          value: "healthy",
+                          label: `Healthy (${formatNumber(statusCounts.healthy)})`,
+                        },
                         {
                           value: "needs_attention",
-                          label: `Needs attention (${statusCounts.needs_attention})`,
+                          label: `Needs attention (${formatNumber(statusCounts.needs_attention)})`,
                         },
-                        { value: "paused", label: `Paused (${statusCounts.paused})` },
-                        { value: "refreshing", label: `Refreshing (${statusCounts.refreshing})` },
+                        { value: "paused", label: `Paused (${formatNumber(statusCounts.paused)})` },
+                        {
+                          value: "refreshing",
+                          label: `Refreshing (${formatNumber(statusCounts.refreshing)})`,
+                        },
                       ]}
                       onChange={(value) => setFeedStatusFilter(value as FeedStatusFilter)}
                     />
@@ -370,11 +386,12 @@ function FeedsPageContent({
                 <p className="feed-result-count" aria-live="polite">
                   {filtersActive ? (
                     <>
-                      <strong>{filteredFeeds.length}</strong> of {bootstrap.feeds.length}
+                      <strong>{formatNumber(filteredFeeds.length)}</strong> of{" "}
+                      {formatNumber(bootstrap.feeds.length)}
                     </>
                   ) : (
                     <>
-                      <strong>{bootstrap.feeds.length}</strong>{" "}
+                      <strong>{formatNumber(bootstrap.feeds.length)}</strong>{" "}
                       {bootstrap.feeds.length === 1 ? "feed" : "feeds"}
                     </>
                   )}
@@ -440,8 +457,9 @@ function FeedsPageContent({
               <p>Expand folders to see feeds, then drag a feed onto another folder.</p>
             </div>
             <span>
-              {bootstrap.folders.length} {bootstrap.folders.length === 1 ? "folder" : "folders"}
-              {` · ${bootstrap.feeds.length} ${bootstrap.feeds.length === 1 ? "feed" : "feeds"}`}
+              {formatNumber(bootstrap.folders.length)}{" "}
+              {bootstrap.folders.length === 1 ? "folder" : "folders"}
+              {` · ${formatNumber(bootstrap.feeds.length)} ${bootstrap.feeds.length === 1 ? "feed" : "feeds"}`}
             </span>
           </div>
           {bootstrap.folders.length === 0 && bootstrap.feeds.length === 0 ? (
@@ -790,7 +808,7 @@ function FolderBranch({
           <span>
             <strong>{folder?.name ?? "Top level"}</strong>
             <small>
-              {feedCount} {feedCount === 1 ? "feed" : "feeds"}
+              {formatNumber(feedCount)} {feedCount === 1 ? "feed" : "feeds"}
               {folder
                 ? ` · ${folder.sortDirection === "oldest" ? "Oldest" : "Newest"} first`
                 : " · No folder"}
