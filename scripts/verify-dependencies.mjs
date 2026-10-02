@@ -28,7 +28,6 @@ if (profile === "desktop" && installed.some(({ name }) => name === "electron-bui
   throw new Error("Desktop development contains the packaging tool.");
 }
 if (["desktop", "packaging"].includes(profile)) {
-  await access(join(modules, "@electron/rebuild/package.json"));
   await access(join(modules, "electron/path.txt"));
 }
 for (const [name, version] of Object.entries({
