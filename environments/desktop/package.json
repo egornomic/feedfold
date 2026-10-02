@@ -10,7 +10,7 @@
   "packageManager": "npm@12.1.0",
   "allowScripts": {
     "argon2@0.45.1": true,
-    "better-sqlite3@12.11.1": true,
+    "better-sqlite3@13.0.3": false,
     "esbuild@0.28.1": true,
     "fsevents": false
   },
@@ -19,7 +19,7 @@
     "@mozilla/readability": "0.6.0",
     "@simplewebauthn/server": "13.3.2",
     "argon2": "0.45.1",
-    "better-sqlite3": "12.11.1",
+    "better-sqlite3": "13.0.3",
     "fastify": "5.12.5",
     "feedsmith": "2.9.6",
     "htmlparser2": "10.1.0",
@@ -63,8 +63,7 @@
     "@types/sanitize-html": "2.16.1",
     "tsx": "4.23.1",
     "concurrently": "9.2.4",
-    "electron": "43.7.4",
-    "@electron/rebuild": "4.2.0"
+    "electron": "43.7.4"
   },
   "overrides": {
     "brace-expansion@<1.1.21": "1.1.21",
