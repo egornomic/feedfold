@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { App } from "../client/app/app";
 import { selectDataMode, selectedDataMode } from "./stress-api";
 import type { DataMode } from "./worst-case";
@@ -14,6 +14,16 @@ const OPTIONS: Array<{ value: DataMode; label: string }> = [
 
 export function StressApp() {
   const [mode, setMode] = useState(selectedDataMode);
+  useEffect(() => {
+    const restore = () => {
+      const next = selectedDataMode();
+      if (next === mode) return;
+      selectDataMode(next);
+      setMode(next);
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [mode]);
   if (!mode) return <App />;
   return (
     <>

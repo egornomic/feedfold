@@ -41,9 +41,10 @@ function fixtureApi(mode: DataMode) {
 const initialMode = selectedDataMode();
 export let api = initialMode ? fixtureApi(initialMode) : liveApi;
 
-export function selectDataMode(mode: DataMode): void {
-  api = fixtureApi(mode);
+export function selectDataMode(mode: DataMode | null): void {
+  api = mode ? fixtureApi(mode) : liveApi;
   const url = new URL(window.location.href);
-  url.searchParams.set("data", mode);
+  if (mode) url.searchParams.set("data", mode);
+  else url.searchParams.delete("data");
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
 }
