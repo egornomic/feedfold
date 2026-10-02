@@ -91,7 +91,7 @@ jobs:
       - name: Run tests with coverage
         env:
           FEEDFOLD_COVERAGE_SHARD: "true"
-        run: npm run test:coverage -- --shard=${{ matrix.shard }}/3 --reporter=default --reporter=blob --outputFile.blob=coverage/shard-${{ matrix.shard }}.json
+        run: npm run test:coverage -- --shard=${{ matrix.shard }}/3 --maxWorkers=1 --reporter=default --reporter=blob --outputFile.blob=coverage/shard-${{ matrix.shard }}.json
 
       - name: Upload test results and coverage
         if: ${{ !cancelled() }}
