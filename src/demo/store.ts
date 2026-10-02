@@ -55,8 +55,8 @@ function accountManagementUnavailable(): never {
 export class DemoStore {
   private readonly data: DemoData;
 
-  constructor(now = new Date()) {
-    this.data = createDemoData(now);
+  constructor(now = new Date(), data = createDemoData(now)) {
+    this.data = data;
   }
 
   session(): SessionUser {
