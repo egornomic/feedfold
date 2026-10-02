@@ -1,4 +1,4 @@
-import { type CSSProperties, StrictMode } from "react";
+import { type CSSProperties, lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 import "@fontsource-variable/ibm-plex-sans/wght.css";
@@ -17,6 +17,9 @@ import "./ui/overlays.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("The feedfold root element is missing.");
+const Application = import.meta.env.DEV
+  ? lazy(() => import("../demo/stress-app").then(({ StressApp }) => ({ default: StressApp })))
+  : App;
 
 const POINTER_MOVE_THRESHOLD = 4;
 const TOASTER_OFFSET = {
@@ -82,7 +85,9 @@ window.addEventListener(
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <Suspense fallback={null}>
+      <Application />
+    </Suspense>
     {isDesktopApp() ? null : <PwaUpdate />}
     <Toaster
       theme="system"

@@ -1,0 +1,43 @@
+.stress-data-switch {
+  position: fixed;
+  z-index: 10000;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  left: 50%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 3px;
+  margin: 0;
+  border: 1px solid #aaa;
+  border-radius: 8px;
+  background: #ddd;
+  color: #222;
+  font:
+    10px / 1.4 system-ui,
+    sans-serif;
+  transform: translateX(-50%);
+}
+
+.stress-data-switch button {
+  min-width: 0;
+  min-height: 0;
+  padding: 5px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stress-data-switch button[aria-pressed="true"] {
+  background: white;
+  box-shadow: 0 1px 3px #0002;
+}
+
+.stress-data-switch button:focus-visible {
+  outline: 2px solid #333;
+  outline-offset: -1px;
+}

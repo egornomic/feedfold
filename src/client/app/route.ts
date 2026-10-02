@@ -22,6 +22,16 @@ function historyState(): AppHistoryState {
   return (window.history.state ?? {}) as AppHistoryState;
 }
 
+function routeUrl(route: AppRoute, basePath: string): string {
+  const path = appRouteUrl(route, basePath);
+  if (!import.meta.env.DEV) return path;
+  const data = new URLSearchParams(window.location.search).get("data");
+  if (!data) return path;
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set("data", data);
+  return `${url.pathname}${url.search}`;
+}
+
 function readerRouteFromReturnPath(path: string | undefined, basePath: string): ReaderRoute | null {
   if (!path) return null;
   const base = basePath.replace(/\/$/, "");
@@ -92,7 +102,7 @@ export function useAppRoute(basePath: string): AppRouteController {
 
   const navigate = useCallback(
     (nextRoute: AppRoute, historyMode: "push" | "replace" = "push", articleIndex?: number) => {
-      const url = appRouteUrl(nextRoute, basePath);
+      const url = routeUrl(nextRoute, basePath);
       const currentUrl = `${window.location.pathname}${window.location.search}`;
       const previousState = historyState();
       if (currentUrl === url) {
@@ -120,7 +130,7 @@ export function useAppRoute(basePath: string): AppRouteController {
 
   useEffect(() => {
     const parsed = parseAppRoute(window.location.pathname, window.location.search, basePath);
-    const url = new URL(appRouteUrl(parsed, basePath), window.location.origin);
+    const url = new URL(routeUrl(parsed, basePath), window.location.origin);
     if (parsed.kind === "settings" && parsed.category === "feeds") {
       const result = new URLSearchParams(window.location.search).get("youtube");
       if (result === "connected" || result === "cancelled" || result === "failed") {

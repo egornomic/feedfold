@@ -15,6 +15,8 @@ const appBasePattern = appBasePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const apiPathPattern = `${appBasePattern}/(?:api|health)(?:/|$)`;
 const stripBasePath = (path: string) => path.slice(appBasePath.length) || "/";
 const demoApiPath = fileURLToPath(new URL("./src/demo/api.ts", import.meta.url));
+const stressApiPath = fileURLToPath(new URL("./src/demo/stress-api.ts", import.meta.url));
+const stressHttpPath = fileURLToPath(new URL("./src/demo/stress-http.ts", import.meta.url));
 const demoSocialImagePath = fileURLToPath(new URL("./src/demo/assets/og.png", import.meta.url));
 
 function legalPages(server: ViteDevServer | PreviewServer): void {
@@ -70,17 +72,26 @@ function staticDemoPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base: appBaseUrl,
   resolve: {
-    alias: demoMode
-      ? [
-          {
-            find: /^(?:\.\/|(?:\.\.\/)+)api\/api(?:\.js)?$/,
-            replacement: demoApiPath,
-          },
-        ]
-      : [],
+    alias:
+      demoMode || command === "serve"
+        ? [
+            {
+              find: /^(?:\.\/|(?:\.\.\/)+)api\/api(?:\.js)?$/,
+              replacement: command === "serve" ? stressApiPath : demoApiPath,
+            },
+            ...(command === "serve"
+              ? [
+                  {
+                    find: /^(?:(?:\.\.\/)+api\/|\.\/)http-request(?:\.js)?$/,
+                    replacement: stressHttpPath,
+                  },
+                ]
+              : []),
+          ]
+        : [],
   },
   plugins: [
     {
@@ -181,4 +192,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
