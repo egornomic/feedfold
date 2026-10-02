@@ -254,6 +254,7 @@
 .article-list-title {
   display: -webkit-box;
   overflow: hidden;
+  overflow-wrap: anywhere;
   margin-bottom: 8px;
   color: var(--text);
   font: var(--weight-semibold) var(--type-story-list-display) / 1.12 var(--font-reading);
