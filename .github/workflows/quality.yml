@@ -89,6 +89,7 @@ jobs:
         with:
           name: test-results-${{ matrix.shard }}
           path: coverage/shard-${{ matrix.shard }}.json
+          overwrite: true
           if-no-files-found: error
           retention-days: 1
 
