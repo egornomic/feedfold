@@ -4,6 +4,7 @@ import type { BootstrapData, Rule, RuleCondition } from "../../../shared/types";
 import { errorMessage } from "../../api/api";
 import { useDelayedPending } from "../../ui/loading";
 import { useMotionPresence } from "../../ui/motion";
+import { formatNumber } from "../../ui/number-format";
 import type { ReaderDataMutations } from "../reader/reader-data";
 import { RuleForm } from "../rules/rule-form";
 import type { RuleFormDraft } from "../rules/rule-form-types";
@@ -128,7 +129,7 @@ function RulesPage({
           </div>
           {rules !== null ? (
             <span className="rules-count">
-              {rules.filter((rule) => rule.enabled).length} active
+              {formatNumber(rules.filter((rule) => rule.enabled).length)} active
             </span>
           ) : null}
         </div>
@@ -291,7 +292,9 @@ function RuleRow({
               {RULE_FIELD_LABELS[firstCondition.field]}: {firstCondition.pattern}
             </code>
             {rule.conditions.length > 1 ? (
-              <span className="rule-condition-count">+{rule.conditions.length - 1}</span>
+              <span className="rule-condition-count">
+                +{formatNumber(rule.conditions.length - 1)}
+              </span>
             ) : null}
           </span>
         </span>
@@ -303,7 +306,7 @@ function RuleRow({
         </span>
       </td>
       <td data-label="Matched">
-        <span className="numeric-cell">{rule.matchedCount}</span>
+        <span className="numeric-cell">{formatNumber(rule.matchedCount)}</span>
       </td>
       <td className="row-actions">
         <button

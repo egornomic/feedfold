@@ -33,6 +33,7 @@ import { api, errorMessage } from "../../api/api";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import { Modal, useDialog } from "../../ui/dialog";
 import { DropdownSelect } from "../../ui/dropdown";
+import { formatNumber } from "../../ui/number-format";
 import type { ManagementRequest } from "../feeds/feed-management";
 import { folderPathLabel } from "../feeds/folder-hierarchy";
 import type { ReaderDataMutations } from "../reader/reader-data";
@@ -187,11 +188,11 @@ function FeedSettingsPanel({
             {status}
           </span>
           <span>
-            <strong>{details.totalCount}</strong>{" "}
+            <strong>{formatNumber(details.totalCount)}</strong>{" "}
             {details.totalCount === 1 ? "article" : "articles"}
           </span>
           <span>
-            <strong>{details.unreadCount}</strong> unread
+            <strong>{formatNumber(details.unreadCount)}</strong> unread
           </span>
         </div>
 
@@ -245,7 +246,11 @@ function FeedSettingsPanel({
           {details.sourceKind === "web" ? (
             <div>
               <dt>Entries found on last success</dt>
-              <dd>{details.lastMatchCount ?? "No successful refresh yet"}</dd>
+              <dd>
+                {details.lastMatchCount === null
+                  ? "No successful refresh yet"
+                  : formatNumber(details.lastMatchCount)}
+              </dd>
             </div>
           ) : null}
         </dl>

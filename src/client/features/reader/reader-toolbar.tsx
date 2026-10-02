@@ -18,6 +18,7 @@ import { useInterfaceState } from "../../app/session-state";
 import { IconButton } from "../../ui/controls";
 import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
 import { useMotionPresence } from "../../ui/motion";
+import { formatNumber } from "../../ui/number-format";
 
 interface ReaderToolbarProps {
   title: string;
@@ -120,7 +121,7 @@ export function ReaderToolbar({
               aria-pressed={articleState === "unread"}
               onClick={() => onArticleStateChange("unread")}
             >
-              {unreadCount} Unread
+              {formatNumber(unreadCount)} Unread
             </button>
             <button
               type="button"
@@ -310,7 +311,9 @@ function ReaderOptionsMenu({
                 nativeButton
                 closeOnClick
               >
-                <span>{state === "unread" ? `${unreadCount} Unread` : "All articles"}</span>
+                <span>
+                  {state === "unread" ? `${formatNumber(unreadCount)} Unread` : "All articles"}
+                </span>
                 <Menu.RadioItemIndicator>
                   <Check aria-hidden="true" size={15} />
                 </Menu.RadioItemIndicator>
