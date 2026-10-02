@@ -1,4 +1,5 @@
 import { CheckCircle2, Circle, Star } from "lucide-react";
+import { useState } from "react";
 import type { Article } from "../../../../shared/types";
 import { shouldShowArticleDescription } from "../article/article-content";
 import { articleDate, articleLabel, mediaTypeLabel } from "../article/article-format";
@@ -6,6 +7,28 @@ import { articleThumbnailUrl } from "../article/article-image-url";
 import { ArticleThumbnailPlaceholder } from "../article/article-thumbnail-placeholder";
 import { LinkifiedText } from "../article/linkified-text";
 import { VirtualArticles } from "./virtual-articles";
+
+function ArticleListThumbnail({ imageUrl }: { imageUrl: string | null }) {
+  const [failed, setFailed] = useState(false);
+
+  if (imageUrl && !failed) {
+    return (
+      <img
+        className="article-card-image"
+        src={articleThumbnailUrl(imageUrl)}
+        alt=""
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span className="article-card-image article-card-image-placeholder" aria-hidden="true">
+      <ArticleThumbnailPlaceholder />
+    </span>
+  );
+}
 
 export function ArticleList({
   enabled,
@@ -62,21 +85,7 @@ export function ArticleList({
             <span className="sr-only">Open {articleLabel(article)}</span>
           </button>
           <div className="article-card-content">
-            {article.imageUrl ? (
-              <img
-                className="article-card-image"
-                src={articleThumbnailUrl(article.imageUrl)}
-                alt=""
-                loading="lazy"
-              />
-            ) : (
-              <span
-                className="article-card-image article-card-image-placeholder"
-                aria-hidden="true"
-              >
-                <ArticleThumbnailPlaceholder />
-              </span>
-            )}
+            <ArticleListThumbnail key={article.imageUrl} imageUrl={article.imageUrl} />
             <span className="article-list-copy">
               <span className="article-list-title">{articleLabel(article)}</span>
               <span className="article-list-meta">
