@@ -165,6 +165,7 @@ export default defineConfig(({ command }) => ({
         navigateFallback: appUrl("/index.html"),
         navigateFallbackDenylist: [
           new RegExp(`^${appBasePattern}/\\.well-known/security\\.txt(?:\\?|$)`),
+          /^\/robots\.txt$/,
           new RegExp(`^${appBasePattern}/(?:privacy|terms)(?:/|$)`),
           new RegExp(`^${apiPathPattern}`),
           ...(!demoMode ? [/^\/demo(?:\/|$)/] : []),

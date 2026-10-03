@@ -11,7 +11,7 @@ import { FeedRefreshService } from "../../src/server/features/refresh/service.js
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
-describe("production app hosting", () => {
+describe.each([undefined, "https://feedfold.com"])("app hosting (%s)", (publicOrigin) => {
   const securityContact =
     "Contact: https://example.test/private-report\nExpires: 2027-01-01T00:00:00Z\n";
   let directory: string;
@@ -26,10 +26,13 @@ describe("production app hosting", () => {
     const demoDirectory = join(directory, "demo");
     await mkdir(join(staticDirectory, "assets"), { recursive: true });
     await mkdir(join(staticDirectory, ".well-known"));
+    await mkdir(join(staticDirectory, "legal"));
     await mkdir(join(demoDirectory, "assets"), { recursive: true });
     await Promise.all([
       writeFile(join(staticDirectory, "index.html"), "<main>feedfold shell</main>"),
       writeFile(join(staticDirectory, ".well-known", "security.txt"), securityContact),
+      writeFile(join(staticDirectory, "legal", "privacy.html"), "<main>privacy page</main>"),
+      writeFile(join(staticDirectory, "legal", "terms.html"), "<main>terms page</main>"),
       writeFile(join(staticDirectory, "assets", "app.css"), "body { color: green; }"),
       writeFile(join(staticDirectory, "assets", "app-aB12_3-4.js"), "export default 1;"),
       writeFile(join(staticDirectory, "sw.js"), "self.addEventListener('fetch', () => {});"),
@@ -56,6 +59,7 @@ describe("production app hosting", () => {
       authService,
       staticDir: staticDirectory,
       demoDir: demoDirectory,
+      ...(publicOrigin ? { publicOrigin } : {}),
     });
   });
 
@@ -65,6 +69,33 @@ describe("production app hosting", () => {
     database.close();
     await rm(directory, { recursive: true, force: true });
   });
+
+  it("serves crawler rules and the configured sitemap location", async () => {
+    for (const method of ["GET", "HEAD"] as const) {
+      const robots = await app.inject({ method, url: "/robots.txt" });
+      expect(robots.statusCode).toBe(200);
+      expect(robots.headers["content-type"]).toContain("text/plain");
+      expect(robots.headers["cache-control"]).toBe("no-cache");
+      if (method === "GET") {
+        expect(robots.body).toBe(
+          `User-agent: *\nAllow: /\n${publicOrigin ? `Sitemap: ${publicOrigin}/sitemap.xml\n` : ""}`,
+        );
+      } else {
+        expect(robots.body).toBe("");
+      }
+    }
+  });
+
+  it.each(["/", "/index.html", "/privacy", "/terms", "/demo/", "/demo/index.html"])(
+    "keeps the public page %s discoverable",
+    async (url) => {
+      for (const method of ["GET", "HEAD"] as const) {
+        const page = await app.inject({ method, url });
+        expect(page.statusCode).toBe(200);
+        expect(page.headers["x-robots-tag"]).toBeUndefined();
+      }
+    },
+  );
 
   it("serves navigation, assets, and APIs from the application root", async () => {
     const navigation = await app.inject({ method: "GET", url: "/articles/all" });
@@ -85,6 +116,7 @@ describe("production app hosting", () => {
     expect(asset.headers["content-type"]).toContain("text/css");
     expect(asset.body).toBe("body { color: green; }");
     expect(asset.headers["cache-control"]).toBe("public, max-age=0");
+    expect(asset.headers["x-robots-tag"]).toBeUndefined();
 
     const demoRedirect = await app.inject({ method: "GET", url: "/demo" });
     expect(demoRedirect.statusCode).toBe(308);
@@ -155,12 +187,15 @@ describe("production app hosting", () => {
         expect(response.headers["content-type"]).toContain("text/html");
         expect(response.headers["cache-control"]).toBe("no-cache");
         expect(response.body).toBe(shell);
+        expect(response.headers["x-robots-tag"]).toBe(path === "/" ? undefined : "noindex");
+        const head = await app.inject({ method: "HEAD", url });
+        expect(head.statusCode).toBe(200);
+        expect(head.headers["x-robots-tag"]).toBe(path === "/" ? undefined : "noindex");
       }
     },
   );
 
   it.each([
-    "/robots.txt",
     "/.well-known/missing.txt",
     "/sitemap.xml",
     "/assets/essential-audit-missing.js",
@@ -201,6 +236,7 @@ describe("production app hosting", () => {
     expect(head.statusCode).toBe(200);
     expect(head.headers["content-type"]).toContain("text/html");
     expect(head.body).toBe("");
+    expect(head.headers["x-robots-tag"]).toBe("noindex");
     for (const method of ["POST", "PUT", "DELETE", "OPTIONS"] as const) {
       const response = await app.inject({ method, url: "/articles/unread" });
       expect(response.statusCode).toBe(404);
