@@ -6,7 +6,11 @@ import { FeedRefreshService } from "../../src/server/features/refresh/service.js
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
-export async function createTestApp(database: AppDatabase, authService: AuthService) {
+export async function createTestApp(
+  database: AppDatabase,
+  authService: AuthService,
+  staticDir?: string,
+) {
   const extraction = new ExtractionQueue(database.extractions, 1, 1_000);
   const refresh = new FeedRefreshService(
     database.feeds,
@@ -21,6 +25,7 @@ export async function createTestApp(database: AppDatabase, authService: AuthServ
       refreshService: refresh,
     }),
     authService,
+    ...(staticDir ? { staticDir } : {}),
   });
 
   return {
