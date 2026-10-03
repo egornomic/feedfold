@@ -30,20 +30,25 @@ COPY environments/server/package.json environments/server/package-lock.json ./
 COPY scripts/verify-dependencies.mjs ./scripts/
 RUN npm ci --omit=dev && node scripts/verify-dependencies.mjs server --omit-dev
 
-FROM toolchain AS runtime
+FROM toolchain AS browser-runtime
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# Keep browser downloads independent of application dependencies and source changes.
+RUN npm install --prefix /opt/browser --ignore-scripts --no-package-lock playwright@1.62.0 \
+    && node /opt/browser/node_modules/playwright/cli.js install --with-deps --only-shell chromium \
+    && rm -rf /opt/browser /var/lib/apt/lists/* \
+    && chown -R node:node /ms-playwright
+
+FROM browser-runtime AS runtime
 ARG FEEDFOLD_BASE_PATH=/
 ENV NODE_ENV=production \
     FEEDFOLD_BASE_PATH=$FEEDFOLD_BASE_PATH \
     HOST=0.0.0.0 \
     PORT=3000 \
-    DATABASE_PATH=/data/feedfold.db \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    DATABASE_PATH=/data/feedfold.db
 COPY --from=production-dependencies --chown=node:node /app/package.json /app/package-lock.json /app/.npmrc ./
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=production-dependencies --chown=node:node /app/scripts ./scripts
-RUN node node_modules/playwright/cli.js install --with-deps --only-shell chromium \
-    && mkdir -p /data \
-    && chown -R node:node /data /ms-playwright
+RUN mkdir -p /data && chown node:node /data
 COPY --from=web --chown=node:node /app/dist/client ./dist/client
 COPY --from=web --chown=node:node /app/dist/demo ./dist/demo
 COPY --from=server --chown=node:node /app/dist/server ./dist/server

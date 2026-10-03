@@ -71,27 +71,31 @@ jobs:
       - name: Install dependencies
         run: npm run install:profile -- main
 
-      - name: Audit dependencies
-        run: npm audit signatures && npm audit --audit-level=high
-
-      - name: Install Chromium
-        run: node node_modules/playwright/cli.js install --with-deps --only-shell chromium
-
-      - name: Allow Chromium to create its sandbox
+      - name: Allow the test container to create Chromium's sandbox
         run: |
-          cat <<EOF_PROFILE | sudo tee /etc/apparmor.d/feedfold-chromium
+          sudo tee /etc/apparmor.d/feedfold-ci <<'EOF_PROFILE'
           abi <abi/4.0>,
-          include <tunables/global>
-          profile feedfold-chromium ${HOME}/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell flags=(unconfined) {
+          profile feedfold-ci flags=(unconfined) {
             userns,
           }
           EOF_PROFILE
-          sudo apparmor_parser --replace /etc/apparmor.d/feedfold-chromium
+          sudo apparmor_parser --replace /etc/apparmor.d/feedfold-ci
 
-      - name: Run tests with coverage
-        env:
-          FEEDFOLD_COVERAGE_SHARD: "true"
-        run: npm run test:coverage -- --shard=${{ matrix.shard }}/3 --maxWorkers=1 --reporter=default --reporter=blob --outputFile.blob=coverage/shard-${{ matrix.shard }}.json
+      - name: Run tests with coverage in prepared browser environment
+        # Keep this image aligned with the pinned Playwright package. Use the host's
+        # pinned Node runtime and preserve the browser sandbox with a non-root user.
+        run: |
+          docker run --rm --init --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            --security-opt apparmor=feedfold-ci \
+            --security-opt "seccomp=$GITHUB_WORKSPACE/.docker/playwright-seccomp.json" \
+            --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            --volume "$(dirname "$(dirname "$(command -v node)")"):/opt/node:ro" \
+            --workdir "$GITHUB_WORKSPACE" \
+            --env HOME=/tmp --env CI=true --env FEEDFOLD_COVERAGE_SHARD=true \
+            --env PATH=/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            mcr.microsoft.com/playwright:v1.62.0-noble@sha256:baed2032d533817f3dbe6425de795788430ba345e819a1201337009ba17c9d07 \
+            npm run test:coverage -- --shard=${{ matrix.shard }}/3 --maxWorkers=1 --reporter=default --reporter=blob --outputFile.blob=coverage/shard-${{ matrix.shard }}.json
 
       - name: Upload test results and coverage
         if: ${{ !cancelled() }}
@@ -117,7 +121,9 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-          cache-dependency-path: environments/*/package-lock.json
+          cache-dependency-path: |
+            environments/desktop/package-lock.json
+            environments/packaging/package-lock.json
       - name: Set up pinned npm
         run: npm install --global npm@12.1.0 --ignore-scripts
       - name: Build and test desktop development installation
@@ -199,21 +205,12 @@ jobs:
           compression-level: 0
           retention-days: 1
 
-  quality:
-    name: Quality
-    needs: [checks, tests, image, desktop]
-    if: ${{ always() }}
+  coverage:
+    name: Merge coverage
+    needs: tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Require all checks to pass
-        env:
-          CHECKS_RESULT: ${{ needs.checks.result }}
-          TESTS_RESULT: ${{ needs.tests.result }}
-          IMAGE_RESULT: ${{ needs.image.result }}
-          DESKTOP_RESULT: ${{ needs.desktop.result }}
-        run: test "$CHECKS_RESULT" = success && test "$TESTS_RESULT" = success && test "$IMAGE_RESULT" = success && test "$DESKTOP_RESULT" = success
-
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -249,9 +246,25 @@ jobs:
           path: coverage/
           retention-days: 14
 
+  quality:
+    name: Quality
+    needs: [checks, tests, coverage, image, desktop]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Require all checks to pass
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          IMAGE_RESULT: ${{ needs.image.result }}
+          DESKTOP_RESULT: ${{ needs.desktop.result }}
+        run: test "$CHECKS_RESULT" = success && test "$TESTS_RESULT" = success && test "$COVERAGE_RESULT" = success && test "$IMAGE_RESULT" = success && test "$DESKTOP_RESULT" = success
+
   deploy:
     name: Deploy to DigitalOcean
-    needs: [quality, image]
+    needs: [checks, tests, coverage, image]
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 20

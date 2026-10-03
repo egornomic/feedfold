@@ -3,7 +3,16 @@ version = 1
 name = "Feedfold"
 
 [setup]
-script = "npm install --global npm@12.1.0 --ignore-scripts && npm run install:profile -- main"
+script = """
+eval "$(fnm env --shell bash)"
+fnm install "$(cat .node-version)"
+fnm use "$(cat .node-version)"
+if [ "$(npm --version)" != "12.1.0" ]; then
+  npm install --global npm@12.1.0 --ignore-scripts
+fi
+npm run install:profile -- main
+node node_modules/playwright/cli.js install --only-shell chromium
+"""
 
 [cleanup]
 script = "node .codex/scripts/dev-server.mjs stop"
