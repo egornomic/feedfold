@@ -44,7 +44,7 @@ if [[ -n $previous ]]; then
   "${compose[@]}" stop
   if ! sqlite3 "$volume/feedfold.db" ".backup '$rollback/feedfold.db'" || \
      [[ $(sqlite3 "$rollback/feedfold.db" 'PRAGMA integrity_check;') != ok ]]; then
-    "${compose[@]}" up --detach --no-build --wait
+    FEEDFOLD_IMAGE="feedfold:$previous" "${compose[@]}" up --detach --no-build --wait
     rm -rf -- "$rollback"
     echo 'Deployment stopped: rollback database failed its integrity check.' >&2
     exit 1

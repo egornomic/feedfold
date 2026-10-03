@@ -14,7 +14,8 @@ youtube=${4:-}
 mkdir -m 700 -- "$destination"
 destination=$(realpath "$destination")
 container=
-trap 'if [[ -n $container ]]; then docker rm --force "$container" >/dev/null; fi' EXIT
+probe=
+trap 'if [[ -n $container ]]; then docker rm --force "$container" >/dev/null; fi; if [[ -n $probe ]]; then rm -rf -- "$probe"; fi' EXIT
 
 age --decrypt --identity "$identity" "$archive" > "$destination/recovery.tar"
 # Extract only the recovery payload, never arbitrary archive paths.
@@ -42,13 +43,17 @@ if [[ -n $youtube ]]; then
 fi
 chown -R 1000:1000 "$destination/data"
 chmod 600 "$destination/data/feedfold.db"
+# Startup polls due feeds. Probe a disposable copy, leaving restored data intact.
+probe=$(mktemp -d "$destination/probe-XXXXXX")
+cp "$destination/data/feedfold.db" "$probe/feedfold.db"
+chown -R 1000:1000 "$probe"
 # No published ports and no network: polling and OAuth cannot reach real services.
 container=$(docker run --detach --network none --read-only --init \
   --cap-drop ALL --security-opt no-new-privileges:true \
   --tmpfs /tmp:rw,noexec,nosuid,size=256m \
   --env-file "$destination/feedfold.env" \
   --env DATABASE_PATH=/data/feedfold.db --env HOST=127.0.0.1 --env PORT=3000 \
-  "${secrets[@]}" --mount "type=bind,src=$destination/data,dst=/data" "$image")
+  "${secrets[@]}" --mount "type=bind,src=$probe,dst=/data" "$image")
 for attempt in {1..60}; do
   if docker exec "$container" node -e \
     "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
