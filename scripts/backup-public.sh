@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 umask 077
+# Keep the database, configuration and image tied to one completed deployment.
+exec 9>/run/lock/feedfold-deploy.lock
+flock --shared 9
 exec 8>/run/lock/feedfold-backup.lock
 flock 8
 mkdir -p /srv/feedfold/backups
@@ -9,7 +12,7 @@ find /srv/feedfold/backups -maxdepth 1 -name 'feedfold-*.db.gz' -mmin +8639 -del
 volume=$(docker volume inspect feedfold_feedfold-data --format '{{.Mountpoint}}')
 backup="/srv/feedfold/backups/feedfold-$(date -u +%Y%m%dT%H%M%S%NZ).db"
 sqlite3 "$volume/feedfold.db" ".backup '$backup'"
-sqlite3 "$backup" < /srv/feedfold/app/scripts/sanitize-youtube-backup.sql
+sqlite3 "$backup" < /srv/feedfold/app/scripts/sanitize-youtube-backup.sql > /dev/null
 if [[ $(sqlite3 "$backup" 'PRAGMA integrity_check;') != ok ]]; then
   echo 'Database backup failed its integrity check.' >&2
   exit 1
@@ -22,7 +25,15 @@ for old_backup in "${backups[@]:2}"; do
 done
 
 if [[ ${1:-} == export ]]; then
-  tar -czf - -C /srv/feedfold/backups "${backup##*/}.gz" \
-    -C /etc/feedfold feedfold.env -C /srv/feedfold revision \
+  recovery=$(mktemp -d /srv/feedfold/recovery-XXXXXX)
+  trap 'rm -rf -- "$recovery"' EXIT
+  cp /srv/feedfold/revision "$recovery/revision"
+  revision=$(cat "$recovery/revision")
+  image="feedfold:$revision"
+  docker image inspect --format '{{.Id}}' "$image" > "$recovery/image-id"
+  docker save "$image" | gzip -1 > "$recovery/image.tar.gz"
+  cp "$backup.gz" "$recovery/feedfold.db.gz"
+  cp /etc/feedfold/feedfold.env "$recovery/feedfold.env"
+  tar -cf - -C "$recovery" feedfold.db.gz feedfold.env revision image-id image.tar.gz \
     | age --recipients-file /etc/feedfold/backup-recipient.txt
 fi
