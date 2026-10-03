@@ -101,7 +101,8 @@ export default defineConfig(({ command }) => ({
     },
     react(),
     VitePWA({
-      registerType: "prompt",
+      registerType: "autoUpdate",
+      injectRegister: false,
       manifest: {
         id: appBaseUrl,
         name: "feedfold",
@@ -146,6 +147,8 @@ export default defineConfig(({ command }) => ({
       },
       workbox: {
         clientsClaim: true,
+        skipWaiting: true,
+        importScripts: [appUrl("/sw-reload.js")],
         globPatterns: ["**/*.{js,css,html,png}"],
         globIgnores: [
           "legal/**",

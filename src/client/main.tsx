@@ -4,7 +4,7 @@ import { Toaster } from "sonner";
 import "@fontsource-variable/ibm-plex-sans/wght.css";
 import "@fontsource-variable/ibm-plex-sans/wght-italic.css";
 import { App } from "./app/app";
-import { PwaUpdate } from "./app/pwa-update";
+import { ApplicationBoundary } from "./app/application-boundary";
 import { isDesktopApp } from "./platform/desktop";
 import "./features/management/common.css";
 import "./styles/base.css";
@@ -14,6 +14,13 @@ import "./features/reader/reader-toolbar.css";
 import "./features/reader/reader.css";
 import "./styles/responsive.css";
 import "./ui/overlays.css";
+
+if (import.meta.env.PROD && !isDesktopApp() && "serviceWorker" in navigator) {
+  // Registration must not depend on the reader mounting successfully.
+  void navigator.serviceWorker
+    .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: "none" })
+    .catch((error) => console.error("Could not register feedfold updates.", error));
+}
 
 const root = document.getElementById("root");
 if (!root) throw new Error("The feedfold root element is missing.");
@@ -85,10 +92,11 @@ window.addEventListener(
 
 createRoot(root).render(
   <StrictMode>
-    <Suspense fallback={null}>
-      <Application />
-    </Suspense>
-    {isDesktopApp() ? null : <PwaUpdate />}
+    <ApplicationBoundary>
+      <Suspense fallback={null}>
+        <Application />
+      </Suspense>
+    </ApplicationBoundary>
     <Toaster
       theme="system"
       position="bottom-right"
