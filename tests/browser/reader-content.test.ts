@@ -120,13 +120,14 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
             { timeout: 5000 },
           )
           .toBe(update === "full text" ? 30 : 20);
-        const after = await next.evaluate(async (element) => {
-          // Allow measurement and its scheduled scroll correction to run after the content commits.
-          await new Promise(requestAnimationFrame);
-          await new Promise(requestAnimationFrame);
-          return element.getBoundingClientRect().top;
-        });
-        expect(Math.abs(after - before)).toBeLessThan(2);
+        // Content rendering and the observer's scroll correction finish in separate frames.
+        await expect
+          .poll(async () =>
+            Math.abs(
+              (await next.evaluate((element) => element.getBoundingClientRect().top)) - before,
+            ),
+          )
+          .toBeLessThan(2);
       } finally {
         await page.close();
       }

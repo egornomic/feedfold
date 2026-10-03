@@ -34,21 +34,39 @@ if [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainer
 fi
 
 previous=$(cat /srv/feedfold/revision 2>/dev/null || true)
+compose=(docker compose --project-name feedfold --env-file /etc/feedfold/feedfold.env)
 if [[ -n $previous ]]; then
-  /usr/local/sbin/feedfold-backup
+  # A migration can commit before startup fails. Roll back the database too.
+  # This private, short-lived copy retains YouTube tokens unlike daily backups.
+  umask 077
+  rollback=$(mktemp -d /srv/feedfold/rollback-XXXXXX)
+  volume=$(docker volume inspect feedfold_feedfold-data --format '{{.Mountpoint}}')
+  "${compose[@]}" stop
+  if ! sqlite3 "$volume/feedfold.db" ".backup '$rollback/feedfold.db'" || \
+     [[ $(sqlite3 "$rollback/feedfold.db" 'PRAGMA integrity_check;') != ok ]]; then
+    FEEDFOLD_IMAGE="feedfold:$previous" "${compose[@]}" up --detach --no-build --wait
+    rm -rf -- "$rollback"
+    echo 'Deployment stopped: rollback database failed its integrity check.' >&2
+    exit 1
+  fi
 fi
 git checkout --detach "$revision"
 export FEEDFOLD_IMAGE="$image"
-compose=(docker compose --project-name feedfold --env-file /etc/feedfold/feedfold.env)
 if ! "${compose[@]}" up --detach --no-build --wait --wait-timeout 120; then
   if [[ -n $previous ]]; then
+    "${compose[@]}" stop
+    cp "$rollback/feedfold.db" "$volume/feedfold.db"
+    chown 1000:1000 "$volume/feedfold.db"
+    rm -f "$volume/feedfold.db-wal" "$volume/feedfold.db-shm"
     git checkout --detach "$previous"
     FEEDFOLD_IMAGE="feedfold:$previous" "${compose[@]}" up --detach --no-build --wait
+    rm -rf -- "$rollback"
   fi
   exit 1
 fi
 curl --fail --silent http://127.0.0.1:3000/health
 printf '%s\n' "$revision" > /srv/feedfold/revision
+if [[ -n $previous ]]; then rm -rf -- "$rollback"; fi
 install -m 700 scripts/deploy-public.sh /usr/local/sbin/feedfold-deploy
 install -m 700 scripts/backup-public.sh /usr/local/sbin/feedfold-backup
 # Keep the running image and the immediately preceding image for rollback.

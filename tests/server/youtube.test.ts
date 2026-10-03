@@ -532,8 +532,11 @@ describe("YouTube data retention", () => {
 });
 
 describe("YouTube backup privacy", () => {
-  it("restores ordinary feeds but cannot restore Google connections or synced subscriptions", () => {
+  it("restores account login and ordinary feeds but cannot restore Google connections or synced subscriptions", async () => {
     const { database, service } = setup();
+    const auth = new AuthService(database.auth, 20);
+    const session = await auth.register("backup-reader", "backup-reader-password");
+    if (!session) throw new Error("Registration failed");
     const ordinary = database.feeds.createFeed(1, { feedUrl: "https://example.com/feed" });
     service.reconcile(1, [first]);
     const snapshot = new Sqlite(database.connection.serialize());
@@ -548,6 +551,22 @@ describe("YouTube backup privacy", () => {
       expect(snapshot.pragma("foreign_key_check")).toEqual([]);
       expect(database.feeds.listFeeds(1)).toHaveLength(2);
       expect(service.status(1).connected).toBe(true);
+      const directory = mkdtempSync(join(tmpdir(), "feedfold-recovery-"));
+      const path = join(directory, "feedfold.db");
+      writeFileSync(path, snapshot.serialize());
+      const restored = new AppDatabase(path);
+      try {
+        const restoredAuth = new AuthService(restored.auth, 20);
+        expect(await restoredAuth.login("backup-reader", "wrong-password")).toBeNull();
+        expect(await restoredAuth.login("backup-reader", "backup-reader-password")).toMatchObject({
+          user: { publicId: session.user.publicId },
+        });
+        expect(restored.feeds.listFeeds(1)).toEqual([ordinary]);
+        expect(restored.settings.getSettings(1)).toEqual(database.settings.getSettings(1));
+      } finally {
+        restored.close();
+        rmSync(directory, { recursive: true, force: true });
+      }
     } finally {
       snapshot.close();
     }
