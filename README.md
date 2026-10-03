@@ -118,7 +118,7 @@ Compose reads these values from the shell or a project-level `.env` file:
 | `FEEDFOLD_BIND_ADDRESS` | `127.0.0.1` | Host address that publishes the container port. Keep loopback when a local reverse proxy provides access. |
 | `FEEDFOLD_PORT` | `3000` | Host port forwarded to feedfold. |
 | `FEEDFOLD_BASE_PATH` | `/` | Browser-facing path where feedfold is mounted. Set this at build time and server runtime, including the leading and trailing slash, when a reverse proxy publishes feedfold below a path such as `/feedfold/`. The Docker image preserves the value used during its build. |
-| `FEEDFOLD_PUBLIC_ORIGIN` | none | Exact external HTTPS origin used for secure cookies, passkeys, and browser-origin validation. |
+| `FEEDFOLD_PUBLIC_ORIGIN` | none | Exact external HTTPS origin used for secure cookies, passkeys, browser-origin validation, and homepage preview URLs. If unset, the homepage omits canonical and preview-image URLs. |
 | `FEEDFOLD_REGISTRATION_MODE` | `closed` | Registration policy: `closed`, `invite`, or `open`. A positive account cap is also required; invite registration requires an invitation. |
 | `FEEDFOLD_MAX_ACCOUNTS` | `0` | Account cap, including the owner. `0`, a missing value, or an invalid value disables registration under every policy. |
 | `FEEDFOLD_MANUAL_REFRESH` | `false` | Allow user-triggered refreshes: `true` or `false`. |

@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { normalizeBasePath } from "./src/shared/base-path";
+import { socialUrlMetadata } from "./src/shared/social-metadata";
 
 const apiOrigin = process.env.FEEDFOLD_DEV_API_ORIGIN ?? "http://127.0.0.1:43001";
 const devPort = Number(process.env.FEEDFOLD_DEV_PORT ?? 45173);
@@ -17,7 +17,6 @@ const stripBasePath = (path: string) => path.slice(appBasePath.length) || "/";
 const demoApiPath = fileURLToPath(new URL("./src/demo/api.ts", import.meta.url));
 const stressApiPath = fileURLToPath(new URL("./src/demo/stress-api.ts", import.meta.url));
 const stressHttpPath = fileURLToPath(new URL("./src/demo/stress-http.ts", import.meta.url));
-const demoSocialImagePath = fileURLToPath(new URL("./src/demo/assets/og.png", import.meta.url));
 
 function legalPages(server: ViteDevServer | PreviewServer): void {
   server.middlewares.use((request, response, next) => {
@@ -37,37 +36,37 @@ function legalPages(server: ViteDevServer | PreviewServer): void {
   });
 }
 
-function staticDemoPlugin(): Plugin {
+function socialMetadataPlugin(): Plugin {
+  const description = demoMode
+    ? "Explore feedfold, a quiet, keyboard-first feed reader."
+    : "Add RSS feeds and X posts, sync YouTube subscriptions, filter out shorts and other noise, and read a feed you can finish.";
   return {
-    name: "feedfold-static-demo",
+    name: "feedfold-social-metadata",
     transformIndexHtml(html) {
-      const demoHtml = html.replace(
-        "feedfold, a quiet, keyboard-first, self-hosted feed reader.",
-        "Explore feedfold, a quiet, keyboard-first feed reader.",
-      );
-      return demoHtml.replace(
-        "</head>",
-        [
-          '    <link rel="canonical" href="https://feedfold.com/demo/" />',
-          '    <meta property="og:type" content="website" />',
-          '    <meta property="og:title" content="feedfold" />',
-          '    <meta property="og:description" content="A quiet place for the web you follow." />',
-          '    <meta property="og:url" content="https://feedfold.com/demo/" />',
-          '    <meta property="og:image" content="https://feedfold.com/demo/og.png" />',
-          '    <meta property="og:image:width" content="1730" />',
-          '    <meta property="og:image:height" content="909" />',
-          '    <meta property="og:image:alt" content="The feedfold reader in its quiet dark theme" />',
-          '    <meta name="twitter:card" content="summary_large_image" />',
-          "  </head>",
-        ].join("\n"),
-      );
-    },
-    generateBundle() {
-      this.emitFile({
-        type: "asset",
-        fileName: "og.png",
-        source: readFileSync(demoSocialImagePath),
-      });
+      return {
+        html: demoMode
+          ? html.replace("</head>", `${socialUrlMetadata("https://feedfold.com/demo/")}\n</head>`)
+          : html,
+        tags: [
+          { tag: "meta", attrs: { name: "description", content: description } },
+          ...Object.entries({
+            type: "website",
+            title: "feedfold",
+            description,
+          }).map(([property, content]) => ({
+            tag: "meta",
+            attrs: { property: `og:${property}`, content },
+          })),
+          ...Object.entries({
+            card: "summary_large_image",
+            title: "feedfold",
+            description,
+          }).map(([name, content]) => ({
+            tag: "meta",
+            attrs: { name: `twitter:${name}`, content },
+          })),
+        ],
+      };
     },
   };
 }
@@ -151,6 +150,7 @@ export default defineConfig(({ command }) => ({
         importScripts: [appUrl("/sw-reload.js")],
         globPatterns: ["**/*.{js,css,html,png}"],
         globIgnores: [
+          "og.png",
           "legal/**",
           "**/{feeds,add-feed,rules,settings,shortcut-help,context-dialog,web-feed-setup,folder-form,rule-form,ai-markdown,auto-render,katex}-*.{js,css}",
         ],
@@ -167,6 +167,7 @@ export default defineConfig(({ command }) => ({
         ],
         navigateFallback: appUrl("/index.html"),
         navigateFallbackDenylist: [
+          new RegExp(`^${appBasePattern}/og\\.png(?:\\?|$)`),
           new RegExp(`^${appBasePattern}/\\.well-known/security\\.txt(?:\\?|$)`),
           /^\/robots\.txt$/,
           new RegExp(`^${appBasePattern}/(?:privacy|terms)(?:/|$)`),
@@ -175,7 +176,7 @@ export default defineConfig(({ command }) => ({
         ],
       },
     }),
-    ...(demoMode ? [staticDemoPlugin()] : []),
+    socialMetadataPlugin(),
   ],
   root: ".",
   build: {
