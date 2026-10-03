@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import type { AddFeedSourceType, AppView } from "../../../shared/app-routes";
 import type {
   ArticleState,
   BootstrapData,
@@ -24,7 +25,6 @@ import type {
   Folder as FolderType,
   SessionUser,
 } from "../../../shared/types";
-import type { AppView } from "../../app/routes";
 import { useInterfaceState, useReaderPreferences } from "../../app/session-state";
 import { BrandIdentity } from "../../ui/brand";
 import { IconButton, Kbd } from "../../ui/controls";
@@ -43,7 +43,6 @@ import {
   FolderActionMenuItems,
   type FolderManagementAction,
 } from "../feeds/feed-management";
-import type { AddFeedSourceType } from "../feeds/feed-source";
 import { ADD_FEED_SOURCE_OPTIONS } from "../feeds/feed-source-options";
 
 function selectedFolderPath(

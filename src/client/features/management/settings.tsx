@@ -34,6 +34,7 @@ import {
   DEFAULT_ARTICLE_TRANSLATION_PROMPT,
 } from "../../../shared/ai-prompts";
 import type { ApiInput } from "../../../shared/api/operations";
+import type { SettingsCategory } from "../../../shared/app-routes";
 import type {
   AiCustomPrompt,
   AiProvider,
@@ -45,7 +46,6 @@ import type {
 import { DUPLICATE_ARTICLE_WINDOW_DAYS, FEED_POLL_INTERVAL_MINUTES } from "../../../shared/types";
 import { ApiError, api, errorMessage } from "../../api/api";
 import { useRequestMutation } from "../../api/use-request-mutation";
-import type { SettingsCategory } from "../../app/routes";
 import { useReaderPreferences } from "../../app/session-state";
 import { isDesktopApp } from "../../platform/desktop";
 import { COLOR_PALETTES } from "../../ui/color-palettes";

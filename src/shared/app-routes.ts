@@ -1,5 +1,6 @@
-import type { ArticleState } from "../../shared/types.js";
-import type { AddFeedSourceType } from "../features/feeds/feed-source.js";
+import type { ArticleState } from "./types.js";
+
+export type AddFeedSourceType = "rss" | "youtube" | "telegram" | "x";
 
 export interface ReaderRoute {
   kind: "reader";
@@ -69,11 +70,16 @@ function readerRoute(
 }
 
 export function parseAppRoute(pathname: string, search: string, basePath: string): AppRoute {
+  return matchAppRoute(pathname, search, basePath) ?? DEFAULT_READER_ROUTE;
+}
+
+export function matchAppRoute(pathname: string, search: string, basePath: string): AppRoute | null {
   const base = normalizedBasePath(basePath);
-  if (pathname !== base && !pathname.startsWith(`${base}/`)) return DEFAULT_READER_ROUTE;
+  if (pathname !== base && !pathname.startsWith(`${base}/`)) return null;
 
   const relativePath = pathname.slice(base.length).replace(/^\/+|\/+$/g, "");
-  const segments = relativePath ? relativePath.split("/") : [];
+  if (!relativePath) return DEFAULT_READER_ROUTE;
+  const segments = relativePath.split("/");
   const query = new URLSearchParams(search).get("q")?.trim() ?? "";
 
   if (segments[0] === "feeds" && segments[1] === "add" && segments.length === 2) {
@@ -95,7 +101,7 @@ export function parseAppRoute(pathname: string, search: string, basePath: string
       const sourceUrl = decodeURIComponent(segments.slice(2).join("/"));
       if (sourceUrl) return { kind: "add-feed", sourceUrl };
     } catch {
-      return DEFAULT_READER_ROUTE;
+      return null;
     }
   }
 
@@ -134,7 +140,7 @@ export function parseAppRoute(pathname: string, search: string, basePath: string
     }
   }
 
-  return DEFAULT_READER_ROUTE;
+  return null;
 }
 
 export function appRoutePath(route: AppRoute): string {

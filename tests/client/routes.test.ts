@@ -4,9 +4,10 @@ import {
   appRoutePath,
   appRouteUrl,
   DEFAULT_READER_ROUTE,
+  matchAppRoute,
   parseAppRoute,
   routeAfterFeedDeletion,
-} from "../../src/client/app/routes.js";
+} from "../../src/shared/app-routes.js";
 
 const BASE_PATH = "/";
 
@@ -50,6 +51,25 @@ describe("application routes", () => {
     expect(parseAppRoute("/folders/nope/all", "", BASE_PATH)).toEqual(DEFAULT_READER_ROUTE);
     expect(parseAppRoute("/feeds/7/unknown", "", BASE_PATH)).toEqual(DEFAULT_READER_ROUTE);
     expect(parseAppRoute("/another-app/settings", "", BASE_PATH)).toEqual(DEFAULT_READER_ROUTE);
+  });
+
+  it("distinguishes supported paths from missing pages at the root and demo base", () => {
+    expect(matchAppRoute("/", "", "/")).toEqual(DEFAULT_READER_ROUTE);
+    expect(matchAppRoute("/demo/", "", "/demo/")).toEqual(DEFAULT_READER_ROUTE);
+    expect(matchAppRoute("/demo/articles/123", "", "/demo/")).toEqual({
+      kind: "article",
+      articleId: 123,
+    });
+    for (const pathname of [
+      "/does-not-exist",
+      "/assets/missing.js",
+      "/articles/0",
+      "/feeds/add/%ZZ",
+    ]) {
+      expect(matchAppRoute(pathname, "", "/")).toBeNull();
+      expect(matchAppRoute(`/demo${pathname}`, "", "/demo/")).toBeNull();
+    }
+    expect(matchAppRoute("/articles/unread", "", "/demo/")).toBeNull();
   });
 
   it("keeps submitted search only on collection routes", () => {
