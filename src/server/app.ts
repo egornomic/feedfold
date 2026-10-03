@@ -50,6 +50,8 @@ function staticHeaders(reply: FastifyReply, path: string): void {
 
 export async function createApp(services: AppServices): Promise<FastifyInstance> {
   const basePath = normalizeBasePath(services.basePath);
+  // Offline navigation also uses the public entry document.
+  const indexablePages = new Set(["/", "/index.html", "/privacy", "/terms"]);
   const app = Fastify({
     logger: services.logger ?? false,
     logController: new LogController({ disableRequestLogging: true }),
@@ -97,6 +99,13 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   });
 
   app.addHook("onSend", async (request, reply) => {
+    const pathname = request.url.split("?", 1)[0] ?? "/";
+    if (
+      String(reply.getHeader("Content-Type")).startsWith("text/html") &&
+      !indexablePages.has(pathname)
+    ) {
+      reply.header("X-Robots-Tag", "noindex");
+    }
     reply.headers(responsePolicies[request.routeOptions.config.responsePolicy ?? "application"]);
     if (request.routeOptions.url?.startsWith("/api/youtube"))
       reply.header("Referrer-Policy", "no-referrer");
@@ -237,6 +246,14 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
     app.get("/.well-known/security.txt", (_request, reply) =>
       reply.type("text/plain; charset=utf-8").sendFile(".well-known/security.txt"),
     );
+    app.get("/robots.txt", (_request, reply) =>
+      reply
+        .type("text/plain; charset=utf-8")
+        .header("Cache-Control", "no-cache")
+        .send(
+          `User-agent: *\nAllow: /\n${services.publicOrigin ? `Sitemap: ${services.publicOrigin}/sitemap.xml\n` : ""}`,
+        ),
+    );
     for (const page of ["privacy", "terms"]) {
       app.get(`/${page}`, (_request, reply) => reply.sendFile(`legal/${page}.html`));
       app.get(`/${page}/`, (_request, reply) => reply.redirect(`${basePath}/${page}`, 308));
@@ -246,6 +263,8 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
         ? services.demoDir
         : undefined;
     if (demoDir) {
+      indexablePages.add("/demo/");
+      indexablePages.add("/demo/index.html");
       app.get("/demo", (_request, reply) => reply.redirect("/demo/", 308));
       await app.register(fastifyStatic, {
         root: demoDir,
