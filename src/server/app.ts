@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify, {
@@ -244,19 +245,21 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   // biome-ignore-end lint/nursery/noMisusedPromises: End of async plugin registrations.
 
   if (services.staticDir && existsSync(join(services.staticDir, "index.html"))) {
-    const homepageHtml = readFileSync(join(services.staticDir, "index.html"), "utf8");
-    const homepage = services.publicOrigin
-      ? homepageHtml.replace(
-          "</head>",
-          `${socialUrlMetadata(new URL(`${basePath}/`, services.publicOrigin).href)}\n</head>`,
-        )
-      : homepageHtml;
-    const sendHomepage = (reply: FastifyReply) =>
-      reply
+    const homepagePath = join(services.staticDir, "index.html");
+    const sendHomepage = async (reply: FastifyReply) => {
+      const homepageHtml = await readFile(homepagePath, "utf8");
+      const homepage = services.publicOrigin
+        ? homepageHtml.replace(
+            "</head>",
+            `${socialUrlMetadata(new URL(`${basePath}/`, services.publicOrigin).href)}\n</head>`,
+          )
+        : homepageHtml;
+      return reply
         .type("text/html; charset=utf-8")
         .header("Cache-Control", "no-cache")
         .header("Content-Length", Buffer.byteLength(homepage))
         .send(reply.request.method === "HEAD" ? undefined : homepage);
+    };
     for (const path of ["/", "/index.html"]) {
       app.route({
         method: ["GET", "HEAD"],
