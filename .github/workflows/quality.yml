@@ -71,17 +71,27 @@ jobs:
       - name: Install dependencies
         run: npm run install:profile -- main
 
+      - name: Allow the test container to create Chromium's sandbox
+        run: |
+          sudo tee /etc/apparmor.d/feedfold-ci <<'EOF_PROFILE'
+          abi <abi/4.0>,
+          profile feedfold-ci flags=(unconfined) {
+            userns,
+          }
+          EOF_PROFILE
+          sudo apparmor_parser --replace /etc/apparmor.d/feedfold-ci
+
       - name: Run tests with coverage in prepared browser environment
         # Keep this image aligned with the pinned Playwright package. Use the host's
         # pinned Node runtime and preserve the browser sandbox with a non-root user.
         run: |
           docker run --rm --init --ipc=host \
             --user "$(id -u):$(id -g)" \
-            --security-opt apparmor=unconfined \
+            --security-opt apparmor=feedfold-ci \
             --security-opt "seccomp=$GITHUB_WORKSPACE/.docker/playwright-seccomp.json" \
-            --volume "$GITHUB_WORKSPACE:/app" \
+            --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
             --volume "$(dirname "$(dirname "$(command -v node)")"):/opt/node:ro" \
-            --workdir /app \
+            --workdir "$GITHUB_WORKSPACE" \
             --env HOME=/tmp --env CI=true --env FEEDFOLD_COVERAGE_SHARD=true \
             --env PATH=/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             mcr.microsoft.com/playwright:v1.62.0-noble@sha256:baed2032d533817f3dbe6425de795788430ba345e819a1201337009ba17c9d07 \
