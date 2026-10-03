@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify, {
@@ -11,6 +11,7 @@ import Fastify, {
 import { matchAppRoute } from "../shared/app-routes.js";
 import { normalizeBasePath } from "../shared/base-path.js";
 import { readerMutationRoutes } from "../shared/reader-mutations.js";
+import { socialUrlMetadata } from "../shared/social-metadata.js";
 import { applicationError } from "./application-error.js";
 import { ApplicationService, type ApplicationServices } from "./application-service.js";
 import { aiRoutes } from "./features/ai/routes.js";
@@ -243,6 +244,26 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   // biome-ignore-end lint/nursery/noMisusedPromises: End of async plugin registrations.
 
   if (services.staticDir && existsSync(join(services.staticDir, "index.html"))) {
+    const homepageHtml = readFileSync(join(services.staticDir, "index.html"), "utf8");
+    const homepage = services.publicOrigin
+      ? homepageHtml.replace(
+          "</head>",
+          `${socialUrlMetadata(new URL(`${basePath}/`, services.publicOrigin).href)}\n</head>`,
+        )
+      : homepageHtml;
+    const sendHomepage = (reply: FastifyReply) =>
+      reply
+        .type("text/html; charset=utf-8")
+        .header("Cache-Control", "no-cache")
+        .header("Content-Length", Buffer.byteLength(homepage))
+        .send(reply.request.method === "HEAD" ? undefined : homepage);
+    for (const path of ["/", "/index.html"]) {
+      app.route({
+        method: ["GET", "HEAD"],
+        url: path,
+        handler: (_request, reply) => sendHomepage(reply),
+      });
+    }
     app.get("/.well-known/security.txt", (_request, reply) =>
       reply.type("text/plain; charset=utf-8").sendFile(".well-known/security.txt"),
     );
@@ -277,6 +298,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
     await app.register(fastifyStatic, {
       root: services.staticDir,
       wildcard: false,
+      globIgnore: ["index.html"],
       setHeaders: staticHeaders,
     });
     app.setNotFoundHandler((request, reply) => {
@@ -285,7 +307,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
         if (demoDir && matchAppRoute(pathname, "", "/demo")) {
           return reply.sendFile("index.html", demoDir);
         }
-        if (matchAppRoute(pathname, "", "/")) return reply.sendFile("index.html");
+        if (matchAppRoute(pathname, "", "/")) return sendHomepage(reply);
       }
       return reply
         .code(404)

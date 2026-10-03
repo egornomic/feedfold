@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
+import { JSDOM } from "jsdom";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
@@ -11,7 +12,11 @@ import { FeedRefreshService } from "../../src/server/features/refresh/service.js
 import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js";
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
-describe.each([undefined, "https://feedfold.com"])("app hosting (%s)", (publicOrigin) => {
+describe.each([
+  [undefined, "/"],
+  ["https://feedfold.com", "/"],
+  ["https://reader.example", "/feedfold/"],
+])("app hosting (%s at %s)", (publicOrigin, basePath) => {
   const securityContact =
     "Contact: https://example.test/private-report\nExpires: 2027-01-01T00:00:00Z\n";
   let directory: string;
@@ -29,7 +34,8 @@ describe.each([undefined, "https://feedfold.com"])("app hosting (%s)", (publicOr
     await mkdir(join(staticDirectory, "legal"));
     await mkdir(join(demoDirectory, "assets"), { recursive: true });
     await Promise.all([
-      writeFile(join(staticDirectory, "index.html"), "<main>feedfold shell</main>"),
+      writeFile(join(staticDirectory, "index.html"), "<head></head><main>feedfold shell</main>"),
+      copyFile(new URL("../../public/og.png", import.meta.url), join(staticDirectory, "og.png")),
       writeFile(join(staticDirectory, ".well-known", "security.txt"), securityContact),
       writeFile(join(staticDirectory, "legal", "privacy.html"), "<main>privacy page</main>"),
       writeFile(join(staticDirectory, "legal", "terms.html"), "<main>terms page</main>"),
@@ -59,6 +65,7 @@ describe.each([undefined, "https://feedfold.com"])("app hosting (%s)", (publicOr
       authService,
       staticDir: staticDirectory,
       demoDir: demoDirectory,
+      basePath,
       ...(publicOrigin ? { publicOrigin } : {}),
     });
   });
@@ -86,6 +93,44 @@ describe.each([undefined, "https://feedfold.com"])("app hosting (%s)", (publicOr
     }
   });
 
+  it("identifies the configured public homepage and its preview image on all reader links", async () => {
+    for (const url of ["/", "/index.html", "/articles/unread", "/feeds/7/all?q=sqlite"]) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      const head = await app.inject({ method: "HEAD", url });
+      expect(head.statusCode).toBe(200);
+      expect(head.body).toBe("");
+      expect(head.headers["content-length"]).toBe(response.headers["content-length"]);
+      const document = new JSDOM(response.body).window.document;
+      const canonical = document.querySelector('link[rel="canonical"]');
+      const socialUrl = document.querySelector('meta[property="og:url"]');
+      const image = document.querySelector('meta[property="og:image"]');
+      if (!publicOrigin) {
+        expect(canonical).toBeNull();
+        expect(socialUrl).toBeNull();
+        expect(image).toBeNull();
+        continue;
+      }
+      const homepage = `${publicOrigin}${basePath}`;
+      expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
+      expect(canonical?.getAttribute("href")).toBe(homepage);
+      expect(socialUrl?.getAttribute("content")).toBe(homepage);
+      expect(image?.getAttribute("content")).toBe(`${homepage}og.png`);
+      expect(document.querySelector('meta[name="twitter:image"]')?.getAttribute("content")).toBe(
+        `${homepage}og.png`,
+      );
+      const preview = await app.inject({ method: "GET", url: "/og.png" });
+      expect(preview.statusCode).toBe(200);
+      expect(preview.headers["content-type"]).toBe("image/png");
+      expect(
+        document.querySelector('meta[property="og:image:width"]')?.getAttribute("content"),
+      ).toBe(String(preview.rawPayload.readUInt32BE(16)));
+      expect(
+        document.querySelector('meta[property="og:image:height"]')?.getAttribute("content"),
+      ).toBe(String(preview.rawPayload.readUInt32BE(20)));
+    }
+  });
+
   it.each(["/", "/index.html", "/privacy", "/terms", "/demo/", "/demo/index.html"])(
     "keeps the public page %s discoverable",
     async (url) => {
@@ -100,7 +145,9 @@ describe.each([undefined, "https://feedfold.com"])("app hosting (%s)", (publicOr
   it("serves navigation, assets, and APIs from the application root", async () => {
     const navigation = await app.inject({ method: "GET", url: "/articles/all" });
     expect(navigation.statusCode).toBe(200);
-    expect(navigation.body).toBe("<main>feedfold shell</main>");
+    expect(new JSDOM(navigation.body).window.document.querySelector("main")?.textContent).toBe(
+      "feedfold shell",
+    );
     expect(navigation.headers["cache-control"]).toBe("no-cache");
 
     for (const url of ["/assets/app-aB12_3-4.js", "/demo/assets/app-12345678.css"]) {
@@ -186,7 +233,9 @@ describe.each([undefined, "https://feedfold.com"])("app hosting (%s)", (publicOr
         expect(response.statusCode).toBe(200);
         expect(response.headers["content-type"]).toContain("text/html");
         expect(response.headers["cache-control"]).toBe("no-cache");
-        expect(response.body).toBe(shell);
+        expect(new JSDOM(response.body).window.document.querySelector("main")?.outerHTML).toBe(
+          shell,
+        );
         expect(response.headers["x-robots-tag"]).toBe(path === "/" ? undefined : "noindex");
         const head = await app.inject({ method: "HEAD", url });
         expect(head.statusCode).toBe(200);
