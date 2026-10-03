@@ -12,6 +12,8 @@ import { DefaultFeedSourceLoader } from "../../src/server/feed-source-loader.js"
 import { createApplicationServices } from "../../src/server/runtime/application-runtime.js";
 
 describe("production app hosting", () => {
+  const securityContact =
+    "Contact: https://example.test/private-report\nExpires: 2027-01-01T00:00:00Z\n";
   let directory: string;
   let database: AppDatabase;
   let extraction: ExtractionQueue;
@@ -23,9 +25,11 @@ describe("production app hosting", () => {
     const staticDirectory = join(directory, "client");
     const demoDirectory = join(directory, "demo");
     await mkdir(join(staticDirectory, "assets"), { recursive: true });
+    await mkdir(join(staticDirectory, ".well-known"));
     await mkdir(join(demoDirectory, "assets"), { recursive: true });
     await Promise.all([
       writeFile(join(staticDirectory, "index.html"), "<main>feedfold shell</main>"),
+      writeFile(join(staticDirectory, ".well-known", "security.txt"), securityContact),
       writeFile(join(staticDirectory, "assets", "app.css"), "body { color: green; }"),
       writeFile(join(staticDirectory, "assets", "app-aB12_3-4.js"), "export default 1;"),
       writeFile(join(staticDirectory, "sw.js"), "self.addEventListener('fetch', () => {});"),
@@ -99,6 +103,24 @@ describe("production app hosting", () => {
     expect(api.json()).toEqual({ error: "Sign in to continue." });
   });
 
+  it("serves the security reporting file as plain text for browsers and file consumers", async () => {
+    for (const accept of ["*/*", "text/plain", "text/html"]) {
+      const security = await app.inject({
+        method: "GET",
+        url: "/.well-known/security.txt",
+        headers: { accept },
+      });
+      expect(security.statusCode).toBe(200);
+      expect(security.headers["content-type"]).toBe("text/plain; charset=utf-8");
+      expect(security.headers["cache-control"]).toBe("no-cache");
+      expect(security.body).toBe(securityContact);
+    }
+    const securityHead = await app.inject({ method: "HEAD", url: "/.well-known/security.txt" });
+    expect(securityHead.statusCode).toBe(200);
+    expect(securityHead.headers["content-type"]).toBe("text/plain; charset=utf-8");
+    expect(securityHead.body).toBe("");
+  });
+
   const applicationPaths = [
     "/",
     "/articles/unread",
@@ -139,7 +161,7 @@ describe("production app hosting", () => {
 
   it.each([
     "/robots.txt",
-    "/.well-known/security.txt",
+    "/.well-known/missing.txt",
     "/sitemap.xml",
     "/assets/essential-audit-missing.js",
     "/assets/index-Bv9smjdE.js",
