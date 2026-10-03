@@ -111,9 +111,15 @@ describe("feed refresh and full-text extraction", () => {
     expect(text?.match(/f\(x\)/g)).toHaveLength(1);
   });
 
-  it("starts new subscriptions with the 10 latest articles without backfilling older entries", async () => {
+  it("limits initial subscriptions to 10 articles and delivers newly qualifying older entries", async () => {
     let latestArticle = 12;
-    const server = createServer((_request, response) => {
+    let includeOlderArticle = false;
+    const lastModified = "Sun, 12 Jul 2026 00:00:00 GMT";
+    const server = createServer((request, response) => {
+      if (request.headers["if-modified-since"] === lastModified) {
+        response.writeHead(304).end();
+        return;
+      }
       const items = Array.from({ length: latestArticle }, (_, index) => index + 1)
         .map(
           (article) => `<item>
@@ -124,10 +130,14 @@ describe("feed refresh and full-text extraction", () => {
           </item>`,
         )
         .join("");
-      response.writeHead(200, { "Content-Type": "application/rss+xml" });
+      response.writeHead(200, {
+        "Content-Type": "application/rss+xml",
+        "Last-Modified": lastModified,
+      });
       response.end(`<?xml version="1.0"?><rss version="2.0"><channel>
         <title>Busy feed</title><link>https://example.test/</link><description>Updates</description>
         ${items}
+        ${includeOlderArticle ? "<item><guid>older</guid><title>Newly qualifying older article</title><pubDate>Tue, 30 Jun 2026 00:00:00 GMT</pubDate></item>" : ""}
       </channel></rss>`);
     });
     const feedUrl = await listen(server);
@@ -159,6 +169,15 @@ describe("feed refresh and full-text extraction", () => {
       Array.from({ length: 10 }, (_, index) => `Article ${12 - index}`),
     );
 
+    includeOlderArticle = true;
+    refresh.request([feed.id]);
+    await refresh.waitForIdle();
+    expect(
+      database.articles
+        .listArticlePage(TEST_USER_ID, { state: "all", feedId: feed.id })
+        .articles.map(({ title }) => title),
+    ).toEqual([...initialArticles.map(({ title }) => title), "Newly qualifying older article"]);
+
     latestArticle = 13;
     refresh.request([feed.id]);
     await refresh.waitForIdle();
@@ -167,9 +186,10 @@ describe("feed refresh and full-text extraction", () => {
       state: "all",
       feedId: feed.id,
     }).articles;
-    expect(refreshedArticles.map(({ title }) => title)).toEqual(
-      Array.from({ length: 11 }, (_, index) => `Article ${13 - index}`),
-    );
+    expect(refreshedArticles.map(({ title }) => title)).toEqual([
+      ...Array.from({ length: 11 }, (_, index) => `Article ${13 - index}`),
+      "Newly qualifying older article",
+    ]);
   });
 
   it("shows sanitized feed content until publisher extraction is explicitly requested", async () => {

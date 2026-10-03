@@ -169,7 +169,6 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
         "User-Agent": USER_AGENT,
       });
       if (feed.etag) headers.set("If-None-Match", feed.etag);
-      if (feed.lastModified) headers.set("If-Modified-Since", feed.lastModified);
       let response = await this.fetch(
         sourceUrl,
         {
