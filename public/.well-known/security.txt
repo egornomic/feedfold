@@ -1,0 +1,4 @@
+# Report security vulnerabilities privately by email. Do not use public GitHub issues.
+Contact: mailto:security@feedfold.com
+Expires: 2027-09-30T23:59:59Z
+Canonical: https://feedfold.com/.well-known/security.txt
