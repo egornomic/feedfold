@@ -21,6 +21,8 @@ await run(npm, ["run", "desktop:prepare-browser"]);
 const builderArguments = [
   electronBuilderCli,
   "--mac",
+  "--publish",
+  "never",
   `-c.electronVersion=${electron.version}`,
   `-c.electronDist=${join(projectPath, "node_modules", "electron", "dist")}`,
   "-c.mac.identity=null",

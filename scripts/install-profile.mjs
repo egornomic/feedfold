@@ -7,6 +7,7 @@ if (!["main", "server", "web", "desktop", "packaging"].includes(profile)) {
   throw new Error("Choose main, server, web, desktop, or packaging.");
 }
 const projectPath = process.cwd();
+process.env.npm_config_cache = join(projectPath, ".npm-cache");
 const manifest = await import("../package.json", { with: { type: "json" } });
 if (process.versions.node !== manifest.default.engines.node) {
   throw new Error(`Use Node ${manifest.default.engines.node}.`);
