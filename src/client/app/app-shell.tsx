@@ -9,11 +9,17 @@ import {
   useState,
 } from "react";
 import { toast as showToast } from "sonner";
+import type { AddFeedSourceType, AppView } from "../../shared/app-routes";
+import {
+  appRoutePath,
+  DEFAULT_READER_ROUTE,
+  type ReaderRoute,
+  routeAfterFeedDeletion,
+} from "../../shared/app-routes";
 import type { Article, ArticleState, Feed, SessionUser } from "../../shared/types";
 import { errorMessage } from "../api/api";
 import { SessionLoading } from "../features/auth/auth";
 import type { FeedManagementAction } from "../features/feeds/feed-management";
-import type { AddFeedSourceType } from "../features/feeds/feed-source";
 import { folderPathLabel } from "../features/feeds/folder-hierarchy";
 import { Sidebar } from "../features/navigation/sidebar";
 import { useArticleActions } from "../features/reader/article-actions";
@@ -31,13 +37,6 @@ import type { RuleFormDraft } from "../features/rules/rule-form-types";
 import { isDesktopApp } from "../platform/desktop";
 import { useDelayedPending } from "../ui/loading";
 import { useAppRoute } from "./route";
-import type { AppView } from "./routes";
-import {
-  appRoutePath,
-  DEFAULT_READER_ROUTE,
-  type ReaderRoute,
-  routeAfterFeedDeletion,
-} from "./routes";
 import { SessionStateProvider, useInterfaceState, useReaderPreferences } from "./session-state";
 import { useAppShortcuts } from "./shortcuts";
 

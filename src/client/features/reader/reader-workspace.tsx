@@ -1,7 +1,7 @@
 import type { FormEvent, RefObject } from "react";
+import { appRoutePath, type ReaderRoute } from "../../../shared/app-routes";
 import type { Article, BootstrapData, ReadingMode } from "../../../shared/types";
 import type { AppRouteController } from "../../app/route";
-import { appRoutePath, type ReaderRoute } from "../../app/routes";
 import { useReaderPreferences } from "../../app/session-state";
 import type { FeedManagementAction } from "../feeds/feed-management";
 import {

@@ -8,11 +8,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { appRoutePath, type ReaderRoute } from "../../../shared/app-routes";
 import type { Article, ReadingMode } from "../../../shared/types";
 import { errorMessage } from "../../api/api";
 import { articlePagesQuery, articleQuery, counterMutationKey, readerKeys } from "../../api/query";
 import type { AppRouteController } from "../../app/route";
-import { appRoutePath, type ReaderRoute } from "../../app/routes";
 import { useDelayedPending } from "../../ui/loading";
 import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
 import {

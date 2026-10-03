@@ -13,6 +13,7 @@ import {
   Search,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { AddFeedSourceType } from "../../../shared/app-routes";
 import type {
   Feed,
   FeedPreview,
@@ -27,7 +28,6 @@ import type { ReaderDataMutations } from "../reader/reader-data";
 import { FeedEntriesPreview } from "./feed-entries-preview";
 import { feedHost } from "./feed-format";
 import {
-  type AddFeedSourceType,
   feedSourceUrl,
   TELEGRAM_HANDLE_PATTERN,
   X_HANDLE_PATTERN,

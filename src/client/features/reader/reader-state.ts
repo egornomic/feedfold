@@ -1,3 +1,4 @@
+import type { ReaderRoute } from "../../../shared/app-routes.js";
 import type {
   AppSettings,
   Article,
@@ -6,7 +7,6 @@ import type {
   BootstrapData,
   Folder,
 } from "../../../shared/types.js";
-import type { ReaderRoute } from "../../app/routes.js";
 import { folderPath } from "../feeds/folder-hierarchy.js";
 
 const FILTER_RULE_NAME_TEXT_LIMIT = 72;

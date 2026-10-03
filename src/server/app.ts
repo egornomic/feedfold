@@ -8,6 +8,7 @@ import Fastify, {
   type FastifyServerOptions,
   LogController,
 } from "fastify";
+import { matchAppRoute } from "../shared/app-routes.js";
 import { normalizeBasePath } from "../shared/base-path.js";
 import { readerMutationRoutes } from "../shared/reader-mutations.js";
 import { applicationError } from "./application-error.js";
@@ -257,13 +258,17 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
       setHeaders: staticHeaders,
     });
     app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith("/api/") || request.url === "/health") {
-        return reply.code(404).send({ error: "This page does not exist." });
+      const pathname = request.url.split("?", 1)[0] ?? "";
+      if (request.method === "GET" || request.method === "HEAD") {
+        if (demoDir && matchAppRoute(pathname, "", "/demo")) {
+          return reply.sendFile("index.html", demoDir);
+        }
+        if (matchAppRoute(pathname, "", "/")) return reply.sendFile("index.html");
       }
-      if (demoDir && request.url.startsWith("/demo/")) {
-        return reply.sendFile("index.html", demoDir);
-      }
-      return reply.sendFile("index.html");
+      return reply
+        .code(404)
+        .header("Cache-Control", "no-store")
+        .send({ error: "This page does not exist." });
     });
   }
 

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { ArticleState } from "../../shared/types";
-import { readerRouteForSelection } from "../features/reader/reader-state";
-import type { AppView } from "./routes";
+import type { AppView } from "../../shared/app-routes";
 import {
   type AppRoute,
   appRoutePath,
@@ -9,7 +7,9 @@ import {
   DEFAULT_READER_ROUTE,
   parseAppRoute,
   type ReaderRoute,
-} from "./routes";
+} from "../../shared/app-routes";
+import type { ArticleState } from "../../shared/types";
+import { readerRouteForSelection } from "../features/reader/reader-state";
 
 interface AppHistoryState {
   feedfold?: true;
