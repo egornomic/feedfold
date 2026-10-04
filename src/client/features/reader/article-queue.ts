@@ -43,6 +43,7 @@ export interface ArticleQueueController {
   queryRevision: number;
   fullContentLoadedIds: React.RefObject<Set<number>>;
   loadArticles: () => Promise<void>;
+  refreshQueue: () => Promise<void>;
   loadOlderArticles: () => Promise<Article[]>;
   selectArticle: (articleId: number, keyboardTarget?: boolean) => void;
   clearKeyboardTarget: () => void;
@@ -320,6 +321,22 @@ export function useArticleQueue({
     await client.invalidateQueries({ queryKey: readerKeys.lists });
     setReloadRevision((revision) => revision + 1);
   }, [client]);
+  const refreshQueue = useCallback(async () => {
+    try {
+      const result = await pages.refetch({ cancelRefetch: false, throwOnError: true });
+      if (latestRequestKey.current !== requestKey) return;
+      const candidates = result.data?.pages.flatMap((page) => page.articles) ?? [];
+      setArticles(
+        (current) =>
+          appendUnseenArticles(
+            articlesWithUpdatedState(current, candidates),
+            candidates.filter((article) => articleMatchesState(article, route.readerRoute.state)),
+          ).articles,
+      );
+    } catch (error) {
+      showToast(`Could not load more articles: ${errorMessage(error)}`);
+    }
+  }, [pages, requestKey, route.readerRoute.state, setArticles, showToast]);
   const mergeArticle = useCallback(
     (updated: Article) => {
       fullContentLoadedIds.current.add(updated.id);
@@ -376,6 +393,7 @@ export function useArticleQueue({
     queryRevision,
     fullContentLoadedIds,
     loadArticles,
+    refreshQueue,
     loadOlderArticles,
     selectArticle,
     clearKeyboardTarget: () => setExpandedKeyboardTargetId(null),

@@ -31,6 +31,8 @@ export function useArticleActions({
   const client = useQueryClient();
   const { run: mutateRequest, isPending: markReadPending } = useRequestMutation();
   const manuallyUnreadArticleIds = useRef(new Set<number>());
+  const activeArticleIdRef = useRef(queue.activeArticleId);
+  activeArticleIdRef.current = queue.activeArticleId;
   const loadBootstrap = dataResource.loadBootstrap;
   const loadArticles = queue.loadArticles;
 
@@ -110,11 +112,11 @@ export function useArticleActions({
         route.navigate(
           { kind: "article", articleId: article.id },
           historyMode,
-          queue.articles.findIndex((item) => item.id === article.id),
+          queue.articlesRef.current.findIndex((item) => item.id === article.id),
         );
       }
     },
-    [activateArticle, queue.articles, route],
+    [activateArticle, queue.articlesRef, route],
   );
 
   useEffect(() => {
@@ -159,6 +161,18 @@ export function useArticleActions({
         !queue.loadingMore &&
         queue.queueReady
       ) {
+        await queue.refreshQueue();
+        if (
+          route.current() !== currentRoute ||
+          (!routed && activeArticleIdRef.current !== currentId)
+        )
+          return false;
+        const articles = queue.articlesRef.current;
+        const next = articles[articles.findIndex((article) => article.id === currentId) + 1];
+        if (next) {
+          openArticle(next, openReader, routed ? "replace" : "push");
+          return true;
+        }
         route.navigate({ ...route.readerRoute, state: "unread" }, routed ? "replace" : "push");
         return true;
       }
