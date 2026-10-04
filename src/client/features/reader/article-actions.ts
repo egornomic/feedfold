@@ -110,11 +110,11 @@ export function useArticleActions({
         route.navigate(
           { kind: "article", articleId: article.id },
           historyMode,
-          queue.articles.findIndex((item) => item.id === article.id),
+          queue.articlesRef.current.findIndex((item) => item.id === article.id),
         );
       }
     },
-    [activateArticle, queue.articles, route],
+    [activateArticle, queue.articlesRef, route],
   );
 
   useEffect(() => {
@@ -159,6 +159,14 @@ export function useArticleActions({
         !queue.loadingMore &&
         queue.queueReady
       ) {
+        if (!(await queue.refreshQueue())) return false;
+        if (route.current() !== currentRoute) return false;
+        const articles = queue.articlesRef.current;
+        const next = articles[articles.findIndex((article) => article.id === currentId) + 1];
+        if (next) {
+          openArticle(next, openReader, routed ? "replace" : "push");
+          return true;
+        }
         route.navigate({ ...route.readerRoute, state: "unread" }, routed ? "replace" : "push");
         return true;
       }
