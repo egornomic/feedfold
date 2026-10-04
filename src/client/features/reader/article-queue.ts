@@ -43,7 +43,7 @@ export interface ArticleQueueController {
   queryRevision: number;
   fullContentLoadedIds: React.RefObject<Set<number>>;
   loadArticles: () => Promise<void>;
-  refreshQueue: () => Promise<boolean>;
+  refreshQueue: () => Promise<void>;
   loadOlderArticles: () => Promise<Article[]>;
   selectArticle: (articleId: number, keyboardTarget?: boolean) => void;
   clearKeyboardTarget: () => void;
@@ -324,7 +324,7 @@ export function useArticleQueue({
   const refreshQueue = useCallback(async () => {
     try {
       const result = await pages.refetch({ cancelRefetch: false, throwOnError: true });
-      if (latestRequestKey.current !== requestKey) return false;
+      if (latestRequestKey.current !== requestKey) return;
       const candidates = result.data?.pages.flatMap((page) => page.articles) ?? [];
       setArticles(
         (current) =>
@@ -333,10 +333,8 @@ export function useArticleQueue({
             candidates.filter((article) => articleMatchesState(article, route.readerRoute.state)),
           ).articles,
       );
-      return true;
     } catch (error) {
       showToast(`Could not load more articles: ${errorMessage(error)}`);
-      return false;
     }
   }, [pages, requestKey, route.readerRoute.state, setArticles, showToast]);
   const mergeArticle = useCallback(

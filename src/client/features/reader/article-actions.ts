@@ -31,6 +31,8 @@ export function useArticleActions({
   const client = useQueryClient();
   const { run: mutateRequest, isPending: markReadPending } = useRequestMutation();
   const manuallyUnreadArticleIds = useRef(new Set<number>());
+  const activeArticleIdRef = useRef(queue.activeArticleId);
+  activeArticleIdRef.current = queue.activeArticleId;
   const loadBootstrap = dataResource.loadBootstrap;
   const loadArticles = queue.loadArticles;
 
@@ -159,8 +161,12 @@ export function useArticleActions({
         !queue.loadingMore &&
         queue.queueReady
       ) {
-        if (!(await queue.refreshQueue())) return false;
-        if (route.current() !== currentRoute) return false;
+        await queue.refreshQueue();
+        if (
+          route.current() !== currentRoute ||
+          (!routed && activeArticleIdRef.current !== currentId)
+        )
+          return false;
         const articles = queue.articlesRef.current;
         const next = articles[articles.findIndex((article) => article.id === currentId) + 1];
         if (next) {

@@ -13,6 +13,104 @@ import {
 } from "./reader-browser-fixture.js";
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it("returns from the final article when the queue refresh fails offline", async () => {
+    const sample = seedReaderBacklog(database, "Offline queue completion", 1);
+    const page = await open("magazine");
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+      await page
+        .getByRole("button", { name: `Open ${sample.feed.title} 0000`, exact: true })
+        .click();
+      await expect
+        .poll(
+          () =>
+            database.articles.listArticlePage(1, { feedId: sample.feed.id, state: "unread" })
+              .articles.length,
+        )
+        .toBe(0);
+      await settle(page);
+      const response = await page.request.get(
+        `/api/articles?feedId=${sample.feed.id}&state=unread`,
+      );
+      expect(response.status()).toBe(200);
+      expect((await response.json()).articles).toEqual([]);
+      await page.context().setOffline(true);
+      await page.keyboard.press("j");
+      await expect
+        .poll(() => new URL(page.url()).pathname, { timeout: 15_000 })
+        .toBe(`/feeds/${sample.feed.id}/unread`);
+      await expect.poll(() => page.locator(".article-swipe-layer.is-active").count()).toBe(0);
+    } finally {
+      await page.context().setOffline(false);
+      await page.close();
+    }
+  }, 20_000);
+
+  it.each(["keyboard", "focus"] as const)(
+    "keeps a newer expanded article selection made by %s while the queue refresh is pending",
+    async (input) => {
+      const sample = seedReaderBacklog(database, `Expanded pending selection ${input}`, 2);
+      const page = await open("expanded");
+      let release = () => {};
+      try {
+        await page.goto(`${origin}feeds/${sample.feed.id}/all`);
+        await page.locator(".expanded-article").first().waitFor();
+        for (const title of ["0000", "0001"]) {
+          await page.keyboard.press("j");
+          await expect
+            .poll(() => page.locator(".expanded-article.is-active h2").textContent())
+            .toContain(title);
+          await settle(page);
+        }
+        await expect
+          .poll(
+            () =>
+              database.articles.listArticlePage(1, { feedId: sample.feed.id, state: "unread" })
+                .articles.length,
+          )
+          .toBe(0);
+        await page.waitForTimeout(500);
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let requested = false;
+        await page.route(/\/api\/articles\?/, async (route) => {
+          const response = await route.fetch();
+          expect(response.status()).toBe(200);
+          requested = true;
+          await held;
+          await route.fulfill({ response });
+        });
+        await page.keyboard.press("j");
+        await expect.poll(() => requested).toBe(true);
+        if (input === "keyboard") await page.keyboard.press("k");
+        else
+          await page
+            .locator(".expanded-article")
+            .first()
+            .getByRole("button", { name: "Save article (S)", exact: true })
+            .focus();
+        await expect
+          .poll(() => page.locator(".expanded-article.is-active h2").textContent())
+          .toContain("0000");
+        const completed = page.waitForResponse((response) =>
+          response.url().includes("/api/articles?"),
+        );
+        release();
+        await completed;
+        await settle(page);
+        expect(new URL(page.url()).pathname).toBe(`/feeds/${sample.feed.id}/all`);
+        expect(await page.locator(".expanded-article.is-active h2").textContent()).toContain(
+          "0000",
+        );
+      } finally {
+        release();
+        await page.close();
+      }
+    },
+    20_000,
+  );
+
   it.each(["pending", "complete", "unannounced", "left reader"] as const)(
     "continues reading new deliveries with a %s queue update",
     async (delivery) => {
