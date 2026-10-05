@@ -223,7 +223,11 @@ export function ImageLightbox({
         event.stopPropagation();
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget || event.target === stageRef.current) {
+        if (
+          event.target === event.currentTarget ||
+          event.target === stageRef.current ||
+          event.target === imageRef.current
+        ) {
           dialog.close();
         }
       }}

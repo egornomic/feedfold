@@ -1479,6 +1479,7 @@ img.article-card-image {
 
 .image-lightbox-stage img {
   display: block;
+  cursor: zoom-out;
   flex: 0 0 auto;
   margin: auto;
   opacity: 1;
