@@ -299,8 +299,6 @@ describe("article HTML", () => {
       expect(viewerImage.style.width).toBe("");
       await touchViewer("touchstart", 100);
       await touchViewer("touchcancel", null);
-      await act(async () => viewerImage.click());
-      expect(dialog?.hasAttribute("data-open")).toBe(true);
 
       await pressViewerKey("ArrowRight");
       expect(dialog?.querySelector("img")?.alt).toBe("Chart");
@@ -325,7 +323,7 @@ describe("article HTML", () => {
       expect(articleEscapeCount).toBe(0);
       expect(dom.window.document.activeElement).toBe(images[0]);
 
-      for (const closeWith of ["button", "background"]) {
+      for (const closeWith of ["button", "background", "image"]) {
         await act(async () => images[1]?.click());
         const reopened = dom.window.document.querySelector<HTMLElement>(
           '[role="dialog"].image-lightbox',
@@ -336,7 +334,9 @@ describe("article HTML", () => {
             ?.querySelector<HTMLElement>(
               closeWith === "button"
                 ? '[aria-label="Close image viewer"]'
-                : ".image-lightbox-stage",
+                : closeWith === "image"
+                  ? ".image-lightbox-stage img"
+                  : ".image-lightbox-stage",
             )
             ?.click();
         });

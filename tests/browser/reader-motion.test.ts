@@ -252,6 +252,18 @@ it("swipes across an article image without opening it and still opens the image 
     await expect.poll(title).toContain("0000");
     await image.tap();
     await page.locator(".image-lightbox").waitFor();
+    const preview = page.locator(".image-lightbox-stage img");
+    expect(await preview.evaluate((element) => getComputedStyle(element).cursor)).toBe("zoom-out");
+    await preview.tap();
+    await page.locator(".image-lightbox").waitFor({ state: "detached" });
+    await image.tap();
+    await page.locator(".image-lightbox").waitFor();
+    await page.keyboard.press("+");
+    await page.locator(".image-lightbox-stage img.is-zoomed").waitFor();
+    await preview.click();
+    await page.locator(".image-lightbox").waitFor({ state: "detached" });
+    await image.tap();
+    await page.locator(".image-lightbox").waitFor();
     await page.keyboard.press("Escape");
     await page.locator(".image-lightbox").waitFor({ state: "detached" });
   } finally {
