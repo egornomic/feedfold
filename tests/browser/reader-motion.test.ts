@@ -258,6 +258,7 @@ it("swipes across an article image without opening it and still opens the image 
     await page.locator(".image-lightbox").waitFor({ state: "detached" });
     await image.tap();
     await page.locator(".image-lightbox").waitFor();
+    await preview.evaluate((element) => (element as HTMLImageElement).decode());
     await page.keyboard.press("+");
     await page.locator(".image-lightbox-stage img.is-zoomed").waitFor();
     await preview.click();
