@@ -80,7 +80,7 @@ function ArticleRows({ context, children, style, ...props }: ListProps & Context
 
 function ArticleFooter({ context }: ContextProp<ListContext>) {
   return (
-    <div className="virtual-article-footer" aria-live="polite">
+    <div className={`virtual-article-footer${context.hasMore ? "" : " is-end"}`} aria-live="polite">
       {context.hasMore ? (
         <button
           type="button"
@@ -234,7 +234,7 @@ export function VirtualArticles({
       });
     };
     const scroll = () => {
-      const down = scroller.scrollTop > lastTop + 1;
+      const down = scroller.scrollTop > lastTop;
       lastTop = scroller.scrollTop;
       measure();
       const passedIds = down ? passed.passed(scroller.scrollTop) : [];

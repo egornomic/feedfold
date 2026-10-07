@@ -83,10 +83,19 @@
   list-style: none;
 }
 
+.article-list,
+.expanded-stream {
+  container-type: size;
+}
+
 .virtual-article-footer {
   padding: 36px 18px 100px;
   color: var(--muted);
   text-align: center;
+}
+
+.virtual-article-footer.is-end {
+  min-height: calc(100cqh + 1px);
 }
 
 .virtual-article-header {

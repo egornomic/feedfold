@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { seedReaderBacklog } from "../helpers/reader-backlog.js";
 import {
   anchor,
   backlog,
@@ -7,6 +8,7 @@ import {
   desktop,
   desktopAppPath,
   open,
+  origin,
   other,
   settle,
   surface,
@@ -14,6 +16,102 @@ import {
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
   for (const mode of ["magazine", "expanded"] as const) {
+    for (const count of [1, 3]) {
+      it.each([true, false])(
+        `${mode}: scrolls past the last of ${count} posts with automatic reading set to %s`,
+        async (markReadOnScroll) => {
+          const sample = seedReaderBacklog(
+            database,
+            `Short queue ${mode} ${count} ${markReadOnScroll}`,
+            count,
+          );
+          database.feeds.completeSourceRefresh(sample.sourceId, {
+            ...sample.refresh,
+            parsed: {
+              title: sample.feed.title,
+              siteUrl: null,
+              articles: sample.articles.map((article) => ({
+                ...article,
+                feedContentHtml: "<p>A short post.</p>",
+              })),
+            },
+          });
+          database.settings.updateSettings(1, { markReadOnScroll });
+          const page = await open(mode);
+          const unreadCount = async () => {
+            const response = await page.request.get(
+              `/api/articles?feedId=${sample.feed.id}&state=unread`,
+            );
+            expect(response.status()).toBe(200);
+            return (await response.json()).articles.length;
+          };
+          try {
+            await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+            await page
+              .locator('.reading-workspace[aria-busy="false"] .virtual-article-row')
+              .first()
+              .waitFor();
+            await settle(page);
+            expect(await unreadCount()).toBe(count);
+            if (count === 1) {
+              for (const view of [
+                mode === "magazine" ? "Expanded view" : "Magazine view",
+                mode === "magazine" ? "Magazine view" : "Expanded view",
+              ])
+                await page.getByRole("button", { name: view, exact: true }).click();
+              await page.locator(`.reading-workspace.mode-${mode}[aria-busy="false"]`).waitFor();
+              const readButton = page.locator(
+                mode === "magazine"
+                  ? ".list-read-button"
+                  : '.expanded-actions [aria-label^="Mark as"]',
+              );
+              await readButton.click();
+              await expect.poll(unreadCount).toBe(0);
+              await readButton.click();
+              await expect.poll(unreadCount).toBe(1);
+            } else {
+              // Reaching the end without user input must not mark posts as read.
+              await bottom(page);
+              await page.waitForTimeout(400);
+              expect(await unreadCount()).toBe(count);
+              await surface(page).evaluate((element) => {
+                element.scrollTop = 0;
+              });
+            }
+            await settle(page);
+            const box = await surface(page).boundingBox();
+            if (!box) throw new Error("No scrolling surface");
+            const lastBottom = await page
+              .locator(".virtual-article-row")
+              .last()
+              .evaluate(
+                (element) =>
+                  element.getBoundingClientRect().bottom -
+                  (element.closest("[data-virtuoso-scroller]")?.getBoundingClientRect().top ?? 0),
+              );
+            await page.mouse.move(box.x + box.width / 2, box.y + 100);
+            await page.mouse.wheel(0, lastBottom - 2);
+            await settle(page);
+            for (let step = 0; step < 4; step++) {
+              await page.mouse.wheel(0, 1);
+              await settle(page);
+            }
+            await expect
+              .poll(() => surface(page).evaluate((element) => element.scrollTop))
+              .toBeGreaterThanOrEqual(lastBottom);
+            if (markReadOnScroll) await expect.poll(unreadCount).toBe(0);
+            else {
+              await page.waitForTimeout(400);
+              expect(await unreadCount()).toBe(count);
+            }
+          } finally {
+            await page.close();
+            database.settings.updateSettings(1, { markReadOnScroll: true });
+          }
+        },
+      );
+    }
+
     it(`${mode}: loads pages with bounded DOM, retries failure, and searches unmounted article bodies`, async () => {
       const page = await open(mode);
       try {

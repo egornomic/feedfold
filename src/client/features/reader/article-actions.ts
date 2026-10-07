@@ -257,14 +257,6 @@ export function useArticleActions({
     [dataResource, loadArticles, loadBootstrap, queue, showToast, client],
   );
 
-  const markPassedArticlesRead = useCallback(
-    (candidates: Article[]) =>
-      markArticleBatchRead(
-        candidates.filter((article) => !manuallyUnreadArticleIds.current.has(article.id)),
-      ),
-    [markArticleBatchRead],
-  );
-
   const markVisibleRead = useCallback(async () => {
     const unreadArticles = queue.articles.filter((article) => !article.isRead);
     if (unreadArticles.length === 0) {
@@ -313,7 +305,7 @@ export function useArticleActions({
     moveArticle,
     copyArticleUrl,
     openArticleSource,
-    markPassedArticlesRead,
+    markPassedArticlesRead: markArticleBatchRead,
     markVisibleRead,
     markOlderArticlesRead,
   };
