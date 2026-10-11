@@ -6,6 +6,8 @@ export type Theme = "auto" | "dark" | "light";
 export type ResolvedTheme = Exclude<Theme, "auto">;
 export type ColorPalettes = Record<ResolvedTheme, ColorPalette>;
 
+const STARTUP_APPEARANCE_KEY = "feedfold-startup-appearance";
+
 export const ARTICLE_FONT_MIN = 16;
 export const ARTICLE_FONT_MAX = 23;
 const ARTICLE_FONT_DEFAULT = 18;
@@ -33,6 +35,7 @@ function accountStorageKey(userId: string, setting: string): string {
 }
 
 export function clearReaderPreferences(userId: string): void {
+  window.localStorage.removeItem(STARTUP_APPEARANCE_KEY);
   for (const setting of [
     "reading-mode",
     "theme",
@@ -53,6 +56,34 @@ function resolveTheme(theme: Theme, prefersLight: boolean): ResolvedTheme {
 export function resolveAppearance(theme: Theme, palettes: ColorPalettes, prefersLight: boolean) {
   const mode = resolveTheme(theme, prefersLight);
   return { mode, palette: palettes[mode] };
+}
+
+export function restoreStartupAppearance() {
+  const saved = window.localStorage.getItem(STARTUP_APPEARANCE_KEY);
+  const { theme, colorPalettes } = saved
+    ? (JSON.parse(saved) as { theme: Theme; colorPalettes: ColorPalettes })
+    : {
+        theme: "dark" as const,
+        colorPalettes: { light: DEFAULT_COLOR_PALETTE, dark: DEFAULT_COLOR_PALETTE },
+      };
+  return applyReaderAppearance(theme, colorPalettes);
+}
+
+export function applyReaderAppearance(theme: Theme, colorPalettes: ColorPalettes) {
+  window.localStorage.setItem(STARTUP_APPEARANCE_KEY, JSON.stringify({ theme, colorPalettes }));
+  const colorScheme = window.matchMedia("(prefers-color-scheme: light)");
+  const apply = () => {
+    const appearance = resolveAppearance(theme, colorPalettes, colorScheme.matches);
+    document.documentElement.dataset.theme = appearance.mode;
+    document.documentElement.dataset.palette = appearance.palette;
+    document
+      .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+      ?.setAttribute("content", getComputedStyle(document.body).backgroundColor);
+  };
+  apply();
+  if (theme !== "auto") return;
+  colorScheme.addEventListener("change", apply);
+  return () => colorScheme.removeEventListener("change", apply);
 }
 
 interface ReaderPreferencesState {

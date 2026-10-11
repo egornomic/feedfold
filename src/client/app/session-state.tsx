@@ -1,8 +1,8 @@
 import { createContext, type ReactNode, useContext, useLayoutEffect, useState } from "react";
 import { useStore } from "zustand";
 import {
+  applyReaderAppearance,
   createReaderPreferencesStore,
-  resolveAppearance,
 } from "../features/reader/reader-preferences";
 import { createInterfaceStore } from "./interface-state";
 
@@ -56,21 +56,7 @@ function ReaderAppearance() {
   const colorPalettes = useReaderPreferences((state) => state.colorPalettes);
   const articleFontSize = useReaderPreferences((state) => state.articleFontSize);
 
-  useLayoutEffect(() => {
-    const colorScheme = window.matchMedia("(prefers-color-scheme: light)");
-    const applyTheme = () => {
-      const appearance = resolveAppearance(theme, colorPalettes, colorScheme.matches);
-      document.documentElement.dataset.theme = appearance.mode;
-      document.documentElement.dataset.palette = appearance.palette;
-      document
-        .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-        ?.setAttribute("content", getComputedStyle(document.body).backgroundColor);
-    };
-    applyTheme();
-    if (theme !== "auto") return;
-    colorScheme.addEventListener("change", applyTheme);
-    return () => colorScheme.removeEventListener("change", applyTheme);
-  }, [theme, colorPalettes]);
+  useLayoutEffect(() => applyReaderAppearance(theme, colorPalettes), [theme, colorPalettes]);
 
   useLayoutEffect(() => {
     document.documentElement.style.setProperty("--article-font-size", `${articleFontSize}px`);
