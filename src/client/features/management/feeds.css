@@ -472,6 +472,8 @@
 }
 
 .folder-management-row {
+  position: relative;
+  isolation: isolate;
   display: grid;
   min-width: 0;
   min-height: 58px;
@@ -481,9 +483,19 @@
   margin: 0;
   padding: 7px 8px;
   border: 0;
-  transition:
-    background-color var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease;
+  transition: background-color var(--duration-fast) ease;
+}
+
+.folder-management-row::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--accent-surface);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) ease;
 }
 
 .folder-disclosure {
@@ -638,9 +650,8 @@
   cursor: move;
 }
 
-.folder-management-row.is-feed-drop-target {
-  background: var(--accent-surface);
-  box-shadow: inset 0 0 0 1px var(--accent);
+.folder-management-row.is-feed-drop-target::before {
+  opacity: 1;
 }
 
 .folder-management-row.is-feed-drop-target .folder-row-identity > svg,
@@ -1020,6 +1031,7 @@
 @media (prefers-reduced-motion: reduce) {
   .folder-disclosure,
   .folder-management-row,
+  .folder-management-row::before,
   .folder-feed-row {
     transition-duration: 0s;
   }
