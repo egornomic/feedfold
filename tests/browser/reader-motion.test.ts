@@ -231,6 +231,70 @@ describe("reader motion with touch input and the live API", () => {
   });
 });
 
+it("swipes across a native article video while preserving playback and vertical scrolling", async () => {
+  const { page, touchContext, touch, title, settled } = await openTouchReader(0);
+  try {
+    const video = page.locator(".article-swipe-layer.is-active video");
+    const bounds = async () => {
+      await video.scrollIntoViewIfNeeded();
+      const box = await video.boundingBox();
+      if (!box) throw new Error("Expected a visible article video");
+      return box;
+    };
+    const swipeVideo = async (cancelled = false) => {
+      const box = await bounds();
+      const y = box.y + box.height / 3;
+      await touch("touchStart", box.x + box.width * 0.8, y);
+      for (let step = 1; step <= 6; step++) {
+        await touch("touchMove", box.x + box.width * (0.8 - step * 0.1), y);
+        await page.waitForTimeout(16);
+      }
+      await touch(cancelled ? "touchCancel" : "touchEnd");
+    };
+    await swipeVideo();
+    await expect.poll(title).toContain("0001");
+    await settled();
+    await page.keyboard.press("k");
+    await expect.poll(title).toContain("0000");
+    await settled();
+
+    await swipeVideo(true);
+    await settled();
+    expect(await title()).toContain("0000");
+    expect(await video.evaluate((element: HTMLVideoElement) => element.paused)).toBe(true);
+
+    const box = await bounds();
+    await video.tap({ position: { x: 20, y: box.height - 25 } });
+    await expect
+      .poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime))
+      .toBeGreaterThan(0);
+    await swipeVideo();
+    await expect.poll(title).toContain("0001");
+    await settled();
+    await page.keyboard.press("k");
+    await expect.poll(title).toContain("0000");
+    await settled();
+
+    const scrollBox = await bounds();
+    const layer = page.locator(".article-swipe-layer.is-active");
+    const scrollTop = await layer.evaluate((element) => element.scrollTop);
+    const x = scrollBox.x + scrollBox.width / 2;
+    const y = scrollBox.y + scrollBox.height / 3;
+    await touch("touchStart", x, y);
+    for (let step = 1; step <= 6; step++) {
+      await touch("touchMove", x, y - step * 15);
+      await page.waitForTimeout(16);
+    }
+    await touch("touchEnd");
+    await expect
+      .poll(() => layer.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(scrollTop);
+    expect(await title()).toContain("0000");
+  } finally {
+    await touchContext.close();
+  }
+});
+
 it("swipes across an article image without opening it and still opens the image on a tap", async () => {
   const { page, touchContext, touch, title, settled } = await openTouchReader(0);
   try {

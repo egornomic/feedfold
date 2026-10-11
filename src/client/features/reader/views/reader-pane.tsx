@@ -40,7 +40,7 @@ import { InlineError } from "../reader-states";
 
 const ARTICLE_SWIPE_TARGETS =
   "a, button, input, select, textarea, summary, video, audio, iframe, pre, dialog, .article-table-scroll, [contenteditable], [data-image-lightbox-trigger]";
-const ARTICLE_SWIPE_SURFACE = "[data-article-swipe-surface], [data-image-lightbox-trigger]";
+const ARTICLE_SWIPE_SURFACE = "video, [data-article-swipe-surface], [data-image-lightbox-trigger]";
 // Match the existing critically damped spring's 0.32 s response.
 const SWIPE_OMEGA = (2 * Math.PI) / 0.32;
 const SWIPE_SPRING = {
