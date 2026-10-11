@@ -1,5 +1,5 @@
 import { ExternalLink, X } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Modal, useDialog } from "../../../ui/dialog.js";
 
 export interface ImageLightboxItem {
@@ -47,8 +47,7 @@ export function ImageLightbox({
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(state.index);
-  const [zoom, setZoom] = useState<number | null>(null);
-  const [pinchMidpoint, setPinchMidpoint] = useState<{ x: number; y: number } | null>(null);
+  const zoom = useRef<number | null>(null);
   const fittedSize = useRef<{ width: number; height: number } | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "loaded" | "error">("loading");
   const stageRef = useRef<HTMLDivElement>(null);
@@ -63,16 +62,35 @@ export function ImageLightbox({
   const image = state.images[index] ?? state.images[0];
   const multiple = state.images.length > 1;
 
+  const setZoom = useCallback((next: number | null, midpoint?: { x: number; y: number }) => {
+    zoom.current = next;
+    const element = imageRef.current;
+    if (!element) return;
+    const size = fittedSize.current;
+    const zoomed = next !== null && size !== null;
+    element.className = zoomed ? "is-zoomed" : "is-fit";
+    element.style.width = zoomed ? `${size.width * next}px` : "";
+    element.style.height = zoomed ? `${size.height * next}px` : "";
+    element.style.maxWidth = zoomed ? "none" : "";
+    element.style.maxHeight = zoomed ? "none" : "";
+    const stage = stageRef.current;
+    const gesture = pinch.current;
+    if (!zoomed || !stage || !gesture || !midpoint) return;
+    // Keep the same image detail underneath the moving midpoint of the fingers.
+    const rect = element.getBoundingClientRect();
+    stage.scrollLeft += rect.left + gesture.imageX * rect.width - midpoint.x;
+    stage.scrollTop += rect.top + gesture.imageY * rect.height - midpoint.y;
+  }, []);
+
   const resetView = useCallback(() => {
     setZoom(null);
-    setPinchMidpoint(null);
     fittedSize.current = null;
     wheelDelta.current = 0;
     pinch.current = null;
     if (typeof stageRef.current?.scrollTo === "function") {
       stageRef.current.scrollTo({ top: 0, left: 0 });
     }
-  }, []);
+  }, [setZoom]);
 
   const showImage = useCallback(
     (nextIndex: number) => {
@@ -90,25 +108,17 @@ export function ImageLightbox({
     [index, resetView, state.images],
   );
 
-  const changeZoom = useCallback((direction: number) => {
-    const element = imageRef.current;
-    if (!element?.naturalWidth) return;
-    fittedSize.current ??= element.getBoundingClientRect();
-    setZoom((current) => clampZoom(Number(((current ?? 1) + direction * ZOOM_STEP).toFixed(2))));
-  }, []);
+  const changeZoom = useCallback(
+    (direction: number) => {
+      const element = imageRef.current;
+      if (!element?.naturalWidth) return;
+      fittedSize.current ??= element.getBoundingClientRect();
+      setZoom(clampZoom(Number(((zoom.current ?? 1) + direction * ZOOM_STEP).toFixed(2))));
+    },
+    [setZoom],
+  );
   const zoomIn = useCallback(() => changeZoom(1), [changeZoom]);
   const zoomOut = useCallback(() => changeZoom(-1), [changeZoom]);
-
-  useLayoutEffect(() => {
-    const stage = stageRef.current;
-    const element = imageRef.current;
-    const gesture = pinch.current;
-    if (zoom === null || !stage || !element || !gesture || !pinchMidpoint) return;
-    // Keep the same image detail underneath the moving midpoint of the fingers.
-    const rect = element.getBoundingClientRect();
-    stage.scrollLeft += rect.left + gesture.imageX * rect.width - pinchMidpoint.x;
-    stage.scrollTop += rect.top + gesture.imageY * rect.height - pinchMidpoint.y;
-  }, [zoom, pinchMidpoint]);
 
   const attachStage = useCallback(
     (stage: HTMLDivElement | null) => {
@@ -137,8 +147,10 @@ export function ImageLightbox({
           };
           return;
         }
-        setPinchMidpoint({ x: clientX, y: clientY });
-        setZoom(clampZoom((pinch.current.zoom * distance) / pinch.current.distance));
+        setZoom(clampZoom((pinch.current.zoom * distance) / pinch.current.distance), {
+          x: clientX,
+          y: clientY,
+        });
       };
       const endTouch = (event: TouchEvent) => {
         if (pinch.current) event.preventDefault();
@@ -175,20 +187,11 @@ export function ImageLightbox({
         stage.removeEventListener("wheel", handleWheel);
       };
     },
-    [zoomIn, zoomOut],
+    [setZoom, zoomIn, zoomOut],
   );
 
   if (!image) return null;
   const imageUrl = externalHttpUrl(image.src);
-  const imageStyle =
-    zoom !== null && fittedSize.current
-      ? {
-          width: fittedSize.current.width * zoom,
-          height: fittedSize.current.height * zoom,
-          maxWidth: "none",
-          maxHeight: "none",
-        }
-      : undefined;
   return (
     <Modal
       dialog={dialog}
@@ -252,11 +255,10 @@ export function ImageLightbox({
           <img
             key={image.src}
             ref={imageRef}
-            className={zoom === null ? "is-fit" : "is-zoomed"}
+            className={zoom.current === null ? "is-fit" : "is-zoomed"}
             data-loading={loadState === "loading" ? "true" : undefined}
             src={image.src}
             alt={image.alt}
-            style={imageStyle}
             draggable={false}
             onLoad={() => setLoadState("loaded")}
             onError={() => setLoadState("error")}

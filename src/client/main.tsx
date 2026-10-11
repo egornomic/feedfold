@@ -54,7 +54,7 @@ const TOAST_STYLE: CSSProperties = {
   fontSize: "var(--type-body)",
   fontWeight: "var(--weight-semibold)",
   transition:
-    "transform var(--duration-surface) var(--ease-out), opacity var(--duration-surface) var(--ease-out), height var(--duration-surface) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out)",
+    "transform var(--duration-surface) var(--ease-out), opacity var(--duration-surface) var(--ease-out)",
 };
 let lastMousePosition: { x: number; y: number } | null = null;
 
