@@ -592,7 +592,7 @@
   flex: 1;
 }
 
-:where(.reader-toolbar.is-reading-article) .search-form,
+:where(.reader-toolbar.is-reading-article) .search-presence,
 :where(.reader-toolbar.is-reading-article) .search-toggle,
 :where(.reader-toolbar.is-reading-article) .view-switcher,
 :where(.reader-toolbar.is-reading-article) .toolbar-actions {
