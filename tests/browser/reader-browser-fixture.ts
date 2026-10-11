@@ -1,6 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import fastifyStatic from "@fastify/static";
 import react from "@vitejs/plugin-react";
 import {
   _electron,
@@ -67,6 +69,10 @@ beforeAll(async () => {
     wav.writeUInt32LE(samples * 2, 40);
     return reply.type("audio/wav").send(wav);
   });
+  await server.app.register(fastifyStatic, {
+    root: fileURLToPath(new URL("../fixtures/", import.meta.url)),
+    prefix: "/test-media/",
+  });
   server.app.get("/player", async (_request, reply) =>
     reply
       .header("X-Frame-Options", "SAMEORIGIN")
@@ -93,6 +99,7 @@ beforeAll(async () => {
         "/api": { target: apiOrigin },
         "/player": { target: apiOrigin },
         "/tone.wav": { target: apiOrigin },
+        "/test-media": { target: apiOrigin },
       },
     },
   });

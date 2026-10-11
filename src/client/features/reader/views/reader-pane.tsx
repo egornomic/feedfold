@@ -40,7 +40,8 @@ import { InlineError } from "../reader-states";
 
 const ARTICLE_SWIPE_TARGETS =
   "a, button, input, select, textarea, summary, video, audio, iframe, pre, dialog, .article-table-scroll, [contenteditable], [data-image-lightbox-trigger]";
-const ARTICLE_SWIPE_SURFACE = "[data-article-swipe-surface], [data-image-lightbox-trigger]";
+const ARTICLE_SWIPE_SURFACE = "video, [data-article-swipe-surface], [data-image-lightbox-trigger]";
+const NATIVE_VIDEO_CONTROL_INSET = 64;
 // Match the existing critically damped spring's 0.32 s response.
 const SWIPE_OMEGA = (2 * Math.PI) / 0.32;
 const SWIPE_SPRING = {
@@ -359,6 +360,15 @@ export function ReaderPane({
       suppressSwipeSurfaceClick.current = false;
       const target = event.target instanceof Element ? event.target : null;
       const swipeSurface = target?.closest(ARTICLE_SWIPE_SURFACE);
+      if (swipeSurface instanceof HTMLVideoElement && swipeSurface.controls) {
+        // Native controls retarget touches to the video, hiding the original control.
+        const bounds = swipeSurface.getBoundingClientRect();
+        if (
+          event.clientY < bounds.top + NATIVE_VIDEO_CONTROL_INSET ||
+          event.clientY >= bounds.bottom - NATIVE_VIDEO_CONTROL_INSET
+        )
+          return;
+      }
       const active = activeSurfaceRef.current;
       if (
         !active ||
