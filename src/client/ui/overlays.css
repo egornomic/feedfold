@@ -41,6 +41,10 @@ body {
   overflow: visible;
 }
 
+.dropdown-select-option:not([data-disabled]) {
+  cursor: pointer;
+}
+
 .dropdown-select-option[data-highlighted] {
   background: var(--surface-hover);
   color: var(--text);
