@@ -336,7 +336,7 @@
     min-width: 100px;
     max-width: 180px;
   }
-  .search-form {
+  .search-presence {
     min-width: 0;
     flex: 1;
   }
@@ -440,9 +440,14 @@
       );
     gap: 8px;
     padding: 6px 9px 7px;
+    transition: row-gap var(--duration-surface) var(--ease-out);
   }
   .reader-toolbar.is-search-open .reader-title-row {
     grid-template-areas: "menu title search-toggle options" "search search search search";
+  }
+  .reader-title-row:has(> .search-presence[data-motion-state="closed"]) {
+    row-gap: 0;
+    transition-duration: var(--duration-fast);
   }
   .search-toggle {
     grid-area: search-toggle;
@@ -466,15 +471,22 @@
     max-width: none;
     align-self: center;
   }
-  .reader-title-row > .search-form {
+  .reader-title-row > .search-presence {
     grid-area: search;
     width: 100%;
     max-width: none;
     height: var(--control-size-touch);
     margin-left: 0;
+  }
+  .reader-title-row > .search-presence[data-motion-state="closed"] {
+    max-width: none;
+    height: 0;
+    margin-right: 0;
+  }
+  .reader-title-row .search-form {
     transform-origin: top right;
   }
-  .reader-title-row > .search-form > button:not(.search-submit) {
+  .reader-title-row .search-form > button:not(.search-submit) {
     width: var(--control-size-touch);
     height: var(--control-size-touch);
   }
@@ -800,6 +812,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .search-presence,
+  .reader-title-row:has(> .search-presence[data-motion-state="closed"]) {
+    transition: none;
+  }
+
   .search-form,
   .search-form[data-motion-state="closed"] {
     transform: none;

@@ -149,49 +149,51 @@ export function ReaderToolbar({
           )}
         </button>
         {searchPresence.present ? (
-          <form
-            id="article-search-form"
-            className="search-form"
-            data-motion-state={searchPresence.state}
-            inert={!searchExpanded}
-            aria-label="Article search"
-            onSubmit={onSearch}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape") return;
-              event.preventDefault();
-              event.stopPropagation();
-              closeSearch();
-            }}
-          >
-            <Search aria-hidden="true" size={16} />
-            <label className="sr-only" htmlFor="article-search">
-              Search articles
-            </label>
-            <input
-              ref={searchInputRef}
-              id="article-search"
-              type="search"
-              value={searchInput}
-              placeholder="Search titles and article text"
-              onChange={(event) => onSearchInput(event.target.value)}
-            />
-            {searchInput || searchActive ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchOpen(true);
-                  onClearSearch();
-                  searchInputRef.current?.focus();
-                }}
-                aria-label="Clear search"
-              >
-                <X aria-hidden="true" size={15} />
+          <div className="search-presence" data-motion-state={searchPresence.state}>
+            <form
+              id="article-search-form"
+              className="search-form"
+              data-motion-state={searchPresence.state}
+              inert={!searchExpanded}
+              aria-label="Article search"
+              onSubmit={onSearch}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") return;
+                event.preventDefault();
+                event.stopPropagation();
+                closeSearch();
+              }}
+            >
+              <Search aria-hidden="true" size={16} />
+              <label className="sr-only" htmlFor="article-search">
+                Search articles
+              </label>
+              <input
+                ref={searchInputRef}
+                id="article-search"
+                type="search"
+                value={searchInput}
+                placeholder="Search titles and article text"
+                onChange={(event) => onSearchInput(event.target.value)}
+              />
+              {searchInput || searchActive ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchOpen(true);
+                    onClearSearch();
+                    searchInputRef.current?.focus();
+                  }}
+                  aria-label="Clear search"
+                >
+                  <X aria-hidden="true" size={15} />
+                </button>
+              ) : null}
+              <button className="search-submit" type="submit">
+                Search
               </button>
-            ) : null}
-            <button className="search-submit" type="submit">
-              Search
-            </button>
-          </form>
+            </form>
+          </div>
         ) : null}
         <fieldset className="view-switcher">
           <legend className="sr-only">Reading view</legend>
