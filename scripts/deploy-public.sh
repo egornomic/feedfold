@@ -10,13 +10,15 @@ if [[ ! $revision =~ ^[a-f0-9]{40}$ ]]; then
 fi
 exec 9>/run/lock/feedfold-deploy.lock
 flock 9
+compose=(docker compose --project-name feedfold --env-file /etc/feedfold/feedfold.env)
 if [[ $request == "verify $revision" ]]; then
   if [[ $(cat /srv/feedfold/revision) != "$revision" ]]; then
     echo 'The running revision does not match the requested verification.' >&2
     exit 1
   fi
   curl --fail --silent --show-error --retry 5 --retry-all-errors --dump-header /dev/stderr https://feedfold.com/health | jq --exit-status '.status == "ok"'
-  curl --fail --silent --show-error --dump-header /dev/stderr https://feedfold.com/api/auth/config | jq --exit-status '.registrationMode == "invite"'
+  expected_registration_mode=$("${compose[@]}" --file /srv/feedfold/app/compose.yaml config --format json | jq --raw-output --exit-status '.services.feedfold.environment.FEEDFOLD_REGISTRATION_MODE')
+  curl --fail --silent --show-error --dump-header /dev/stderr https://feedfold.com/api/auth/config | jq --exit-status --arg expected "$expected_registration_mode" '.registrationMode == $expected'
   exit 0
 fi
 cd /srv/feedfold/app
@@ -34,7 +36,6 @@ if [[ $(docker image inspect --format '{{index .Config.Labels "org.opencontainer
 fi
 
 previous=$(cat /srv/feedfold/revision 2>/dev/null || true)
-compose=(docker compose --project-name feedfold --env-file /etc/feedfold/feedfold.env)
 if [[ -n $previous ]]; then
   # A migration can commit before startup fails. Roll back the database too.
   # This private, short-lived copy retains YouTube tokens unlike daily backups.
