@@ -35,6 +35,7 @@ function accountStorageKey(userId: string, setting: string): string {
 }
 
 export function clearReaderPreferences(userId: string): void {
+  window.localStorage.removeItem(STARTUP_APPEARANCE_KEY);
   for (const setting of [
     "reading-mode",
     "theme",
