@@ -24,7 +24,7 @@ export function seedReaderBacklog(
     publishedAt: new Date(Date.UTC(2026, 8, 22, 12, 0, -index)).toISOString(),
     summary: `Summary ${index}. ${"A variable length description. ".repeat((index % 5) + 1)}`,
     imageUrl: null,
-    feedContentHtml: `${index === 0 ? `<img src="${assetOrigin}/delayed-image.svg" alt="Delayed landscape"><video src="${assetOrigin}/tone.wav" controls loop></video>` : ""}<p>Introduction ${index}.</p>${"<p>Reading continuity matters when articles have different heights and content arrives while reading.</p>".repeat((index % 12) + 1)}<p>bodyneedle${index} searchable text.</p>`,
+    feedContentHtml: `${index === 0 ? `<img src="${assetOrigin}/delayed-image.svg" alt="Delayed landscape"><video src="${assetOrigin}/test-media/article-video.mp4" controls loop></video>` : ""}<p>Introduction ${index}.</p>${"<p>Reading continuity matters when articles have different heights and content arrives while reading.</p>".repeat((index % 12) + 1)}<p>bodyneedle${index} searchable text.</p>`,
   }));
   database.feeds.completeSourceRefresh(sourceId, {
     ...refresh,

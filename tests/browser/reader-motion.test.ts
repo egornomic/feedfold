@@ -1,3 +1,4 @@
+import type { CDPSession } from "playwright";
 import { describe, expect, it } from "vitest";
 import { backlog, browser, context, database, open, origin } from "./reader-browser-fixture.js";
 
@@ -53,7 +54,31 @@ async function openTouchReader(
       )
       .toBe(0);
   };
-  return { page, touchContext, touch, swipe, title, settled };
+  return { page, touchContext, session, touch, swipe, title, settled };
+}
+
+async function nativeVideoControlBox(session: CDPSession, pseudo: string) {
+  const { root } = await session.send("DOM.getDocument", { depth: 0 });
+  const { nodeId } = await session.send("DOM.querySelector", {
+    nodeId: root.nodeId,
+    selector: ".article-swipe-layer.is-active video",
+  });
+  const { node } = await session.send("DOM.describeNode", { nodeId, depth: -1, pierce: true });
+  function findControl(candidate: typeof node): typeof node | undefined {
+    if (candidate.attributes?.includes(pseudo)) return candidate;
+    for (const child of [...(candidate.children ?? []), ...(candidate.shadowRoots ?? [])]) {
+      const control = findControl(child);
+      if (control) return control;
+    }
+    return undefined;
+  }
+  const control = findControl(node);
+  if (!control) throw new Error(`Expected native video control: ${pseudo}`);
+  const { model } = await session.send("DOM.getBoxModel", { backendNodeId: control.backendNodeId });
+  const [left, top, right, , , bottom] = model.content;
+  if (left === undefined || top === undefined || right === undefined || bottom === undefined)
+    throw new Error("Expected native control coordinates");
+  return { left, right, x: (left + right) / 2, y: (top + bottom) / 2 };
 }
 
 describe("reader motion with touch input and the live API", () => {
@@ -232,7 +257,7 @@ describe("reader motion with touch input and the live API", () => {
 });
 
 it("swipes across a native article video while preserving playback and vertical scrolling", async () => {
-  const { page, touchContext, touch, title, settled } = await openTouchReader(0);
+  const { page, touchContext, session, touch, title, settled } = await openTouchReader(0);
   try {
     const video = page.locator(".article-swipe-layer.is-active video");
     const bounds = async () => {
@@ -263,8 +288,9 @@ it("swipes across a native article video while preserving playback and vertical 
     expect(await title()).toContain("0000");
     expect(await video.evaluate((element: HTMLVideoElement) => element.paused)).toBe(true);
 
-    const box = await bounds();
-    await video.tap({ position: { x: 20, y: box.height - 25 } });
+    await bounds();
+    const play = await nativeVideoControlBox(session, "-webkit-media-controls-play-button");
+    await page.touchscreen.tap(play.x, play.y);
     await expect
       .poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime))
       .toBeGreaterThan(0);
@@ -290,6 +316,88 @@ it("swipes across a native article video while preserving playback and vertical 
       .poll(() => layer.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(scrollTop);
     expect(await title()).toContain("0000");
+  } finally {
+    await touchContext.close();
+  }
+});
+
+it("seeks with native video controls without changing articles", async () => {
+  const { page, touchContext, session, touch, title, settled } = await openTouchReader(0);
+  try {
+    const video = page.locator(".article-swipe-layer.is-active video");
+    await video.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState))
+      .toBeGreaterThanOrEqual(2);
+    await video.tap();
+    const { left, right, y } = await nativeVideoControlBox(
+      session,
+      "-webkit-media-controls-timeline",
+    );
+    const originalTitle = await title();
+    for (const [from, to] of [
+      [0.2, 0.8],
+      [0.8, 0.2],
+    ] as const) {
+      await touch("touchStart", left + (right - left) * from, y);
+      for (let step = 1; step <= 6; step++) {
+        await touch("touchMove", left + (right - left) * (from + ((to - from) * step) / 6), y);
+        await page.waitForTimeout(16);
+      }
+      await touch("touchEnd");
+      await expect
+        .poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime))
+        .toBeGreaterThan(to === 0.8 ? 15 : 0);
+      if (to === 0.2)
+        expect(
+          await video.evaluate((element: HTMLVideoElement) => element.currentTime),
+        ).toBeLessThan(15);
+      await settled();
+      expect(await title()).toBe(originalTitle);
+    }
+  } finally {
+    await touchContext.close();
+  }
+});
+
+it("keeps retargeted video-control drags on the current article", async () => {
+  const { page, touchContext, title, settled } = await openTouchReader(0);
+  try {
+    const video = page.locator(".article-swipe-layer.is-active video");
+    await video.scrollIntoViewIfNeeded();
+    const box = await video.boundingBox();
+    if (!box) throw new Error("Expected a visible article video");
+    const originalTitle = await title();
+    // WebKit exposes touches on native controls as touches on the video itself.
+    for (const y of [box.y + 32, box.y + box.height - 32]) {
+      const pointer = {
+        pointerId: 7,
+        pointerType: "touch",
+        isPrimary: true,
+        button: 0,
+        clientY: y,
+      };
+      await video.dispatchEvent("pointerdown", {
+        ...pointer,
+        buttons: 1,
+        clientX: box.x + box.width * 0.8,
+      });
+      for (let step = 1; step <= 6; step++) {
+        await video.dispatchEvent("pointermove", {
+          ...pointer,
+          buttons: 1,
+          clientX: box.x + box.width * (0.8 - step * 0.1),
+        });
+        await page.waitForTimeout(16);
+      }
+      await video.dispatchEvent("pointerup", {
+        ...pointer,
+        buttons: 0,
+        clientX: box.x + box.width * 0.2,
+      });
+      await settled();
+      expect(await title()).toBe(originalTitle);
+    }
   } finally {
     await touchContext.close();
   }
