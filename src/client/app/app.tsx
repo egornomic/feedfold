@@ -1,11 +1,12 @@
 import { QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import type { SessionUser } from "../../shared/types";
 import { ApiError, AUTH_REQUIRED_EVENT, api, appUrl, errorMessage } from "../api/api";
 import { createQueryClient } from "../api/query";
 import { SessionLoading } from "../features/auth/auth";
 import { Homepage } from "../features/auth/homepage";
 import { onboardingStep } from "../features/auth/onboarding-state";
+import { restoreStartupAppearance } from "../features/reader/reader-preferences";
 import { StartupError } from "../features/reader/reader-states";
 import AppShell from "./app-shell";
 
@@ -38,9 +39,10 @@ function Session() {
     onSettled: () => signedOut(),
   });
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = "dark";
-  }, []);
+  useLayoutEffect(
+    () => (session.isPending ? restoreStartupAppearance() : undefined),
+    [session.isPending],
+  );
 
   const clearSession = useCallback(() => {
     // Keep the observed session query so subscribers receive the signed-out value.
