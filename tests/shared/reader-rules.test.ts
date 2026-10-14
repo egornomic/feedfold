@@ -271,6 +271,18 @@ describe.each(["demo", "server"] as const)("%s reader business rules", (mode) =>
     }
   });
 
+  it("treats a NUL-terminated search as a suffix while ordinary searches match substrings", async () => {
+    expect(await titles({ state: "all", search: "Alpha" })).toEqual([
+      "Alpha Rust École",
+      "Alpha only",
+    ]);
+    expect(await titles({ state: "all", search: "Alpha\0ignored" })).toEqual([]);
+    expect(await titles({ state: "all", search: "École\0ignored" })).toEqual(["Alpha Rust École"]);
+    expect(await titles({ state: "all", search: "le\0ignored" })).toEqual(["Alpha Rust École"]);
+    expect(await titles({ state: "all", search: "%_done\0ignored" })).toHaveLength(4);
+    expect(await titles({ state: "all", search: "\0ignored" })).toHaveLength(4);
+  });
+
   it("keeps a now-read selection in unread results and respects feed and folder scope", async () => {
     await api.updateArticleState(alphaId, { isRead: true });
     expect(await titles({ state: "unread" })).not.toContain("Alpha Rust École");

@@ -20,11 +20,14 @@ export function articleMatchesSearch(
     feed_text: articleSearchText(article.feedContentHtml),
     content_text: articleSearchText(article.contentHtml),
   };
-  // SQLite LIKE folds ASCII case and stops at NUL.
+  // A NUL ends SQLite's LIKE pattern before the trailing wildcard, requiring a suffix match.
   const fold = (text: string) =>
     (text.split("\0", 1)[0] ?? "").replace(/[A-Z]/g, (letter) => letter.toLowerCase());
   const pattern = fold(normalizeSearchText(search));
-  return articleSearchColumns.some((column) => fold(values[column]).includes(pattern));
+  return articleSearchColumns.some((column) => {
+    const value = fold(values[column]);
+    return search.includes("\0") ? value.endsWith(pattern) : value.includes(pattern);
+  });
 }
 
 const textBreaks = new Set([
