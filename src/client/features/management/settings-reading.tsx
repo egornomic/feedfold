@@ -9,6 +9,16 @@ export function ReadingSettingsSection({
   saveSettings,
 }: SettingsPreferencesProps) {
   const [translationLanguage, setTranslationLanguage] = useState(settings.translationLanguage);
+  const [previousLanguage, setPreviousLanguage] = useState(settings.translationLanguage);
+  if (
+    previousLanguage !== settings.translationLanguage &&
+    (translationLanguage.trim() === previousLanguage ||
+      translationLanguage.trim() === settings.translationLanguage)
+  ) {
+    setTranslationLanguage(settings.translationLanguage);
+    setPreviousLanguage(settings.translationLanguage);
+  }
+
   return (
     <>
       <section className="settings-section" aria-labelledby="reading-behavior-heading">

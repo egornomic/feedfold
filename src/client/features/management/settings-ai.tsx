@@ -39,14 +39,18 @@ export function AiSettingsSection({
   runSensitive: SensitiveAction;
 }) {
   const { run: mutateRequest } = useRequestMutation();
-  const initialFeature = aiSettings.features.articleSummary;
-  const initialProvider = initialFeature?.provider ?? "gemini";
-  const initialModel =
-    initialFeature?.model ??
-    aiSettings.providers.find((provider) => provider.id === initialProvider)?.defaultModel ??
+  const activeFeature = aiSettings.features.articleSummary;
+  const savedProvider = activeFeature?.provider ?? "gemini";
+  const savedModel =
+    activeFeature?.model ??
+    aiSettings.providers.find((provider) => provider.id === savedProvider)?.defaultModel ??
     "";
-  const [providerId, setProviderId] = useState<AiProvider>(initialProvider);
-  const [modelId, setModelId] = useState(initialModel);
+  const [providerId, setProviderId] = useState<AiProvider>(savedProvider);
+  const [modelId, setModelId] = useState(savedModel);
+  const [previousFeature, setPreviousFeature] = useState({
+    provider: savedProvider,
+    model: savedModel,
+  });
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [savingFeature, setSavingFeature] = useState(false);
@@ -72,9 +76,24 @@ export function AiSettingsSection({
     autoOpen: false,
   });
 
+  if (previousFeature.provider !== savedProvider || previousFeature.model !== savedModel) {
+    // A pending key also pins the provider, even when the model itself is untouched.
+    const dirty =
+      providerId !== previousFeature.provider ||
+      modelId.trim() !== previousFeature.model ||
+      apiKey.length > 0;
+    const matchesSaved = providerId === savedProvider && modelId.trim() === savedModel;
+    if (!dirty || matchesSaved) {
+      setPreviousFeature({ provider: savedProvider, model: savedModel });
+      if (!dirty) {
+        setProviderId(savedProvider);
+        setModelId(savedModel);
+      }
+    }
+  }
+
   const provider = aiSettings.providers.find((option) => option.id === providerId);
   if (!provider) return null;
-  const activeFeature = aiSettings.features.articleSummary;
   const modelChanged =
     activeFeature?.provider !== providerId || activeFeature?.model !== modelId.trim();
   const promptsChanged =

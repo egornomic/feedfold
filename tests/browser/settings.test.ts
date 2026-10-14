@@ -5,11 +5,11 @@ import type { AppSettings, BootstrapData } from "../../src/shared/types.js";
 import { browser, context, database, origin } from "./reader-browser-fixture.js";
 
 async function refreshSettings(page: Page, check: (data: BootstrapData) => boolean) {
-  const refreshed = page.waitForResponse(async (response) =>
-    response.url().endsWith("/api/bootstrap") && response.ok()
-      ? check((await response.json()) as BootstrapData)
-      : false,
-  );
+  const refreshed = page.waitForEvent("requestfinished", async (request) => {
+    if (!request.url().endsWith("/api/bootstrap")) return false;
+    const response = await request.response();
+    return response?.ok() ? check((await response.json()) as BootstrapData) : false;
+  });
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await refreshed;
   // Let React apply the response before checking the draft.
@@ -21,6 +21,121 @@ async function updateSettings(change: Partial<AppSettings>) {
   expect(response.status()).toBe(200);
   return (await response.json()) as AppSettings;
 }
+
+it.each(["gemini", "openai"] as const)(
+  "refreshes untouched AI fields when another tab saves a %s model",
+  async (provider) => {
+    const initial = await context.request.patch("/api/ai/features/article_summary", {
+      data: { provider: "gemini", model: "initial-model" },
+    });
+    expect(initial.status()).toBe(200);
+    const page = await context.newPage();
+    page.setDefaultTimeout(3000);
+    try {
+      await page.goto(`${origin}settings/ai`);
+      const model = page.locator("#ai-summary-model");
+      const save = page.getByRole("button", { name: "Save model", exact: true });
+      expect(await model.inputValue()).toBe("initial-model");
+      const updated = await context.request.patch("/api/ai/features/article_summary", {
+        data: { provider, model: "updated-model" },
+      });
+      expect(updated.status()).toBe(200);
+      await refreshSettings(
+        page,
+        (data) => data.aiSettings.features.articleSummary?.model === "updated-model",
+      );
+      expect(await model.inputValue()).toBe("updated-model");
+      expect(await page.locator("#ai-summary-provider").textContent()).toContain(
+        provider === "gemini" ? "Google Gemini" : "OpenAI",
+      );
+      expect(await save.isDisabled()).toBe(true);
+
+      await model.fill("my-saved-model");
+      await save.click();
+      await page.getByText("AI provider and model saved", { exact: true }).waitFor();
+      const refreshed = await context.request.patch("/api/ai/features/article_summary", {
+        data: { provider: "gemini", model: "latest-model" },
+      });
+      expect(refreshed.status()).toBe(200);
+      await refreshSettings(
+        page,
+        (data) => data.aiSettings.features.articleSummary?.model === "latest-model",
+      );
+      expect(await model.inputValue()).toBe("latest-model");
+      expect(await save.isDisabled()).toBe(true);
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+it("refreshes an untouched translation language, including after a local save", async () => {
+  await updateSettings({ translationLanguage: "English" });
+  const page = await context.newPage();
+  page.setDefaultTimeout(3000);
+  try {
+    await page.goto(`${origin}settings/reading`);
+    const language = page.getByRole("combobox", { name: "Translation language", exact: true });
+    const save = page.getByRole("button", { name: "Save language", exact: true });
+    expect(await language.inputValue()).toBe("English");
+    await updateSettings({ translationLanguage: "German" });
+    await refreshSettings(page, (data) => data.settings.translationLanguage === "German");
+    expect(await language.inputValue()).toBe("German");
+    expect(await save.isDisabled()).toBe(true);
+
+    await language.fill("Unfinished language");
+    await updateSettings({ translationLanguage: "Polish" });
+    await refreshSettings(page, (data) => data.settings.translationLanguage === "Polish");
+    expect(await language.inputValue()).toBe("Unfinished language");
+    await language.fill("German");
+    await language.press("Escape");
+    expect(await language.inputValue()).toBe("Polish");
+    expect(await save.isDisabled()).toBe(true);
+
+    await language.fill("Japanese");
+    await language.press("Escape");
+    await save.click();
+    await page.getByText("Settings saved", { exact: true }).waitFor();
+    await updateSettings({ translationLanguage: "French" });
+    await refreshSettings(page, (data) => data.settings.translationLanguage === "French");
+    expect(await language.inputValue()).toBe("French");
+    expect(await save.isDisabled()).toBe(true);
+  } finally {
+    await page.close();
+  }
+});
+
+it("keeps a pending API key attached to its selected provider during refresh", async () => {
+  const initial = await context.request.patch("/api/ai/features/article_summary", {
+    data: { provider: "gemini", model: "key-provider-model" },
+  });
+  expect(initial.status()).toBe(200);
+  const page = await context.newPage();
+  page.setDefaultTimeout(3000);
+  try {
+    await page.goto(`${origin}settings/ai`);
+    await page.locator("#ai-api-key").fill("unfinished-key");
+    const updated = await context.request.patch("/api/ai/features/article_summary", {
+      data: { provider: "openai", model: "another-provider-model" },
+    });
+    expect(updated.status()).toBe(200);
+    await refreshSettings(
+      page,
+      (data) => data.aiSettings.features.articleSummary?.model === "another-provider-model",
+    );
+    expect(await page.locator("#ai-summary-model").inputValue()).toBe("key-provider-model");
+    expect(await page.locator("#ai-summary-provider").textContent()).toContain("Google Gemini");
+    expect(await page.locator("#ai-api-key").inputValue()).toBe("unfinished-key");
+    await page.locator("#ai-api-key").fill("");
+    expect(await page.locator("#ai-summary-model").inputValue()).toBe("another-provider-model");
+    expect(await page.locator("#ai-summary-provider").textContent()).toContain("OpenAI");
+    expect(await page.getByRole("button", { name: "Save model", exact: true }).isDisabled()).toBe(
+      true,
+    );
+  } finally {
+    await page.close();
+  }
+});
 
 it("keeps default prompt drafts during refresh and loads saved values on reopening", async () => {
   const page = await context.newPage();
@@ -59,6 +174,10 @@ it("keeps default prompt drafts during refresh and loads saved values on reopeni
 });
 
 it("keeps the model and key drafts when another tab changes the AI provider", async () => {
+  const initial = await context.request.patch("/api/ai/features/article_summary", {
+    data: { provider: "gemini", model: "initial-model" },
+  });
+  expect(initial.status()).toBe(200);
   const page = await context.newPage();
   page.setDefaultTimeout(3000);
   try {
