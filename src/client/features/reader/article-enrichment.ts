@@ -357,7 +357,7 @@ export function useArticleEnrichment({
           staleTime: Infinity,
           retry: false,
         });
-        const currentArticle = queue.articlesRef.current.find((item) => item.id === article.id);
+        const currentArticle = queue.getArticles().find((item) => item.id === article.id);
         const currentSourceKind = currentArticle
           ? articleTranslationSourceKind(
               currentArticle,
@@ -392,7 +392,7 @@ export function useArticleEnrichment({
       client,
       mutateRequest,
       patchArticleTranslationState,
-      queue.articlesRef,
+      queue.getArticles,
     ],
   );
 

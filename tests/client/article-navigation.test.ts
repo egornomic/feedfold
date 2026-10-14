@@ -4,6 +4,77 @@ import { waitFor } from "./react-harness.js";
 import { readerFixture } from "./reader-fixture.js";
 
 describe("reader navigation", () => {
+  it.each([false, true])(
+    "restores a rejected bulk read before a background reload can finish (queued unread: %s)",
+    async (queuedUnread) => {
+      const fixture = readerFixture("/articles/all", 3);
+      try {
+        await fixture.mount();
+        await waitFor(
+          "article previews",
+          () => fixture.container.querySelectorAll(".article-open-button").length === 3,
+        );
+        const mutation = fixture.hold("markRead", true);
+        fixture.database.connection.exec(`
+        CREATE TRIGGER reject_article_state BEFORE UPDATE ON feed_articles
+        BEGIN SELECT RAISE(ABORT, 'article state write rejected'); END;
+      `);
+        await act(async () =>
+          fixture.container
+            .querySelector<HTMLButtonElement>('[aria-label="Mark loaded articles as read"]')
+            ?.click(),
+        );
+        await waitFor("pending bulk read", () => mutation.held > 0);
+        await waitFor(
+          "immediate read feedback",
+          () =>
+            fixture.container.querySelectorAll('.list-read-button[aria-label$="as unread"]')
+              .length === 3,
+        );
+        if (queuedUnread) {
+          await act(async () =>
+            fixture.container
+              .querySelector<HTMLButtonElement>('.list-read-button[aria-label$="as unread"]')
+              ?.click(),
+          );
+        }
+        const articles = fixture.hold("articles");
+        const bootstrap = fixture.hold("bootstrap");
+        await act(async () => {
+          fixture.services.refreshService.notifyDataChanged(1);
+          mutation.release();
+        });
+        await waitFor("rejected write", () => fixture.failures.length > 0);
+        expect(fixture.failures[0]?.message).toContain("article state write rejected");
+        const persisted = await fixture.application.invoke({
+          operation: "articles",
+          payload: { state: "unread" },
+        });
+        expect(persisted.articles).toHaveLength(3);
+        if (queuedUnread)
+          await waitFor("rejected queued write", () => fixture.failures.length === 2);
+        await waitFor(
+          "local bulk rollback",
+          () =>
+            fixture.container.querySelectorAll('.list-read-button[aria-label$="as read"]')
+              .length === 3,
+        );
+        expect(
+          fixture.container.querySelector(".quick-links .nav-count")?.getAttribute("title"),
+        ).toBe("3");
+        expect(
+          fixture.container.querySelector(".feed-nav-item .nav-count")?.getAttribute("title"),
+        ).toBe("3");
+        await act(async () => {
+          articles.release();
+          bootstrap.release();
+        });
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
+
   it.each(["button", "j", "ArrowRight"])(
     "returns to the feed's unread page after its last article using %s",
     async (input) => {

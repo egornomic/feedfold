@@ -30,6 +30,7 @@ export const readerKeys = {
   bootstrap: ["reader", "bootstrap"] as const,
   rules: ["reader", "rules"] as const,
   lists: ["reader", "articles"] as const,
+  queue: ["reader", "queue"] as const,
   article: (id: number) => ["reader", "article", id] as const,
 };
 export const counterMutationKey = ["article-state"];
@@ -86,26 +87,44 @@ export async function invalidateReader(
 
 export function updateCachedArticleStates(
   client: QueryClient,
-  ids: ReadonlySet<number>,
-  change: { isRead?: boolean; isSaved?: boolean },
+  changes: ReadonlyMap<number, Partial<Pick<Article, "isRead" | "isSaved">>>,
 ) {
-  client.setQueriesData<InfiniteData<ArticlePage>>({ queryKey: readerKeys.lists }, (data) =>
-    data
-      ? {
-          ...data,
-          pages: data.pages.map((page) => ({
-            ...page,
-            articles: page.articles.map((article) =>
-              ids.has(article.id) ? { ...article, ...change } : article,
-            ),
-          })),
-        }
-      : data,
-  );
-  for (const id of ids)
-    client.setQueryData(readerKeys.article(id), (article: Article | undefined) =>
-      article ? { ...article, ...change } : article,
-    );
+  const update = (article: Article) => {
+    const change = changes.get(article.id);
+    if (
+      !change ||
+      ((change.isRead === undefined || change.isRead === article.isRead) &&
+        (change.isSaved === undefined || change.isSaved === article.isSaved))
+    )
+      return article;
+    return { ...article, ...change };
+  };
+  const updateArticles = (articles: Article[]) => {
+    const next = articles.map(update);
+    return next.some((article, index) => article !== articles[index]) ? next : articles;
+  };
+  const queue = client.getQueryData<Article[]>(readerKeys.queue);
+  if (queue) {
+    const next = updateArticles(queue);
+    if (next !== queue) client.setQueryData(readerKeys.queue, next);
+  }
+  for (const [key, data] of client.getQueriesData<InfiniteData<ArticlePage>>({
+    queryKey: readerKeys.lists,
+  })) {
+    if (!data) continue;
+    const pages = data.pages.map((page) => {
+      const articles = updateArticles(page.articles);
+      return articles === page.articles ? page : { ...page, articles };
+    });
+    if (pages.some((page, index) => page !== data.pages[index]))
+      client.setQueryData(key, { ...data, pages });
+  }
+  for (const id of changes.keys()) {
+    const article = client.getQueryData<Article>(readerKeys.article(id));
+    if (!article) continue;
+    const next = update(article);
+    if (next !== article) client.setQueryData(readerKeys.article(id), next);
+  }
 }
 
 export const youtubeQuery = (userId: string) =>
