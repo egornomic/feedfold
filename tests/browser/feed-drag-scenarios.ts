@@ -52,7 +52,7 @@ afterAll(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-async function setup(surface: Surface, touch: boolean) {
+async function setup(surface: Surface, touch: boolean, duplicateNames = false) {
   const context = await browser.newContext({
     baseURL: origin,
     viewport: touch ? { width: 390, height: 844 } : { width: 1280, height: 900 },
@@ -68,9 +68,10 @@ async function setup(surface: Surface, touch: boolean) {
     expect(response.status()).toBe(200);
     return response.json();
   };
-  const first = await folder("First");
-  const second = await folder("Second");
-  const nested = await folder("Nested", second.id);
+  const first = await folder(duplicateNames ? "Work" : "First");
+  const second = await folder(duplicateNames ? "Personal" : "Second");
+  const nested = await folder(duplicateNames ? "News" : "Nested", second.id);
+  if (duplicateNames) await folder("News", first.id);
   const response = await context.request.post("/api/feeds", {
     data: {
       sourceKind: "published",
@@ -100,7 +101,7 @@ async function setup(surface: Surface, touch: boolean) {
       ? surface === "sidebar"
         ? scope.locator(`[data-management-folder-id="${destination.id}"]`)
         : scope.getByRole("group", {
-            name: `${destination === nested ? "Second / " : ""}${destination.name} folder`,
+            name: `${destination === nested ? `${second.name} / ` : ""}${destination.name} folder`,
             exact: true,
           })
       : scope.locator(
@@ -119,6 +120,20 @@ async function point(locator: Locator) {
   const box = await locator.boundingBox();
   if (!box) throw new Error("Drag surface is not visible");
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+async function openMove(page: Page, surface: Surface, source: Locator) {
+  if (surface === "sidebar") {
+    await source.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Move to folder", exact: true }).click();
+  } else {
+    await source.click();
+  }
+}
+
+async function selectMoveFolder(page: Page, name: string) {
+  await page.getByRole("combobox", { name: "Folder", exact: true }).click();
+  await page.getByRole("option", { name, exact: true }).click();
 }
 
 async function drag(
@@ -184,6 +199,99 @@ async function drag(
 
 export function feedDragScenarios(surface: Surface) {
   describe(`${surface} feed moves`, () => {
+    it("shows the same full destination path for drag and dialog moves", async () => {
+      const { context, page, scope, source, target, feed, nested } = await setup(
+        surface,
+        false,
+        true,
+      );
+      try {
+        await scope.getByRole("button", { name: "Expand Personal", exact: true }).click();
+        await drag(page, source(), target(nested), "mouse");
+        await expect.poll(() => location(context, feed)).toBe(nested.id);
+        const message = "Moved Daily news to Personal / News";
+        await expect.poll(() => page.getByText(message, { exact: true }).isVisible()).toBe(true);
+        const destinationFeed = target(nested)
+          .locator(surface === "sidebar" ? "xpath=../.." : "..")
+          .locator(
+            surface === "sidebar"
+              ? ":scope > ul > li > .feed-tree-row > .feed-nav-item"
+              : ":scope > ul > .folder-feed-row > .folder-feed-drag-region",
+          );
+        await expect.poll(() => destinationFeed.isVisible()).toBe(true);
+        await drag(page, source(), target(null), "mouse");
+        await expect.poll(() => location(context, feed)).toBeNull();
+        await expect
+          .poll(() => page.getByText(message, { exact: true }).count(), { timeout: 10_000 })
+          .toBe(0);
+        await openMove(page, surface, source());
+        await selectMoveFolder(page, "Personal / News");
+        await page.getByRole("button", { name: "Save folder", exact: true }).click();
+        await expect.poll(() => location(context, feed)).toBe(nested.id);
+        await expect.poll(() => page.getByRole("dialog").count()).toBe(0);
+        await expect.poll(() => page.getByText(message, { exact: true }).isVisible()).toBe(true);
+        await openMove(page, surface, source());
+        await selectMoveFolder(page, "Top level");
+        await page.getByRole("button", { name: "Save folder", exact: true }).click();
+        await expect.poll(() => location(context, feed)).toBeNull();
+        await expect.poll(() => page.getByRole("dialog").count()).toBe(0);
+        await expect
+          .poll(() => page.getByText("Moved Daily news to Top level", { exact: true }).isVisible())
+          .toBe(true);
+        await expect
+          .poll(() => page.getByText(message, { exact: true }).count(), { timeout: 10_000 })
+          .toBe(0);
+        if (surface === "sidebar") {
+          await target(nested).click({ button: "right" });
+        } else {
+          await scope.getByRole("button", { name: "Personal / News actions", exact: true }).click();
+        }
+        await page.getByRole("menuitem", { name: "Add feed to folder", exact: true }).click();
+        await page
+          .getByRole("dialog")
+          .getByRole("button", { name: "Move to folder", exact: true })
+          .click();
+        await expect.poll(() => location(context, feed)).toBe(nested.id);
+        await expect.poll(() => page.getByRole("dialog").count()).toBe(0);
+        await expect.poll(() => page.getByText(message, { exact: true }).isVisible()).toBe(true);
+      } finally {
+        await context.close();
+      }
+    }, 30_000);
+
+    it("keeps the move dialog open after a rejected move and allows a subsequent move", async () => {
+      const { context, page, source, feed, first, second } = await setup(surface, false);
+      try {
+        await openMove(page, surface, source());
+        await selectMoveFolder(page, first.name);
+        await page.route(
+          `**/api/feeds/${feed.id}`,
+          async (route) => {
+            const deleted = await context.request.delete(`/api/folders/${first.id}`);
+            expect(deleted.ok()).toBe(true);
+            await route.continue();
+          },
+          { times: 1 },
+        );
+        const rejection = page.waitForResponse(
+          (response) =>
+            response.request().method() === "PATCH" &&
+            response.url().endsWith(`/api/feeds/${feed.id}`),
+        );
+        await page.getByRole("button", { name: "Save folder", exact: true }).click();
+        expect((await rejection).status()).toBe(400);
+        expect(await location(context, feed)).toBeNull();
+        await expect.poll(() => page.getByText(/Could not move Daily news/).isVisible()).toBe(true);
+        expect(await page.getByRole("dialog").isVisible()).toBe(true);
+        await selectMoveFolder(page, second.name);
+        await page.getByRole("button", { name: "Save folder", exact: true }).click();
+        await expect.poll(() => location(context, feed)).toBe(second.id);
+        await expect.poll(() => page.getByRole("dialog").count()).toBe(0);
+      } finally {
+        await context.close();
+      }
+    });
+
     it("keeps the feed in place after a rejected move and allows a subsequent move", async () => {
       const { context, page, source, target, feed, first, second } = await setup(surface, false);
       try {
