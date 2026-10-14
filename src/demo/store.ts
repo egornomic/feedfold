@@ -1,7 +1,9 @@
 import { generateOpml } from "feedsmith";
 import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../shared/api/inputs.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
-import { articleSearchText, normalizeSearchText } from "../shared/article-search.js";
+import { articleMatchesRule } from "../shared/article-rules.js";
+import { articleMatchesSearch } from "../shared/article-search.js";
+import { folderBranchIds, validFolderParent } from "../shared/folder-tree.js";
 import type {
   AiArticleSourceKind,
   AiFeature,
@@ -57,6 +59,7 @@ export class DemoStore {
 
   constructor(now = new Date(), data = createDemoData(now)) {
     this.data = data;
+    this.applyReadRules();
   }
 
   session(): SessionUser {
@@ -64,9 +67,11 @@ export class DemoStore {
   }
 
   bootstrap() {
+    const visibleArticles = this.filteredArticles({ state: "all" });
     const feeds = this.data.feeds.map((feed) => {
-      const articles = this.data.articles.filter((article) => article.feedId === feed.id);
-      const lastPostAt = articles
+      const articles = visibleArticles.filter((article) => article.feedId === feed.id);
+      const lastPostAt = this.data.articles
+        .filter((article) => article.feedId === feed.id)
         .map((article) => article.publishedAt ?? article.discoveredAt)
         .sort()
         .at(-1);
@@ -81,7 +86,7 @@ export class DemoStore {
       const folderIds = this.folderBranchIds(folder.id);
       return {
         ...folder,
-        unreadCount: this.data.articles.filter(
+        unreadCount: visibleArticles.filter(
           (article) =>
             !article.isRead && article.folderId !== null && folderIds.has(article.folderId),
         ).length,
@@ -94,10 +99,9 @@ export class DemoStore {
       settings: this.data.settings,
       aiSettings: this.data.aiSettings,
       counts: {
-        unread: this.data.articles.filter((article) => article.feedId !== null && !article.isRead)
-          .length,
+        unread: visibleArticles.filter((article) => !article.isRead).length,
         saved: this.data.articles.filter((article) => article.isSaved).length,
-        all: this.data.articles.filter((article) => article.feedId !== null).length,
+        all: visibleArticles.length,
       },
       capabilities: {
         manualRefresh: true,
@@ -123,13 +127,11 @@ export class DemoStore {
     });
 
     const limit = Math.max(1, query.limit ?? 100);
-    const anchorIndex =
-      query.anchorId === undefined
-        ? null
-        : Math.max(
-            0,
-            articles.findIndex((article) => article.id === query.anchorId),
-          );
+    const foundAnchor =
+      query.anchorId === undefined || query.cursor
+        ? -1
+        : articles.findIndex((article) => article.id === query.anchorId);
+    const anchorIndex = foundAnchor < 0 ? null : foundAnchor;
     const cursorOffset = Number.parseInt(query.cursor ?? "0", 10);
     const requestedOffset = Number.isFinite(cursorOffset) ? Math.max(0, cursorOffset) : 0;
     const offset =
@@ -301,6 +303,7 @@ export class DemoStore {
       for (const article of this.data.articles) {
         if (article.feedId === id) article.folderId = input.folderId;
       }
+      this.applyReadRules(this.data.articles.filter((article) => article.feedId === id));
     }
     return clone(feed);
   }
@@ -329,6 +332,7 @@ export class DemoStore {
 
   createFolder(input: FolderInput): Folder {
     const parentId = input.parentId ?? null;
+    if (parentId !== null) this.requireFolder(parentId);
     const siblings = this.data.folders.filter((folder) => folder.parentId === parentId);
     const folder: Folder = {
       id: idAfter(this.data.folders),
@@ -344,7 +348,15 @@ export class DemoStore {
 
   updateFolder(id: number, input: Partial<FolderInput>): Folder {
     const folder = this.requireFolder(id);
+    if (input.parentId !== undefined) {
+      if (input.parentId !== null) this.requireFolder(input.parentId);
+      if (!validFolderParent(id, input.parentId, this.data.folders)) {
+        throw new Error("Choose a parent outside this folder.");
+      }
+    }
+    const previousParentId = folder.parentId;
     Object.assign(folder, input);
+    if (folder.parentId !== previousParentId) this.applyReadRules();
     return clone(folder);
   }
 
@@ -365,10 +377,11 @@ export class DemoStore {
     for (const rule of this.data.rules) {
       if (rule.folderId === id) rule.folderId = parentId;
     }
+    this.applyReadRules();
   }
 
   rules(): Rule[] {
-    return clone(this.data.rules);
+    return this.data.rules.map((rule) => this.ruleWithCount(rule));
   }
 
   createRule(input: RuleInput): Rule {
@@ -384,13 +397,15 @@ export class DemoStore {
       updatedAt: now,
     };
     this.data.rules.push(rule);
-    return clone(rule);
+    this.applyReadRule(rule, this.data.articles);
+    return this.ruleWithCount(rule);
   }
 
   updateRule(id: number, input: Partial<RuleInput>): Rule {
     const rule = this.requireRule(id);
     Object.assign(rule, input, { updatedAt: new Date().toISOString() });
-    return clone(rule);
+    this.applyReadRule(rule, this.data.articles);
+    return this.ruleWithCount(rule);
   }
 
   deleteRule(id: number): void {
@@ -557,43 +572,63 @@ export class DemoStore {
 
   private filteredArticles(query: ArticleQuery): Article[] {
     const folderIds = query.folderId === undefined ? null : this.folderBranchIds(query.folderId);
-    const search = normalizeSearchText(query.search ?? "").toLocaleLowerCase();
     return this.data.articles.filter((article) => {
       if (query.state !== "saved" && article.feedId === null) return false;
-      if (query.state === "unread" && article.isRead) return false;
-      if (query.state === "read" && !article.isRead) return false;
-      if (query.state === "saved" && !article.isSaved) return false;
       if (query.feedId !== undefined && article.feedId !== query.feedId) return false;
       if (folderIds && (article.folderId === null || !folderIds.has(article.folderId))) {
         return false;
       }
-      if (!search) return true;
-      return [
-        article.title,
-        article.author,
-        article.summary,
-        article.feedTitle,
-        articleSearchText(article.feedContentHtml),
-        articleSearchText(article.contentHtml),
-      ]
-        .filter((value): value is string => value !== null)
-        .some((value) => value.toLocaleLowerCase().includes(search));
+      if (article.id === query.anchorId) return true;
+      if (query.state !== "saved" && !this.articleVisible(article)) return false;
+      if (query.state === "unread" && article.isRead) return false;
+      if (query.state === "read" && !article.isRead) return false;
+      if (query.state === "saved" && !article.isSaved) return false;
+      return !query.search || articleMatchesSearch(article, query.search);
     });
   }
 
-  private folderBranchIds(rootId: number): Set<number> {
-    const ids = new Set([rootId]);
-    let found = true;
-    while (found) {
-      found = false;
-      for (const folder of this.data.folders) {
-        if (folder.parentId !== null && ids.has(folder.parentId) && !ids.has(folder.id)) {
-          ids.add(folder.id);
-          found = true;
-        }
-      }
+  private ruleInScope(rule: Rule, article: Article): boolean {
+    if (article.feedId === null) return false;
+    if (rule.feedId !== null && rule.feedId !== article.feedId) return false;
+    return (
+      rule.folderId === null ||
+      (article.folderId !== null && this.folderBranchIds(rule.folderId).has(article.folderId))
+    );
+  }
+
+  private articleVisible(article: Article): boolean {
+    if (article.feedId === null) return false;
+    const rules = this.data.rules.filter((rule) => rule.enabled && this.ruleInScope(rule, article));
+    if (rules.some((rule) => rule.action === "hide" && articleMatchesRule(article, rule))) {
+      return false;
     }
-    return ids;
+    const keepRules = rules.filter((rule) => rule.action === "keep");
+    return keepRules.length === 0 || keepRules.some((rule) => articleMatchesRule(article, rule));
+  }
+
+  private ruleWithCount(rule: Rule): Rule {
+    return clone({
+      ...rule,
+      matchedCount: this.data.articles.filter(
+        (article) => this.ruleInScope(rule, article) && articleMatchesRule(article, rule),
+      ).length,
+    });
+  }
+
+  private applyReadRule(rule: Rule, articles: Article[]): void {
+    if (!rule.enabled || rule.action !== "mark_read") return;
+    for (const article of articles) {
+      if (this.ruleInScope(rule, article) && articleMatchesRule(article, rule))
+        article.isRead = true;
+    }
+  }
+
+  private applyReadRules(articles = this.data.articles): void {
+    for (const rule of this.data.rules) this.applyReadRule(rule, articles);
+  }
+
+  private folderBranchIds(rootId: number): Set<number> {
+    return folderBranchIds(rootId, this.data.folders);
   }
 
   private requireArticle(id: number): Article {

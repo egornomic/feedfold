@@ -40,7 +40,3 @@ export function youtubeMediaFromUrl(
     viewCount: details.viewCount ?? null,
   };
 }
-
-export function articleMediaRuleText(media: ArticleMedia | null): string {
-  return media ? `${media.provider} ${media.type}` : "article";
-}

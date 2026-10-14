@@ -48,16 +48,8 @@ export function folderHierarchy(folders: Folder[]): FolderHierarchyEntry[] {
 }
 
 export function folderBranchFeedCount(folderId: number, folders: Folder[], feeds: Feed[]): number {
-  const branchIds = new Set([folderId]);
-  let addedFolder = true;
-  while (addedFolder) {
-    addedFolder = false;
-    for (const folder of folders) {
-      if (folder.parentId !== null && branchIds.has(folder.parentId) && !branchIds.has(folder.id)) {
-        branchIds.add(folder.id);
-        addedFolder = true;
-      }
-    }
-  }
+  const branchIds = folderBranchIds(folderId, folders);
   return feeds.filter((feed) => feed.folderId !== null && branchIds.has(feed.folderId)).length;
 }
+
+import { folderBranchIds } from "../../../shared/folder-tree.js";

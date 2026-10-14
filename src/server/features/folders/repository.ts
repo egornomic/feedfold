@@ -1,4 +1,5 @@
 import type Sqlite from "better-sqlite3";
+import { validFolderParent } from "../../../shared/folder-tree.js";
 import type { Folder, FolderSortDirection } from "../../../shared/types.js";
 import { InvalidRequestError } from "../../errors.js";
 import { mapFolder, now, type Row, visibleClause } from "../shared.js";
@@ -97,8 +98,8 @@ export class FolderRepository {
     if (!existing) return null;
     this.assertFolderExists(userId, input.parentId);
     if (
-      input.parentId === id ||
-      (input.parentId !== undefined && this.isFolderDescendant(userId, input.parentId, id))
+      input.parentId !== undefined &&
+      !validFolderParent(id, input.parentId, this.listOpmlFolders(userId))
     ) {
       throw new InvalidRequestError("Choose a parent outside this folder.");
     }
@@ -132,26 +133,6 @@ export class FolderRepository {
       .prepare("SELECT COALESCE(MAX(position), -1) + 1 AS position FROM folders WHERE user_id = ?")
       .get(userId) as { position: number };
     return row.position;
-  }
-
-  private isFolderDescendant(
-    userId: number,
-    candidateId: number | null,
-    folderId: number,
-  ): boolean {
-    if (candidateId === null) return false;
-    const row = this.sqlite
-      .prepare(
-        `WITH RECURSIVE descendants(id) AS (
-           SELECT id FROM folders WHERE parent_id = ? AND user_id = ?
-           UNION ALL
-           SELECT folders.id FROM folders JOIN descendants ON folders.parent_id = descendants.id
-           WHERE folders.user_id = ?
-         )
-         SELECT 1 FROM descendants WHERE id = ?`,
-      )
-      .get(folderId, userId, userId, candidateId);
-    return row !== undefined;
   }
 
   listOpmlFolders(userId: number): Array<{ id: number; name: string; parentId: number | null }> {

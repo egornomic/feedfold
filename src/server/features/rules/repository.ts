@@ -1,12 +1,11 @@
 import type Sqlite from "better-sqlite3";
+import { articleMatchesRule } from "../../../shared/article-rules.js";
 import type {
   Rule,
   RuleAction,
   RuleCondition,
   RuleConditionOperator,
-  RuleField,
 } from "../../../shared/types.js";
-import { articleMediaRuleText } from "../../article-media.js";
 import { InvalidRequestError } from "../../errors.js";
 import { mapRule, now, parseArticleMedia, type Row } from "../shared.js";
 
@@ -282,26 +281,20 @@ export class RuleRepository {
         .get(rule.folder_id, rule.user_id, rule.user_id, article.folder_id);
       if (!inScope) return;
     }
-    const mediaText = articleMediaRuleText(parseArticleMedia(article.media_json));
-    const values: Record<RuleField, string> = {
-      title: String(article.title ?? ""),
-      author: String(article.author ?? ""),
-      summary: String(article.summary ?? ""),
-      content: `${String(article.feed_content_html ?? "")} ${String(article.content_html ?? "")}`,
-      media: mediaText,
-      any: `${String(article.title ?? "")} ${String(article.author ?? "")} ${String(
-        article.summary ?? "",
-      )} ${String(article.feed_content_html ?? "")} ${String(
-        article.content_html ?? "",
-      )} ${mediaText}`,
-    };
-    const conditions = JSON.parse(String(rule.conditions_json)) as RuleCondition[];
-    const matchesCondition = (condition: RuleCondition) =>
-      values[condition.field].toLocaleLowerCase().includes(condition.pattern.toLocaleLowerCase());
-    const matched =
-      rule.condition_operator === "and"
-        ? conditions.every(matchesCondition)
-        : conditions.some(matchesCondition);
+    const matched = articleMatchesRule(
+      {
+        title: String(article.title ?? ""),
+        author: String(article.author ?? ""),
+        summary: String(article.summary ?? ""),
+        feedContentHtml: String(article.feed_content_html ?? ""),
+        contentHtml: String(article.content_html ?? ""),
+        media: parseArticleMedia(article.media_json),
+      },
+      {
+        conditions: JSON.parse(String(rule.conditions_json)) as RuleCondition[],
+        conditionOperator: rule.condition_operator as RuleConditionOperator,
+      },
+    );
     if (!matched) return;
     const inserted = this.sqlite
       .prepare(
