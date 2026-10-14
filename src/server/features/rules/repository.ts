@@ -1,5 +1,5 @@
 import type Sqlite from "better-sqlite3";
-import { articleMatchesRule } from "../../../shared/article-rules.js";
+import { articleMatchesRule, type RuleArticle } from "../../../shared/article-rules.js";
 import type {
   Rule,
   RuleAction,
@@ -41,30 +41,32 @@ export class RuleRepository {
       enabled?: boolean;
     },
   ): Rule {
-    this.assertRuleScope(userId, input.feedId, input.folderId);
-    const timestamp = now();
-    const result = this.sqlite
-      .prepare(
-        `INSERT INTO rules (
+    return this.sqlite.transaction(() => {
+      this.assertRuleScope(userId, input.feedId, input.folderId);
+      const timestamp = now();
+      const result = this.sqlite
+        .prepare(
+          `INSERT INTO rules (
            user_id, name, feed_id, folder_id, conditions_json, condition_operator, action, enabled,
            created_at, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        userId,
-        input.name,
-        input.feedId ?? null,
-        input.folderId ?? null,
-        JSON.stringify(input.conditions),
-        input.conditionOperator,
-        input.action,
-        (input.enabled ?? true) ? 1 : 0,
-        timestamp,
-        timestamp,
-      );
-    const id = Number(result.lastInsertRowid);
-    this.reapplyRule(id);
-    return this.getRule(userId, id) as Rule;
+        )
+        .run(
+          userId,
+          input.name,
+          input.feedId ?? null,
+          input.folderId ?? null,
+          JSON.stringify(input.conditions),
+          input.conditionOperator,
+          input.action,
+          (input.enabled ?? true) ? 1 : 0,
+          timestamp,
+          timestamp,
+        );
+      const id = Number(result.lastInsertRowid);
+      this.reapplyRule(id);
+      return this.getRule(userId, id) as Rule;
+    })();
   }
 
   updateRule(
@@ -80,32 +82,34 @@ export class RuleRepository {
       enabled: boolean;
     }>,
   ): Rule | null {
-    const existing = this.getRule(userId, id);
-    if (!existing) return null;
-    const feedId = input.feedId === undefined ? existing.feedId : input.feedId;
-    const folderId = input.folderId === undefined ? existing.folderId : input.folderId;
-    this.assertRuleScope(userId, feedId, folderId);
-    this.sqlite
-      .prepare(
-        `UPDATE rules
+    return this.sqlite.transaction(() => {
+      const existing = this.getRule(userId, id);
+      if (!existing) return null;
+      const feedId = input.feedId === undefined ? existing.feedId : input.feedId;
+      const folderId = input.folderId === undefined ? existing.folderId : input.folderId;
+      this.assertRuleScope(userId, feedId, folderId);
+      this.sqlite
+        .prepare(
+          `UPDATE rules
          SET name = ?, feed_id = ?, folder_id = ?, conditions_json = ?, condition_operator = ?,
              action = ?, enabled = ?, updated_at = ?
          WHERE id = ? AND user_id = ?`,
-      )
-      .run(
-        input.name ?? existing.name,
-        input.feedId === undefined ? existing.feedId : input.feedId,
-        input.folderId === undefined ? existing.folderId : input.folderId,
-        JSON.stringify(input.conditions ?? existing.conditions),
-        input.conditionOperator ?? existing.conditionOperator,
-        input.action ?? existing.action,
-        (input.enabled ?? existing.enabled) ? 1 : 0,
-        now(),
-        id,
-        userId,
-      );
-    this.reapplyRule(id);
-    return this.getRule(userId, id);
+        )
+        .run(
+          input.name ?? existing.name,
+          input.feedId === undefined ? existing.feedId : input.feedId,
+          input.folderId === undefined ? existing.folderId : input.folderId,
+          JSON.stringify(input.conditions ?? existing.conditions),
+          input.conditionOperator ?? existing.conditionOperator,
+          input.action ?? existing.action,
+          (input.enabled ?? existing.enabled) ? 1 : 0,
+          now(),
+          id,
+          userId,
+        );
+      this.reapplyRule(id);
+      return this.getRule(userId, id);
+    })();
   }
 
   deleteRule(userId: number, id: number): boolean {
@@ -142,21 +146,18 @@ export class RuleRepository {
   }
 
   private reapplyRule(ruleId: number): void {
-    const run = this.sqlite.transaction(() => {
-      this.sqlite.prepare("DELETE FROM article_rule_matches WHERE rule_id = ?").run(ruleId);
-      const rows = this.sqlite
-        .prepare(
-          `SELECT articles.id, feeds.id AS feedId
+    this.sqlite.prepare("DELETE FROM article_rule_matches WHERE rule_id = ?").run(ruleId);
+    const rows = this.sqlite
+      .prepare(
+        `SELECT articles.id, feeds.id AS feedId
            FROM feed_articles
            JOIN articles ON articles.id = feed_articles.article_id
            JOIN feeds ON feeds.id = feed_articles.feed_id
            JOIN rules ON rules.user_id = feeds.user_id
            WHERE rules.id = ?`,
-        )
-        .all(ruleId) as Array<{ id: number; feedId: number }>;
-      for (const row of rows) this.applyRuleToArticle(ruleId, row.feedId, row.id);
-    });
-    run();
+      )
+      .all(ruleId) as Array<{ id: number; feedId: number }>;
+    for (const row of rows) this.applyRuleToArticle(ruleId, row.feedId, row.id);
   }
 
   recomputeRulesForArticle(articleId: number): void {
@@ -251,10 +252,7 @@ export class RuleRepository {
     }
   }
 
-  private applyRuleToArticle(ruleId: number, feedId: number, articleId: number): void {
-    const rule = this.sqlite.prepare("SELECT * FROM rules WHERE id = ?").get(ruleId) as
-      | Row
-      | undefined;
+  private getArticleInRuleScope(rule: Row, feedId: number, articleId: number): RuleArticle | null {
     const article = this.sqlite
       .prepare(
         `SELECT articles.*, feeds.id AS feedId, feeds.folder_id, feeds.user_id AS userId
@@ -264,9 +262,9 @@ export class RuleRepository {
          WHERE articles.id = ? AND feeds.id = ?`,
       )
       .get(articleId, feedId) as Row | undefined;
-    if (!rule || !article) return;
-    if (Number(rule.user_id) !== Number(article.userId)) return;
-    if (rule.feed_id !== null && Number(rule.feed_id) !== Number(article.feedId)) return;
+    if (!article) return null;
+    if (Number(rule.user_id) !== Number(article.userId)) return null;
+    if (rule.feed_id !== null && Number(rule.feed_id) !== Number(article.feedId)) return null;
     if (rule.folder_id !== null) {
       const inScope = this.sqlite
         .prepare(
@@ -279,22 +277,29 @@ export class RuleRepository {
            SELECT 1 FROM folder_tree WHERE id = ?`,
         )
         .get(rule.folder_id, rule.user_id, rule.user_id, article.folder_id);
-      if (!inScope) return;
+      if (!inScope) return null;
     }
-    const matched = articleMatchesRule(
-      {
-        title: String(article.title ?? ""),
-        author: String(article.author ?? ""),
-        summary: String(article.summary ?? ""),
-        feedContentHtml: String(article.feed_content_html ?? ""),
-        contentHtml: String(article.content_html ?? ""),
-        media: parseArticleMedia(article.media_json),
-      },
-      {
-        conditions: JSON.parse(String(rule.conditions_json)) as RuleCondition[],
-        conditionOperator: rule.condition_operator as RuleConditionOperator,
-      },
-    );
+    return {
+      title: String(article.title ?? ""),
+      author: String(article.author ?? ""),
+      summary: String(article.summary ?? ""),
+      feedContentHtml: String(article.feed_content_html ?? ""),
+      contentHtml: String(article.content_html ?? ""),
+      media: parseArticleMedia(article.media_json),
+    };
+  }
+
+  private applyRuleToArticle(ruleId: number, feedId: number, articleId: number): void {
+    const rule = this.sqlite.prepare("SELECT * FROM rules WHERE id = ?").get(ruleId) as
+      | Row
+      | undefined;
+    if (!rule) return;
+    const article = this.getArticleInRuleScope(rule, feedId, articleId);
+    if (!article) return;
+    const matched = articleMatchesRule(article, {
+      conditions: JSON.parse(String(rule.conditions_json)) as RuleCondition[],
+      conditionOperator: rule.condition_operator as RuleConditionOperator,
+    });
     if (!matched) return;
     const inserted = this.sqlite
       .prepare(

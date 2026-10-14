@@ -131,7 +131,8 @@ describe("reader navigation", () => {
       const selected = fixture.database.articles.listArticlePage(1, { state: "all" }).articles[0];
       if (!selected) throw new Error("The fixture has no article");
       fixture.dom.window.history.replaceState(null, "", `/articles/${selected.id}`);
-      const articles = fixture.hold("articles");
+      let articles = fixture.hold("articles");
+      const readState = fixture.hold("updateArticleState");
       try {
         await fixture.mount();
         await waitFor(
@@ -142,8 +143,13 @@ describe("reader navigation", () => {
               ?.textContent === "Full content 1",
         );
         if (result === "failed") {
-          await act(async () => articles.fail());
-          await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+          await act(async () => {
+            articles.fail();
+            // The automatic read save can restart the failed list request.
+            articles = fixture.hold("articles");
+            readState.release();
+          });
+          await waitFor("retried surrounding queue", () => articles.held > 0);
         }
         for (const key of ["j", "ArrowRight"]) {
           await act(async () =>
@@ -158,6 +164,7 @@ describe("reader navigation", () => {
             ?.disabled,
         ).toBe(true);
         await act(async () => articles.release());
+        await act(async () => readState.release());
         if (result === "failed") {
           await act(async () =>
             fixture.dom.window.dispatchEvent(new fixture.dom.window.Event("online")),

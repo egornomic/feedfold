@@ -17,6 +17,7 @@ import {
   DEFAULT_CUSTOM_PROMPTS,
 } from "../../src/shared/ai-prompts.js";
 import type { Article, BootstrapData, ImportResult, Rule } from "../../src/shared/types.js";
+import { createTestApp } from "../helpers/app.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -44,6 +45,116 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 describe("live API, OPML, and filtering rules", () => {
+  it.each(["create", "update"] as const)(
+    "rolls back a failed rule %s and commits its article changes on retry",
+    async (operation) => {
+      const directory = await mkdtemp(join(tmpdir(), "feedfold-rule-save-test-"));
+      cleanups.push(() => rm(directory, { recursive: true, force: true }));
+      const database = new AppDatabase(join(directory, "feedfold.db"));
+      cleanups.push(() => database.close());
+      const auth = new AuthService(database.auth);
+      const session = await auth.register("rule-reader", "reader-password");
+      if (!session) throw new Error("Account was not created");
+      const server = await createTestApp(database, auth);
+      cleanups.push(() => server.close());
+      const origin = await server.app.listen({ host: "127.0.0.1", port: 0 });
+      const feed = database.feeds.createFeed(session.user.id, {
+        title: "Rule save feed",
+        feedUrl: "https://rules.example.test/feed",
+      });
+      completeFeedRefresh(database.feeds, feed.id, {
+        httpStatus: 200,
+        etag: null,
+        lastModified: null,
+        parsed: {
+          title: feed.title,
+          siteUrl: null,
+          articles: ["Match first", "Match second", "Other"].map((title) => ({
+            externalId: title,
+            title,
+            url: null,
+            author: null,
+            publishedAt: null,
+            summary: "",
+            imageUrl: null,
+            feedContentHtml: null,
+          })),
+        },
+      });
+      const headers = {
+        cookie: `feedfold_session=${session.token}`,
+        "content-type": "application/json",
+      };
+      const get = <T>(path: string) => json<T>(`${origin}${path}`, { headers });
+      const existing =
+        operation === "update"
+          ? database.rules.createRule(session.user.id, {
+              name: "Previous rule",
+              feedId: feed.id,
+              conditions: [{ field: "title", pattern: "Other" }],
+              conditionOperator: "or",
+              action: "hide",
+              enabled: false,
+            })
+          : null;
+      const beforeRules = await get<{ rules: Rule[] }>("/api/rules");
+      const beforeArticles = await get<{ articles: Article[] }>("/api/articles?state=all");
+      const readMatches = () =>
+        database.connection
+          .prepare("SELECT * FROM article_rule_matches ORDER BY feed_id, article_id, rule_id")
+          .all();
+      const beforeMatches = readMatches();
+      // Fail only after an earlier article was updated in this same save.
+      database.connection.exec(`
+        CREATE TRIGGER interrupt_rule_save BEFORE UPDATE OF is_read ON feed_articles
+        WHEN NEW.is_read = 1 AND EXISTS (
+          SELECT 1 FROM feed_articles WHERE feed_id = NEW.feed_id AND is_read = 1
+        )
+        BEGIN SELECT RAISE(ABORT, 'article update interrupted'); END;
+      `);
+      const save = () =>
+        fetch(`${origin}/api/rules${existing ? `/${existing.id}` : ""}`, {
+          method: existing ? "PATCH" : "POST",
+          headers,
+          body: JSON.stringify({
+            name: "Read matching articles",
+            feedId: feed.id,
+            conditions: [{ field: "title", pattern: "Match" }],
+            conditionOperator: "and",
+            action: "mark_read",
+            enabled: true,
+          }),
+        });
+
+      const failed = await save();
+      expect(failed.status).toBe(500);
+      expect(await get("/api/rules")).toEqual(beforeRules);
+      expect(await get("/api/articles?state=all")).toEqual(beforeArticles);
+      expect(readMatches()).toEqual(beforeMatches);
+
+      database.connection.exec("DROP TRIGGER interrupt_rule_save");
+      const succeeded = await save();
+      expect(succeeded.status).toBe(200);
+      const saved = (await succeeded.json()) as Rule;
+      expect(saved).toMatchObject({
+        name: "Read matching articles",
+        action: "mark_read",
+        enabled: true,
+        matchedCount: 2,
+      });
+      expect(await get("/api/rules")).toEqual({ rules: [saved] });
+      const afterArticles = await get<{ articles: Article[] }>("/api/articles?state=all");
+      expect(afterArticles.articles.map(({ title, isRead }) => ({ title, isRead }))).toEqual(
+        expect.arrayContaining([
+          { title: "Match first", isRead: true },
+          { title: "Match second", isRead: true },
+          { title: "Other", isRead: false },
+        ]),
+      );
+      expect(readMatches()).toHaveLength(2);
+    },
+  );
+
   it("requires a session and keeps each account's data isolated", async () => {
     const directory = await mkdtemp(join(tmpdir(), "feedfold-auth-test-"));
     cleanups.push(() => rm(directory, { recursive: true, force: true }));

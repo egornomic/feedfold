@@ -1,6 +1,6 @@
 import type { Article, Rule, RuleField } from "./types.js";
 
-type RuleArticle = Pick<
+export type RuleArticle = Pick<
   Article,
   "title" | "author" | "summary" | "feedContentHtml" | "contentHtml" | "media"
 >;
