@@ -1,7 +1,8 @@
 import type { ApiInput, ApiOperation, ApiOutput } from "../../shared/api/operations.js";
 import type { AiProvider, AiSettings, BootstrapData, SessionUser } from "../../shared/types.js";
 import { aiDevice, decryptAiKey, encryptAiKey, forgetAiDevice } from "./ai-vault.js";
-import type { ApiRuntime } from "./api-client.js";
+import type { ApiRequestOptions, ApiRuntime } from "./api-client.js";
+import { browserRequests } from "./browser-requests.js";
 
 type HttpRequest = <T>(path: string, init?: RequestInit) => Promise<T>;
 
@@ -11,16 +12,16 @@ export function createBrowserRequest(httpRequest: HttpRequest): ApiRuntime["requ
   return async <K extends ApiOperation>(
     operation: K,
     payload: ApiInput<NoInfer<K>>,
-    path: string,
-    init?: RequestInit,
-    aiProvider?: AiProvider | null,
+    options?: ApiRequestOptions,
   ): Promise<ApiOutput<K>> => {
+    const { path, method, body: requestBody } = browserRequests[operation](payload);
+    let body = requestBody;
+    const aiProvider = options?.aiProvider;
     const account = accountId;
     const device = account ? await aiDevice(account).catch(() => null) : null;
-    const headers = new Headers(init?.headers);
+    const headers = new Headers();
     if (account) headers.set("X-Feedfold-Account", account);
     if (device) headers.set("X-Feedfold-Device", device.id);
-    let options = { ...init, headers };
 
     if (operation === "saveAiProviderKey") {
       if (!device || !account)
@@ -29,7 +30,7 @@ export function createBrowserRequest(httpRequest: HttpRequest): ApiRuntime["requ
         );
       const { provider, apiKey } = payload as { provider: AiProvider; apiKey: string };
       const encryptedApiKey = await encryptAiKey(device, account, provider, apiKey.trim());
-      options = { ...options, body: JSON.stringify({ encryptedApiKey }) };
+      body = { encryptedApiKey };
     }
 
     if (
@@ -44,18 +45,17 @@ export function createBrowserRequest(httpRequest: HttpRequest): ApiRuntime["requ
       );
       if (encryptedApiKey) {
         const apiKey = await decryptAiKey(device, account, aiProvider, encryptedApiKey);
-        options = {
-          ...options,
-          body: JSON.stringify({
-            ...JSON.parse(String(init?.body)),
-            credential: { provider: aiProvider, apiKey },
-          }),
-        };
+        body = { ...body, credential: { provider: aiProvider, apiKey } };
       }
     }
 
     try {
-      const result = await httpRequest<ApiOutput<K>>(path, options);
+      const result = await httpRequest<ApiOutput<K>>(path, {
+        method,
+        headers,
+        signal: options?.signal ?? null,
+        body: body === undefined ? null : JSON.stringify(body),
+      });
       if (
         ["session", "login", "register", "completePasskeySignup", "passkeyLogin"].includes(
           operation,

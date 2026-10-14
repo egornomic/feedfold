@@ -1,4 +1,8 @@
-import { createApiClient, type ReaderDataInvalidation } from "../client/api/api-client.js";
+import {
+  type ApiRequestOptions,
+  createApiClient,
+  type ReaderDataInvalidation,
+} from "../client/api/api-client.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
 import { DemoStore } from "./store.js";
 
@@ -15,8 +19,7 @@ const demoStore = new DemoStore();
 function request<K extends ApiOperation>(
   operation: K,
   payload: ApiInput<NoInfer<K>>,
-  _path: string,
-  init?: RequestInit,
+  init?: ApiRequestOptions,
 ): Promise<ApiOutput<K>> {
   if (init?.signal?.aborted) {
     return Promise.reject(new DOMException("The request was aborted.", "AbortError"));

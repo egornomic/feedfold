@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ApiRuntime, createApiClient } from "../../src/client/api/api-client.js";
+import { createBrowserRequest } from "../../src/client/api/browser-api.js";
 import { folderHierarchy } from "../../src/client/features/feeds/folder-hierarchy.js";
 import { createDemoData } from "../../src/demo/fixtures.js";
 import { DemoStore } from "../../src/demo/store.js";
@@ -106,7 +107,7 @@ describe.each(["demo", "server"] as const)("%s reader business rules", (mode) =>
           },
         });
       }
-      request = async (_operation, _payload, path, init) => {
+      request = createBrowserRequest(async <T>(path: string, init?: RequestInit): Promise<T> => {
         const response = await fetch(`${origin}${path}`, {
           ...init,
           headers: {
@@ -115,8 +116,8 @@ describe.each(["demo", "server"] as const)("%s reader business rules", (mode) =>
           },
         });
         if (!response.ok) throw new Error((await response.json()).error);
-        return response.status === 204 ? undefined : response.json();
-      };
+        return response.status === 204 ? (undefined as T) : response.json();
+      });
     }
     api = createApiClient({
       request,

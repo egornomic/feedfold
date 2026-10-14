@@ -17,7 +17,7 @@ function fixtureApi(mode: DataMode) {
   const store = new DemoStore(new Date(), createStressData(mode));
   const account = createStressAccount(mode);
   return createApiClient({
-    request: async (operation, payload, _path, init) => {
+    request: async (operation, payload, init) => {
       if (init?.signal?.aborted) throw new DOMException("The request was aborted.", "AbortError");
       if (operation in account) {
         return structuredClone(account[operation as keyof typeof account]) as ApiOutput<
