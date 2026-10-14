@@ -211,6 +211,14 @@ export function feedDragScenarios(surface: Surface) {
         await expect.poll(() => location(context, feed)).toBe(nested.id);
         const message = "Moved Daily news to Personal / News";
         await expect.poll(() => page.getByText(message, { exact: true }).isVisible()).toBe(true);
+        const destinationFeed = target(nested)
+          .locator(surface === "sidebar" ? "xpath=../.." : "..")
+          .locator(
+            surface === "sidebar"
+              ? ":scope > ul > li > .feed-tree-row > .feed-nav-item"
+              : ":scope > ul > .folder-feed-row > .folder-feed-drag-region",
+          );
+        await expect.poll(() => destinationFeed.isVisible()).toBe(true);
         await drag(page, source(), target(null), "mouse");
         await expect.poll(() => location(context, feed)).toBeNull();
         await expect
