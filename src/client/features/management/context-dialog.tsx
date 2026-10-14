@@ -486,31 +486,22 @@ function RenameFeedForm({
 function MoveFeedForm({
   feed,
   folders,
-  mutations,
+  onMoveFeed,
   onClose,
-  showToast,
 }: {
   feed: Feed;
   folders: FolderType[];
-  mutations: ReaderDataMutations;
+  onMoveFeed: (feed: Feed, folderId: number | null) => Promise<boolean>;
   onClose: () => void;
-  showToast: (message: string) => void;
 }) {
   const [folderId, setFolderId] = useState<number | null>(feed.folderId);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
-    setError(null);
     try {
-      await mutations.updateFeed(feed.id, { folderId });
-      const folderName = folders.find((folder) => folder.id === folderId)?.name ?? "Top level";
-      showToast(`Moved ${feed.title} to ${folderName}`);
-      onClose();
-    } catch (caught) {
-      setError(errorMessage(caught));
+      if (await onMoveFeed(feed, folderId)) onClose();
     } finally {
       setSaving(false);
     }
@@ -536,7 +527,6 @@ function MoveFeedForm({
           />
           <small>Choose a folder to move this feed, or choose Top level.</small>
         </div>
-        {error ? <DialogError message={error} /> : null}
       </div>
       <div className="management-dialog-footer">
         <span />
@@ -561,33 +551,25 @@ function MoveFeedForm({
 function AddFeedToFolderForm({
   folder,
   feeds,
-  mutations,
+  onMoveFeed,
   onClose,
-  showToast,
 }: {
   folder: FolderType;
   feeds: Feed[];
-  mutations: ReaderDataMutations;
+  onMoveFeed: (feed: Feed, folderId: number | null) => Promise<boolean>;
   onClose: () => void;
-  showToast: (message: string) => void;
 }) {
   const availableFeeds = feeds.filter((feed) => feed.folderId !== folder.id);
   const [feedId, setFeedId] = useState<number | null>(availableFeeds[0]?.id ?? null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (feedId === null) return;
+    const feed = availableFeeds.find((candidate) => candidate.id === feedId);
+    if (!feed) return;
     setSaving(true);
-    setError(null);
     try {
-      const feed = feeds.find((candidate) => candidate.id === feedId);
-      await mutations.updateFeed(feedId, { folderId: folder.id });
-      showToast(`Moved ${feed?.title ?? "feed"} to ${folder.name}`);
-      onClose();
-    } catch (caught) {
-      setError(errorMessage(caught));
+      if (await onMoveFeed(feed, folder.id)) onClose();
     } finally {
       setSaving(false);
     }
@@ -618,7 +600,6 @@ function AddFeedToFolderForm({
             <small>Saving moves the selected feed to {folder.name}.</small>
           </div>
         )}
-        {error ? <DialogError message={error} /> : null}
       </div>
       <div className="management-dialog-footer">
         <span />
@@ -757,6 +738,7 @@ function ContextManagementDialog({
   mutations,
   onClose,
   onRefresh,
+  onMoveFeed,
   onUnsubscribe,
   showToast,
 }: {
@@ -765,6 +747,7 @@ function ContextManagementDialog({
   mutations: ReaderDataMutations;
   onClose: () => void;
   onRefresh: (feedId: number) => Promise<void>;
+  onMoveFeed: (feed: Feed, folderId: number | null) => Promise<boolean>;
   onUnsubscribe: (feed: Feed) => Promise<boolean>;
   showToast: (message: string) => void;
 }) {
@@ -923,9 +906,8 @@ function ContextManagementDialog({
             <MoveFeedForm
               feed={feed}
               folders={bootstrap.folders}
-              mutations={mutations}
+              onMoveFeed={onMoveFeed}
               onClose={close}
-              showToast={showToast}
             />
           ) : request.kind === "unsubscribe-feed" && feed ? (
             <UnsubscribeForm feed={feed} onClose={close} onUnsubscribe={onUnsubscribe} />
@@ -967,9 +949,8 @@ function ContextManagementDialog({
             <AddFeedToFolderForm
               folder={folder}
               feeds={bootstrap.feeds}
-              mutations={mutations}
+              onMoveFeed={onMoveFeed}
               onClose={close}
-              showToast={showToast}
             />
           ) : request.kind === "add-folder" && folder ? (
             <div className="management-dialog-body">

@@ -1,13 +1,12 @@
 import type { ReaderRoute } from "../../../shared/app-routes.js";
+import { folderBranchIds, folderPath } from "../../../shared/folder-tree.js";
 import type {
   AppSettings,
   Article,
   ArticleQuery,
   ArticleState,
   BootstrapData,
-  Folder,
 } from "../../../shared/types.js";
-import { folderPath } from "../feeds/folder-hierarchy.js";
 
 const FILTER_RULE_NAME_TEXT_LIMIT = 72;
 
@@ -142,21 +141,6 @@ export function readerScopeUnreadCount(
   return bootstrap.counts.unread;
 }
 
-function folderTreeIds(folders: Folder[], rootId: number): Set<number> {
-  const ids = new Set([rootId]);
-  let foundChild = true;
-  while (foundChild) {
-    foundChild = false;
-    for (const folder of folders) {
-      if (folder.parentId !== null && ids.has(folder.parentId) && !ids.has(folder.id)) {
-        ids.add(folder.id);
-        foundChild = true;
-      }
-    }
-  }
-  return ids;
-}
-
 export function refreshFeedIds(
   bootstrap: BootstrapData,
   feedId: number | null,
@@ -164,7 +148,7 @@ export function refreshFeedIds(
 ): number[] | undefined {
   if (feedId !== null) return [feedId];
   if (folderId === null) return undefined;
-  const folderIds = folderTreeIds(bootstrap.folders, folderId);
+  const folderIds = folderBranchIds(folderId, bootstrap.folders);
   return bootstrap.feeds
     .filter((feed) => feed.folderId !== null && folderIds.has(feed.folderId))
     .map((feed) => feed.id);

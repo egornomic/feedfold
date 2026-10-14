@@ -1,20 +1,10 @@
+import { folderBranchIds, folderPath } from "../../../shared/folder-tree.js";
 import type { Feed, Folder } from "../../../shared/types.js";
 
 export interface FolderHierarchyEntry {
   folder: Folder;
   depth: number;
   path: string;
-}
-
-export function folderPath(folderId: number | null, folders: Folder[]): Folder[] {
-  const foldersById = new Map(folders.map((folder) => [folder.id, folder]));
-  const path: Folder[] = [];
-  let current = folderId === null ? undefined : foldersById.get(folderId);
-  while (current) {
-    path.unshift(current);
-    current = current.parentId === null ? undefined : foldersById.get(current.parentId);
-  }
-  return path;
 }
 
 export function folderPathLabel(folderId: number | null, folders: Folder[]): string {
@@ -51,5 +41,3 @@ export function folderBranchFeedCount(folderId: number, folders: Folder[], feeds
   const branchIds = folderBranchIds(folderId, folders);
   return feeds.filter((feed) => feed.folderId !== null && branchIds.has(feed.folderId)).length;
 }
-
-import { folderBranchIds } from "../../../shared/folder-tree.js";

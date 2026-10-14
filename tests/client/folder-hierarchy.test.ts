@@ -4,6 +4,7 @@ import {
   folderHierarchy,
   folderPathLabel,
 } from "../../src/client/features/feeds/folder-hierarchy.js";
+import { folderBranchIds, folderPath, validFolderParent } from "../../src/shared/folder-tree.js";
 import type { Feed, Folder } from "../../src/shared/types.js";
 
 function folder(id: number, name: string, parentId: number | null = null): Folder {
@@ -61,5 +62,17 @@ describe("folder hierarchy", () => {
     const feeds = [feed(1, 1), feed(2, 3), feed(3, 2), feed(4, null)];
     expect(folderBranchFeedCount(1, folders, feeds)).toBe(2);
     expect(folderBranchFeedCount(3, folders, feeds)).toBe(1);
+  });
+
+  it("finds all descendants and ancestors when children precede their parents", () => {
+    const nested = [folder(5, "News", 3), ...folders];
+    expect(folderBranchIds(1, nested)).toEqual(new Set([1, 3, 5]));
+    expect(folderPath(5, nested).map((folder) => folder.id)).toEqual([1, 3, 5]);
+    expect(folderPath(null, nested)).toEqual([]);
+    expect(folderBranchFeedCount(1, nested, [feed(1, 5), feed(2, 4)])).toBe(1);
+    expect(validFolderParent(1, 5, nested)).toBe(false);
+    expect(validFolderParent(1, 1, nested)).toBe(false);
+    expect(validFolderParent(1, 4, nested)).toBe(true);
+    expect(validFolderParent(1, null, nested)).toBe(true);
   });
 });

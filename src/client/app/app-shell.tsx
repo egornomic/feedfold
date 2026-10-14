@@ -474,6 +474,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
             mutations={dataResource}
             onClose={() => setManagementRequest(null)}
             onRefresh={(feedId) => refresh(feedId)}
+            onMoveFeed={moveFeed}
             onUnsubscribe={unsubscribeFromFeed}
             showToast={showToast}
           />
