@@ -46,14 +46,6 @@ export function appendUnseenArticles(articles: Article[], candidates: Article[])
   };
 }
 
-export function articlesWithUpdatedState(articles: Article[], candidates: Article[]): Article[] {
-  const updatedById = new Map(candidates.map((article) => [article.id, article]));
-  return articles.map((article) => {
-    const updated = updatedById.get(article.id);
-    return updated ? { ...article, isRead: updated.isRead, isSaved: updated.isSaved } : article;
-  });
-}
-
 export async function firstUnseenArticlePage(
   articles: Article[],
   cursor: string,

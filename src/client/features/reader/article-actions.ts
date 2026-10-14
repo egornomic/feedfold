@@ -2,14 +2,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import type { Article, MarkReadAgeDays, ReadingMode } from "../../../shared/types";
 import { api, errorMessage } from "../../api/api";
-import { updateCachedArticleStates } from "../../api/query";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import type { AppRouteController } from "../../app/route";
 import { copyText } from "../../platform/clipboard";
 import type { ArticleEnrichmentController } from "./article-enrichment";
 import type { ArticleQueueController } from "./article-queue";
+import { type ArticleStateChange, updateReaderArticleStates } from "./article-state";
 import type { ReaderData } from "./reader-data";
-import { shouldAutoMarkRoutedArticleRead, updateBootstrapCounts } from "./reader-state";
+import { shouldAutoMarkRoutedArticleRead } from "./reader-state";
 
 interface ArticleActionsOptions {
   loadFullArticle: ArticleEnrichmentController["loadFullArticle"];
@@ -36,64 +36,55 @@ export function useArticleActions({
   const loadBootstrap = dataResource.loadBootstrap;
   const loadArticles = queue.loadArticles;
 
-  const changeArticleState = useCallback(
-    async (article: Article, change: { isRead?: boolean; isSaved?: boolean }) => {
-      const nextRead = change.isRead ?? article.isRead;
-      const nextSaved = change.isSaved ?? article.isSaved;
-      const unreadDelta = nextRead === article.isRead ? 0 : nextRead ? -1 : 1;
-      const savedDelta = nextSaved === article.isSaved ? 0 : nextSaved ? 1 : -1;
-      const wasManuallyUnread = manuallyUnreadArticleIds.current.has(article.id);
-
-      if (change.isRead === false) manuallyUnreadArticleIds.current.add(article.id);
-      if (change.isRead === true) manuallyUnreadArticleIds.current.delete(article.id);
-
-      queue.setArticles((current) =>
-        current.map((item) =>
-          item.id === article.id ? { ...item, isRead: nextRead, isSaved: nextSaved } : item,
-        ),
-      );
-      dataResource.mutateBootstrap((current) =>
-        updateBootstrapCounts(current, article, unreadDelta, savedDelta),
-      );
-
+  const changeArticlesState = useCallback(
+    async (
+      candidates: Article[],
+      change: ArticleStateChange,
+      request: (ids: number[]) => Promise<unknown>,
+      failureMessage: string,
+    ): Promise<boolean> => {
+      const ids = [...new Set(candidates.map((article) => article.id))];
+      const protectedIds = new Set(ids.filter((id) => manuallyUnreadArticleIds.current.has(id)));
+      for (const id of ids) {
+        if (change.isRead === false) manuallyUnreadArticleIds.current.add(id);
+        if (change.isRead === true) manuallyUnreadArticleIds.current.delete(id);
+      }
       try {
-        await dataResource.runCounterMutation(async () => {
-          await api.updateArticleState(article.id, change);
-          updateCachedArticleStates(client, new Set([article.id]), change);
-        });
+        await dataResource.runCounterMutation(
+          () => request(ids),
+          () => {
+            const rollback = updateReaderArticleStates(
+              client,
+              new Map(ids.map((id) => [id, change])),
+            );
+            return () => {
+              // Keep a rejected automatic read unread until the reader explicitly tries again.
+              for (const id of ids) {
+                if (protectedIds.has(id) || change.isRead === true)
+                  manuallyUnreadArticleIds.current.add(id);
+                else if (change.isRead === false) manuallyUnreadArticleIds.current.delete(id);
+              }
+              rollback();
+            };
+          },
+        );
         return true;
       } catch (caught) {
-        // A rejected automatic read must stay unread until the reader tries again.
-        if (wasManuallyUnread || (change.isRead === true && !article.isRead))
-          manuallyUnreadArticleIds.current.add(article.id);
-        else manuallyUnreadArticleIds.current.delete(article.id);
-        queue.setArticles((current) =>
-          current.map((item) =>
-            item.id === article.id
-              ? {
-                  ...item,
-                  isRead:
-                    change.isRead !== undefined && item.isRead === nextRead
-                      ? article.isRead
-                      : item.isRead,
-                  isSaved:
-                    change.isSaved !== undefined && item.isSaved === nextSaved
-                      ? article.isSaved
-                      : item.isSaved,
-                }
-              : item,
-          ),
-        );
-        dataResource.mutateBootstrap((current) =>
-          updateBootstrapCounts(current, article, -unreadDelta, -savedDelta),
-        );
-        showToast(`Could not update the article: ${errorMessage(caught)}`);
-        await loadBootstrap();
-        if (route.current().kind === "reader") await loadArticles();
+        showToast(`${failureMessage}: ${errorMessage(caught)}`);
         return false;
       }
     },
-    [client, dataResource, loadArticles, loadBootstrap, queue, route.current, showToast],
+    [client, dataResource, showToast],
+  );
+  const changeArticleState = useCallback(
+    (article: Article, change: ArticleStateChange) =>
+      changeArticlesState(
+        [article],
+        change,
+        () => api.updateArticleState(article.id, change),
+        "Could not update the article",
+      ),
+    [changeArticlesState],
   );
 
   const activateArticle = useCallback(
@@ -112,11 +103,11 @@ export function useArticleActions({
         route.navigate(
           { kind: "article", articleId: article.id },
           historyMode,
-          queue.articlesRef.current.findIndex((item) => item.id === article.id),
+          queue.getArticles().findIndex((item) => item.id === article.id),
         );
       }
     },
-    [activateArticle, queue.articlesRef, route],
+    [activateArticle, queue.getArticles, route],
   );
 
   useEffect(() => {
@@ -167,7 +158,7 @@ export function useArticleActions({
           (!routed && activeArticleIdRef.current !== currentId)
         )
           return false;
-        const articles = queue.articlesRef.current;
+        const articles = queue.getArticles();
         const next = articles[articles.findIndex((article) => article.id === currentId) + 1];
         if (next) {
           openArticle(next, openReader, routed ? "replace" : "push");
@@ -226,35 +217,14 @@ export function useArticleActions({
       const unreadArticles = [...unique.values()];
       if (unreadArticles.length === 0) return true;
 
-      const ids = new Set(unreadArticles.map((article) => article.id));
-      const protectedIds = unreadArticles
-        .filter((article) => manuallyUnreadArticleIds.current.has(article.id))
-        .map((article) => article.id);
-      for (const id of ids) manuallyUnreadArticleIds.current.delete(id);
-      queue.setArticles((current) =>
-        current.map((article) => (ids.has(article.id) ? { ...article, isRead: true } : article)),
+      return changeArticlesState(
+        unreadArticles,
+        { isRead: true },
+        (ids) => api.markRead({ articleIds: ids }),
+        "Could not mark articles as read",
       );
-      dataResource.mutateBootstrap((current) => {
-        return unreadArticles.reduce(
-          (next, article) => updateBootstrapCounts(next, article, -1, 0),
-          current,
-        );
-      });
-
-      try {
-        await dataResource.runCounterMutation(async () => {
-          await api.markRead({ articleIds: [...ids] });
-          updateCachedArticleStates(client, ids, { isRead: true });
-        });
-        return true;
-      } catch (caught) {
-        for (const id of protectedIds) manuallyUnreadArticleIds.current.add(id);
-        showToast(`Could not mark articles as read: ${errorMessage(caught)}`);
-        await Promise.all([loadBootstrap(), loadArticles()]);
-        return false;
-      }
     },
-    [dataResource, loadArticles, loadBootstrap, queue, showToast, client],
+    [changeArticlesState],
   );
 
   const markVisibleRead = useCallback(async () => {

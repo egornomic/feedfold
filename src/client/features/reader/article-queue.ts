@@ -1,4 +1,10 @@
-import { useInfiniteQuery, useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  skipToken,
+  useInfiniteQuery,
+  useIsMutating,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   type Dispatch,
   type SetStateAction,
@@ -14,12 +20,12 @@ import { errorMessage } from "../../api/api";
 import { articlePagesQuery, articleQuery, counterMutationKey, readerKeys } from "../../api/query";
 import type { AppRouteController } from "../../app/route";
 import { useDelayedPending } from "../../ui/loading";
+import { updateReaderArticleStates } from "./article-state";
 import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
 import {
   appendUnseenArticles,
   articleMatchesState,
   articleQueryForReaderRoute,
-  articlesWithUpdatedState,
   firstUnseenArticlePage,
 } from "./reader-state";
 
@@ -29,7 +35,7 @@ export interface ArticleQueueController {
   readingMode: ReadingMode;
   articles: Article[];
   setArticles: Dispatch<SetStateAction<Article[]>>;
-  articlesRef: React.RefObject<Article[]>;
+  getArticles: () => Article[];
   loading: boolean;
   showLoading: boolean;
   loadedReaderRoute: ReaderRoute | null;
@@ -78,13 +84,38 @@ export function useArticleQueue({
   const [reloadRevision, setReloadRevision] = useState(0);
   const reconciliationRevision = mutationRevision + reloadRevision;
   const changingCounters = useIsMutating({ mutationKey: counterMutationKey }) > 0;
-  const [articles, updateArticles] = useState<Article[]>([]);
-  const articlesRef = useRef(articles);
-  const setArticles: Dispatch<SetStateAction<Article[]>> = useCallback((update) => {
-    const next = typeof update === "function" ? update(articlesRef.current) : update;
-    articlesRef.current = next;
-    updateArticles(next);
-  }, []);
+  const { data: articles = [] } = useQuery<Article[]>({
+    queryKey: readerKeys.queue,
+    initialData: [] as Article[],
+    queryFn: skipToken,
+  });
+  const getArticles = useCallback(
+    () => client.getQueryData<Article[]>(readerKeys.queue) ?? [],
+    [client],
+  );
+  const setArticles: Dispatch<SetStateAction<Article[]>> = useCallback(
+    (update) => {
+      client.setQueryData<Article[]>(readerKeys.queue, (current = []) =>
+        typeof update === "function" ? update(current) : update,
+      );
+    },
+    [client],
+  );
+  const reconcileArticleStates = useCallback(
+    (candidates: Article[]) => {
+      updateReaderArticleStates(
+        client,
+        new Map(
+          candidates.map((article) => [
+            article.id,
+            { isRead: article.isRead, isSaved: article.isSaved },
+          ]),
+        ),
+        false,
+      );
+    },
+    [client],
+  );
   const [displayedReadingMode, setDisplayedReadingMode] = useState(readingMode);
   const [loadedReaderRoute, setLoadedReaderRoute] = useState<ReaderRoute | null>(null);
   const [activeArticleId, setActiveArticleId] = useState<number | null>(route.routedArticleId);
@@ -134,6 +165,7 @@ export function useArticleQueue({
       return;
     appliedDetail.current = article;
     fullContentLoadedIds.current.add(article.id);
+    reconcileArticleStates([article]);
     setArticles((current) =>
       current.some((item) => item.id === article.id)
         ? current.map((item) => (item.id === article.id ? article : item))
@@ -160,6 +192,7 @@ export function useArticleQueue({
     changingCounters,
     route.articleContext,
     route.setArticleContext,
+    reconcileArticleStates,
     setArticles,
   ]);
 
@@ -206,13 +239,13 @@ export function useArticleQueue({
     const target = contextReturn.current;
     const returnTarget =
       target && appRoutePath(target.route) === appRoutePath(route.readerRoute) ? target : null;
-    const current = articlesRef.current;
+    reconcileArticleStates(candidates);
+    const current = getArticles();
     // Background deliveries retain the reading queue; explicit changes apply its new contents and order.
     const reading = !reconcile && (route.routedArticleId !== null || sameQueue);
     let next =
       reading && (sameQueue || anchor === null)
-        ? appendUnseenArticles(articlesWithUpdatedState(current, candidates), matchingCandidates)
-            .articles
+        ? appendUnseenArticles(current, matchingCandidates).articles
         : matchingCandidates.map((article) => {
             const complete = current.find((item) => item.id === article.id);
             return complete && fullContentLoadedIds.current.has(article.id)
@@ -266,6 +299,8 @@ export function useArticleQueue({
     detail.data,
     changingCounters,
     setArticles,
+    reconcileArticleStates,
+    getArticles,
   ]);
 
   useLayoutEffect(() => {
@@ -289,7 +324,7 @@ export function useArticleQueue({
     const cursor = pages.data?.pages.at(-1)?.nextCursor;
     if (!cursor || pages.isFetching) return Promise.resolve([]);
     const promise = (async () => {
-      const before = articlesRef.current;
+      const before = getArticles();
       try {
         const { appended } = await firstUnseenArticlePage(before, cursor, async () => {
           if (latestRequestKey.current !== requestKey) return;
@@ -315,7 +350,7 @@ export function useArticleQueue({
       if (pendingPage.current?.promise === promise) pendingPage.current = null;
     });
     return promise;
-  }, [pages, requestKey, route.readerRoute.state, setArticles, showToast]);
+  }, [getArticles, pages, requestKey, route.readerRoute.state, setArticles, showToast]);
 
   const loadArticles = useCallback(async () => {
     await client.invalidateQueries({ queryKey: readerKeys.lists });
@@ -326,17 +361,18 @@ export function useArticleQueue({
       const result = await pages.refetch({ cancelRefetch: false, throwOnError: true });
       if (latestRequestKey.current !== requestKey) return;
       const candidates = result.data?.pages.flatMap((page) => page.articles) ?? [];
+      reconcileArticleStates(candidates);
       setArticles(
         (current) =>
           appendUnseenArticles(
-            articlesWithUpdatedState(current, candidates),
+            current,
             candidates.filter((article) => articleMatchesState(article, route.readerRoute.state)),
           ).articles,
       );
     } catch (error) {
       showToast(`Could not load more articles: ${errorMessage(error)}`);
     }
-  }, [pages, requestKey, route.readerRoute.state, setArticles, showToast]);
+  }, [reconcileArticleStates, pages, requestKey, route.readerRoute.state, setArticles, showToast]);
   const mergeArticle = useCallback(
     (updated: Article) => {
       fullContentLoadedIds.current.add(updated.id);
@@ -379,7 +415,7 @@ export function useArticleQueue({
     readingMode: displayedReadingMode,
     articles,
     setArticles,
-    articlesRef,
+    getArticles,
     loading,
     showLoading: loading && (route.route.kind !== "reader" || showLoading),
     loadedReaderRoute,

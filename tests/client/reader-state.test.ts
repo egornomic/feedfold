@@ -1,9 +1,11 @@
+import { QueryClient } from "@tanstack/react-query";
 import { assert, describe, expect, it } from "vitest";
+import { articlePagesQuery, readerKeys } from "../../src/client/api/query.js";
+import { updateReaderArticleStates } from "../../src/client/features/reader/article-state.js";
 import {
   appendUnseenArticles,
   articleQueryForReaderRoute,
   articleSettingsInvalidation,
-  articlesWithUpdatedState,
   filterRuleName,
   firstUnseenArticlePage,
   invalidateArticleSummaries,
@@ -197,8 +199,24 @@ describe("reader state", () => {
       { ...article, id: 3, title: "Delivered three" },
     ];
 
+    const client = new QueryClient();
+    client.setQueryData(readerKeys.queue, current);
+    updateReaderArticleStates(
+      client,
+      new Map(
+        refreshed.map((item) => [
+          item.id,
+          {
+            isRead: item.isRead,
+            isSaved: item.isSaved,
+          },
+        ]),
+      ),
+      false,
+    );
+    const updated = client.getQueryData<Article[]>(readerKeys.queue) ?? [];
     expect(
-      articlesWithUpdatedState(current, refreshed).map(({ id, title, isRead, isSaved }) => ({
+      updated.map(({ id, title, isRead, isSaved }) => ({
         id,
         title,
         isRead,
@@ -208,9 +226,8 @@ describe("reader state", () => {
       { id: 1, title: "Full article", isRead: false, isSaved: true },
       { id: 2, title: article.title, isRead: false, isSaved: false },
     ]);
-    expect(articlesWithUpdatedState(current, refreshed)[0]?.contentHtml).toBe(
-      "<p>Extracted text</p>",
-    );
+    expect(updated[0]?.contentHtml).toBe("<p>Extracted text</p>");
+    client.clear();
   });
 
   it("continues through refreshed cursor pages until another unread article is reachable", async () => {
@@ -313,18 +330,48 @@ describe("reader state", () => {
       });
 
       for (const isRead of [true, false]) {
+        const initial = database.articles.listArticlePage(1, { state: "all" }).articles[0];
+        assert.isDefined(initial);
+        database.articles.updateArticleState(1, initial.id, { isRead: !isRead });
         const stored = database.articles.listArticlePage(1, { state: "all" }).articles[0];
         assert.isDefined(stored);
         const before = {
           ...database.bootstrap.getBootstrap(1),
           aiSettings: bootstrap().aiSettings,
         };
-        const optimistic = updateBootstrapCounts(before, stored, isRead ? -1 : 1, 0);
+        const client = new QueryClient();
+        const pagesKey = articlePagesQuery({ state: "all" }).queryKey;
+        client.setQueryData(readerKeys.bootstrap, before);
+        client.setQueryData(readerKeys.queue, [stored]);
+        client.setQueryData(readerKeys.article(stored.id), stored);
+        client.setQueryData(pagesKey, {
+          pages: [database.articles.listArticlePage(1, { state: "all" })],
+          pageParams: [null],
+        });
+        const change = new Map([[stored.id, { isRead }]]);
+        const rollback = updateReaderArticleStates(client, change);
+        // Duplicate deliveries must not change counts a second time.
+        updateReaderArticleStates(client, change);
+        const optimistic = client.getQueryData<BootstrapData>(readerKeys.bootstrap);
+        assert.isDefined(optimistic);
         database.articles.updateArticleState(1, stored.id, { isRead });
         const persisted = database.bootstrap.getBootstrap(1);
         expect(optimistic.folders).toEqual(persisted.folders);
         expect(optimistic.feeds).toEqual(persisted.feeds);
         expect(optimistic.counts).toEqual(persisted.counts);
+        expect(client.getQueryData<Article[]>(readerKeys.queue)?.[0]?.isRead).toBe(isRead);
+        expect(client.getQueryData<Article>(readerKeys.article(stored.id))?.isRead).toBe(isRead);
+        expect(
+          client.getQueryData<{ pages: { articles: Article[] }[] }>(pagesKey)?.pages[0]?.articles[0]
+            ?.isRead,
+        ).toBe(isRead);
+        // Undo the same transition locally and through the real database.
+        rollback();
+        database.articles.updateArticleState(1, stored.id, { isRead: stored.isRead });
+        const restored = client.getQueryData<BootstrapData>(readerKeys.bootstrap);
+        expect(restored?.counts).toEqual(database.bootstrap.getBootstrap(1).counts);
+        expect(restored?.folders).toEqual(database.bootstrap.getBootstrap(1).folders);
+        client.clear();
       }
     } finally {
       database.close();

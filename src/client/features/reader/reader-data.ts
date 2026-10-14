@@ -1,4 +1,10 @@
-import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryKey,
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import type { BootstrapData } from "../../../shared/types.js";
 import { api } from "../../api/api.js";
@@ -55,19 +61,23 @@ export function useReaderData() {
   const { mutateAsync: counterMutation } = useMutation({
     mutationKey: counterMutationKey,
     scope: { id: "article-state" },
-    mutationFn: (request: () => Promise<unknown>) => request(),
-    onMutate: async () => {
-      const interrupted = client.getQueryCache().findAll({
-        queryKey: readerKeys.all,
-        fetchStatus: "fetching",
-        predicate: (query) => query.queryKey[1] === "articles" || query.queryKey[1] === "article",
-      });
-      await client.cancelQueries({ queryKey: readerKeys.all });
-      return interrupted.map((query) => query.queryKey);
+    mutationFn: async ({
+      request,
+      rollback,
+    }: {
+      request: () => Promise<unknown>;
+      rollback: (() => void) | undefined;
+      interrupted: QueryKey[];
+    }) => {
+      try {
+        return await request();
+      } catch (error) {
+        rollback?.();
+        throw error;
+      }
     },
-    onSettled: (_data, _error, _request, interrupted) => {
-      for (const queryKey of interrupted ?? [])
-        void client.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+    onSettled: (_data, _error, { interrupted }) => {
+      for (const queryKey of interrupted) void client.invalidateQueries({ queryKey, exact: true });
       if (client.isMutating({ mutationKey: counterMutationKey }) === 1) {
         void client.invalidateQueries({ queryKey: readerKeys.bootstrap });
       }
@@ -104,8 +114,34 @@ export function useReaderData() {
           current ? update(current) : current,
         );
       },
-      runCounterMutation: async <T>(request: () => Promise<T>): Promise<T> =>
-        (await counterMutation(request)) as T,
+      runCounterMutation: async <T>(
+        request: () => Promise<T>,
+        optimistic?: () => () => void,
+      ): Promise<T> => {
+        const interrupted = client
+          .getQueryCache()
+          .findAll({
+            queryKey: readerKeys.all,
+            fetchStatus: "fetching",
+            predicate: (query) =>
+              query.queryKey[1] === "articles" || query.queryKey[1] === "article",
+          })
+          .map((query) => query.queryKey);
+        // Cancel stale deliveries before applying the immediate article and count changes.
+        const cancelled = client.cancelQueries({ queryKey: readerKeys.all });
+        const queued = client.isMutating({ mutationKey: counterMutationKey }) > 0;
+        let rollback = queued ? undefined : optimistic?.();
+        return (await counterMutation({
+          request: async () => {
+            await cancelled;
+            // A queued action starts from the preceding action's committed or restored state.
+            if (queued) rollback = optimistic?.();
+            return request();
+          },
+          rollback: () => rollback?.(),
+          interrupted,
+        })) as T;
+      },
       beginRefresh: async (feedIds: number[] | undefined, trackedIds: number[]) => {
         const result = await run(() => api.refresh(feedIds), false);
         const ids = new Set([...trackedIds, ...result.refreshingFeedIds]);
