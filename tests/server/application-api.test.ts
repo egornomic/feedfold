@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import { type ApiRuntime, createApiClient } from "../../src/client/api/api-client.js";
 import { ApiError } from "../../src/client/api/api-contract.js";
+import { createBrowserRequest } from "../../src/client/api/browser-api.js";
 import { createApp } from "../../src/server/app.js";
 import { ApplicationApi, type ApplicationApiServices } from "../../src/server/application-api.js";
 import { applicationError } from "../../src/server/application-error.js";
@@ -58,35 +59,32 @@ async function transportClient(transport: "web" | "desktop", services: Applicati
   const origin = await app.listen({ host: "127.0.0.1", port: 0 });
   const setCookie = registration.headers["set-cookie"];
   const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";", 1)[0];
+  const browserRequest = createBrowserRequest(
+    async <T>(path: string, init?: RequestInit): Promise<T> => {
+      const headers = new Headers(init?.headers);
+      headers.set("cookie", cookie ?? "");
+      if (init?.body) headers.set("content-type", "application/json");
+      const response = await fetch(origin + path, { ...init, headers });
+      if (!response.ok) {
+        const error = (await response.json()) as { error: string; code?: string };
+        throw new ApiError(error.error, response.status, error.code);
+      }
+      return response.status === 204 ? (undefined as T) : response.json();
+    },
+  );
   const request: ApiRuntime["request"] = async <K extends ApiOperation>(
     operation: K,
     payload: ApiInput<K>,
-    path: string,
-    init?: RequestInit,
+    options?: Parameters<ApiRuntime["request"]>[2],
   ) => {
-    if (transport === "desktop") {
-      try {
-        return (await application.invoke({ operation, payload })) as ApiOutput<K>;
-      } catch (error) {
-        const known = applicationError(error);
-        if (known) throw new ApiError(known.message, known.status, known.code);
-        throw error;
-      }
+    if (transport === "web") return browserRequest<K>(operation, payload, options);
+    try {
+      return (await application.invoke({ operation, payload })) as ApiOutput<K>;
+    } catch (error) {
+      const known = applicationError(error);
+      if (known) throw new ApiError(known.message, known.status, known.code);
+      throw error;
     }
-    const response = await fetch(origin + path, {
-      ...init,
-      headers: {
-        cookie: cookie ?? "",
-        ...(init?.body ? { "content-type": "application/json" } : {}),
-      },
-    });
-    if (!response.ok) {
-      const error = (await response.json()) as { error: string; code?: string };
-      throw new ApiError(error.error, response.status, error.code);
-    }
-    return response.status === 204
-      ? (undefined as ApiOutput<K>)
-      : (response.json() as Promise<ApiOutput<K>>);
   };
   return createApiClient({
     request,
@@ -298,25 +296,39 @@ describe("local application API", () => {
         parsed: {
           title: feed.title,
           siteUrl: null,
-          articles: [
-            {
-              externalId: "contract-story",
-              title: "Contract story",
-              url: null,
-              author: null,
-              publishedAt: null,
-              summary: "Available in both apps.",
-              feedContentHtml: null,
-              imageUrl: null,
-            },
-          ],
+          articles: ["Contract story", "Second story", "Third story"].map((title, index) => ({
+            externalId: `contract-story-${index}`,
+            title,
+            url: null,
+            author: null,
+            publishedAt: `2026-10-0${index + 1}T12:00:00Z`,
+            summary: "Available in both apps.",
+            feedContentHtml: `<p>${title} content.</p>`,
+            imageUrl: null,
+          })),
         },
       });
-      const article = (
-        await client.articles({ state: "all", feedId: feed.id, limit: 1, includeContent: true })
-      ).articles[0];
+      const query = {
+        state: "all",
+        feedId: feed.id,
+        folderId: folder.id,
+        search: "story",
+        limit: 1,
+      } as const;
+      const firstPage = await client.articles({ ...query, includeContent: true });
+      const article = firstPage.articles[0];
       assert.isDefined(article);
       expect(article).toMatchObject({ title: "Contract story", isRead: false, isSaved: false });
+      expect(article.feedContentHtml).toBe("<p>Contract story content.</p>");
+      assert.isNotNull(firstPage.nextCursor);
+      const nextPage = await client.articles({
+        ...query,
+        cursor: firstPage.nextCursor,
+        includeContent: false,
+      });
+      expect(nextPage.articles.map(({ title }) => title)).toEqual(["Second story"]);
+      expect(nextPage.articles[0]?.feedContentHtml).toBeNull();
+      expect((await client.articles({ ...query, search: "absent" })).articles).toEqual([]);
       expect(await client.updateArticleState(article.id, { isSaved: true })).toMatchObject({
         isSaved: true,
       });

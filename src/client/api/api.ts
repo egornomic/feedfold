@@ -1,7 +1,10 @@
 import type { ApiInput, ApiOperation, ApiOutput } from "../../shared/api/operations.js";
-import type { AiProvider } from "../../shared/types.js";
 import { invokeDesktop, isDesktopApp } from "../platform/desktop.js";
-import { createApiClient, type ReaderDataInvalidation } from "./api-client.js";
+import {
+  type ApiRequestOptions,
+  createApiClient,
+  type ReaderDataInvalidation,
+} from "./api-client.js";
 import { ApiError, appUrl } from "./api-contract.js";
 import { createBrowserRequest } from "./browser-api.js";
 import { httpRequest } from "./http-request.js";
@@ -30,13 +33,11 @@ const browserRequest = createBrowserRequest(httpRequest);
 async function request<K extends ApiOperation>(
   operation: K,
   payload: ApiInput<NoInfer<K>>,
-  path: string,
-  init?: RequestInit,
-  aiProvider?: AiProvider | null,
+  options?: ApiRequestOptions,
 ): Promise<ApiOutput<K>> {
-  if (!isDesktopApp()) return browserRequest<K>(operation, payload, path, init, aiProvider);
+  if (!isDesktopApp()) return browserRequest<K>(operation, payload, options);
   try {
-    return await abortable(invokeDesktop<K>(operation, payload), init?.signal);
+    return await abortable(invokeDesktop<K>(operation, payload), options?.signal);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     const desktopError = error as Error & { status?: number; code?: string | null };

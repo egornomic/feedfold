@@ -76,6 +76,10 @@ describe("hosted account authentication", () => {
     await api.register("storage-unavailable", "reader-password");
     expect((await api.session()).username).toBe("storage-unavailable");
     expect((await api.bootstrap()).aiSettings.credentialStorageAvailable).toBe(false);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(api.bootstrap(controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+    expect((await api.bootstrap()).counts.all).toBe(0);
     await expect(api.saveAiProviderKey("openai", "must-not-be-stored")).rejects.toThrow(
       "Secure key storage is unavailable",
     );

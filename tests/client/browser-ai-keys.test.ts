@@ -31,9 +31,8 @@ describe("browser-held AI keys", () => {
     const directory = await mkdtemp(join(tmpdir(), "feedfold-browser-keys-"));
     const providerKeys: string[] = [];
     const provider = createServer(async (request, response) => {
-      for await (const _chunk of request) {
-        /* Consume the real provider request. */
-      }
+      let body = "";
+      for await (const chunk of request) body += chunk;
       providerKeys.push(request.headers.authorization ?? "");
       response.setHeader("Content-Type", "application/json");
       response.end(
@@ -43,7 +42,12 @@ describe("browser-held AI keys", () => {
             {
               type: "message",
               content: [
-                { type: "output_text", text: "An encrypted-key request reached the provider." },
+                {
+                  type: "output_text",
+                  text: body.includes("data-translation-id")
+                    ? JSON.stringify({ "0": "Przetłumaczony artykuł." })
+                    : "An encrypted-key request reached the provider.",
+                },
               ],
             },
           ],
@@ -195,6 +199,27 @@ describe("browser-held AI keys", () => {
         return response.status;
       }, identity.device);
       expect(oldSave).toBe(400);
+
+      await first.page.evaluate(() =>
+        window.feedfoldTest.api.updateSettings({ translationLanguage: "Polish" }),
+      );
+      const translated = await first.page.evaluate(
+        (id) => window.feedfoldTest.api.translateArticle(id, "feed", "openai"),
+        articleId,
+      );
+      expect(translated).toMatchObject({
+        sourceKind: "feed",
+        language: "Polish",
+        html: "<p>Przetłumaczony artykuł.</p>",
+      });
+      expect(providerKeys).toEqual(["Bearer FIRST_DEVICE_SECRET", "Bearer FIRST_DEVICE_SECRET"]);
+      await expect(
+        first.page.evaluate(
+          (id) => window.feedfoldTest.api.translateArticle(id, "full", "openai"),
+          articleId,
+        ),
+      ).rejects.toThrow("no text to translate");
+      expect(providerKeys).toHaveLength(2);
 
       await first.context.close();
       first = await openBrowser("first");
