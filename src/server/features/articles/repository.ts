@@ -1,5 +1,5 @@
 import type Sqlite from "better-sqlite3";
-import { normalizeSearchText } from "../../../shared/article-search.js";
+import { articleSearchColumns, normalizeSearchText } from "../../../shared/article-search.js";
 import type {
   Article,
   ArticlePage,
@@ -108,13 +108,11 @@ export class ArticleRepository {
       const search = normalizeSearchText(query.search);
       const indexedSearch = search.split("\0", 1)[0] ?? "";
       const escaped = search.replace(/[\\%_]/g, "\\$&");
-      const textMatch = `(title LIKE ? ESCAPE '\\' COLLATE NOCASE
-        OR COALESCE(author, '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-        OR summary LIKE ? ESCAPE '\\' COLLATE NOCASE
-        OR feed_text LIKE ? ESCAPE '\\' COLLATE NOCASE
-        OR content_text LIKE ? ESCAPE '\\' COLLATE NOCASE)`;
+      const textMatch = `(${articleSearchColumns
+        .map((column) => `COALESCE(${column}, '') LIKE ? ESCAPE '\\' COLLATE NOCASE`)
+        .join(" OR ")})`;
       // Trigrams find candidates; LIKE preserves SQLite case rules and literal substrings.
-      const patterns = Array<string>(5).fill(`%${escaped}%`);
+      const patterns = Array<string>(articleSearchColumns.length).fill(`%${escaped}%`);
       if ([...indexedSearch].length >= 3) {
         // Compute matches once, then reuse them for every folder and the anchor query.
         const access = savedOrder

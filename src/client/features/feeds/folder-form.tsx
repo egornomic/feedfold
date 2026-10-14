@@ -1,5 +1,6 @@
 import { Check, LoaderCircle } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { folderBranchIds } from "../../../shared/folder-tree";
 import type { Folder, FolderSortDirection } from "../../../shared/types";
 import { errorMessage } from "../../api/api";
 import { DropdownSelect } from "../../ui/dropdown";
@@ -32,23 +33,7 @@ export function FolderForm({
     initial?.sortDirection ?? "newest",
   );
   const [saving, setSaving] = useState(false);
-  const unavailableParentIds = new Set(initial ? [initial.id] : []);
-  if (initial) {
-    let foundDescendant = true;
-    while (foundDescendant) {
-      foundDescendant = false;
-      for (const folder of folders) {
-        if (
-          folder.parentId !== null &&
-          unavailableParentIds.has(folder.parentId) &&
-          !unavailableParentIds.has(folder.id)
-        ) {
-          unavailableParentIds.add(folder.id);
-          foundDescendant = true;
-        }
-      }
-    }
-  }
+  const unavailableParentIds = initial ? folderBranchIds(initial.id, folders) : new Set<number>();
   const availableParents = folders.filter((folder) => !unavailableParentIds.has(folder.id));
 
   const submit = async (event: FormEvent) => {
