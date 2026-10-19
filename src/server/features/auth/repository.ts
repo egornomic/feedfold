@@ -594,13 +594,17 @@ export class AuthRepository {
     })();
   }
 
-  removePassword(userId: number, replacementHash: string, at: string): void {
-    this.sqlite
-      .prepare(
-        `UPDATE users SET password_hash = ?, has_password = 0,
-           password_enrolled_at = NULL, updated_at = ? WHERE id = ?`,
-      )
-      .run(replacementHash, at, userId);
+  /** Returns false when the password is the account's only sign-in method. */
+  removePassword(userId: number, replacementHash: string, at: string): boolean {
+    return (
+      this.sqlite
+        .prepare(
+          `UPDATE users SET password_hash = ?, has_password = 0,
+             password_enrolled_at = NULL, updated_at = ?
+           WHERE id = ? AND EXISTS (SELECT 1 FROM passkeys WHERE user_id = users.id)`,
+        )
+        .run(replacementHash, at, userId).changes > 0
+    );
   }
 
   upgradePasswordHash(userId: number, passwordHash: string, at: string): void {
@@ -702,11 +706,23 @@ export class AuthRepository {
       .run(counter, deviceType, backedUp ? 1 : 0, at, id);
   }
 
-  deletePasskey(userId: number, id: string): boolean {
-    return (
-      this.sqlite.prepare("DELETE FROM passkeys WHERE user_id = ? AND id = ?").run(userId, id)
-        .changes > 0
-    );
+  deletePasskey(userId: number, id: string): "deleted" | "missing" | "last-sign-in-method" {
+    return this.sqlite.transaction(() => {
+      const passkey = this.sqlite
+        .prepare("SELECT 1 FROM passkeys WHERE user_id = ? AND id = ?")
+        .get(userId, id);
+      if (!passkey) return "missing" as const;
+      const otherSignInMethods = this.sqlite
+        .prepare(
+          `SELECT (SELECT has_password FROM users WHERE id = ?)
+                + (SELECT COUNT(*) FROM passkeys WHERE user_id = ? AND id <> ?)`,
+        )
+        .pluck()
+        .get(userId, userId, id) as number;
+      if (otherSignInMethods === 0) return "last-sign-in-method" as const;
+      this.sqlite.prepare("DELETE FROM passkeys WHERE user_id = ? AND id = ?").run(userId, id);
+      return "deleted" as const;
+    })();
   }
 
   userWithPasskeys(userId: number): StoredUser | null {

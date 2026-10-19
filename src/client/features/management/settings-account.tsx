@@ -292,15 +292,17 @@ export function AccountSettingsSection({
                     >
                       <Pencil aria-hidden="true" size={15} />
                     </button>
-                    <button
-                      className="icon-button danger-action"
-                      type="button"
-                      aria-label={`Remove ${passkey.name}`}
-                      disabled={passkeyBusy || renamingPasskey}
-                      onClick={() => void removePasskey(passkey.id)}
-                    >
-                      <Trash2 aria-hidden="true" size={15} />
-                    </button>
+                    {hasPassword || passkeys.length > 1 ? (
+                      <button
+                        className="icon-button danger-action"
+                        type="button"
+                        aria-label={`Remove ${passkey.name}`}
+                        disabled={passkeyBusy || renamingPasskey}
+                        onClick={() => void removePasskey(passkey.id)}
+                      >
+                        <Trash2 aria-hidden="true" size={15} />
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </li>
@@ -355,7 +357,7 @@ export function AccountSettingsSection({
             ) : null}
             {hasPassword ? "Change password" : "Add password"}
           </button>
-          {hasPassword ? (
+          {hasPassword && passkeys.length > 0 ? (
             <button
               className="danger-button"
               type="button"

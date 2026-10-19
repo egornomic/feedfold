@@ -136,17 +136,8 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
         return reply.code(403).send({ error: "This request is not allowed." });
       }
     }
-    if (
-      path === "/api/auth/config" ||
-      path === "/api/auth/login" ||
-      path === "/api/auth/register" ||
-      path === "/api/auth/register/passkey/options" ||
-      path === "/api/auth/register/passkey" ||
-      path === "/api/auth/session" ||
-      path === "/api/auth/passkey/options" ||
-      path === "/api/auth/passkey"
-    )
-      return;
+    const access = request.routeOptions.config.access ?? "account";
+    if (access === "public") return;
     const user = services.authService.userForToken(sessionToken(request.headers.cookie));
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
     const browserAccount = request.headers["x-feedfold-account"];
@@ -159,15 +150,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
       ai.deleteDeviceKeys(user.id, browserDeviceId(request));
     }
     requestUsers.set(request, user);
-    const sensitive =
-      (request.method === "POST" &&
-        (path === "/api/auth/passkeys/options" || path === "/api/auth/passkeys")) ||
-      (request.method === "DELETE" && path.startsWith("/api/auth/passkeys/")) ||
-      (request.method === "DELETE" && path === "/api/auth/account") ||
-      (["PUT", "DELETE"].includes(request.method) && path === "/api/auth/password") ||
-      (["PUT", "DELETE"].includes(request.method) &&
-        /^\/api\/ai\/providers\/[^/]+\/key$/.test(path));
-    if (sensitive) {
+    if (access === "recent-auth") {
       const recent = services.authService.beginSensitiveOperation(
         sessionToken(request.headers.cookie),
       );

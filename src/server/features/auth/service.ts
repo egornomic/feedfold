@@ -22,7 +22,7 @@ import {
   type SessionUser,
 } from "../../../shared/types.js";
 import { accountActivityCutoff, accountActivityTouchBefore } from "../../account-activity.js";
-import { OperationForbiddenError } from "../../errors.js";
+import { ApplicationApiError, OperationForbiddenError } from "../../errors.js";
 import type {
   AuthRepository,
   StoredAuthChallenge,
@@ -111,6 +111,14 @@ function tokenHash(token: string): string {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function lastSignInMethodError(): ApplicationApiError {
+  return new ApplicationApiError(
+    409,
+    "Add another passkey or a password first. This is the only way to sign in to your account.",
+    "LAST_SIGN_IN_METHOD",
+  );
 }
 
 function passkeySummary(passkey: StoredPasskey): PasskeySummary {
@@ -586,11 +594,12 @@ export class AuthService {
   }
 
   async removePassword(userId: number): Promise<void> {
-    this.repository.removePassword(
+    const removed = this.repository.removePassword(
       userId,
       await hashPassword(randomBytes(32).toString("base64url")),
       now(),
     );
+    if (!removed) throw lastSignInMethodError();
   }
 
   deleteAccount(userId: number): boolean {
@@ -719,7 +728,9 @@ export class AuthService {
   }
 
   deletePasskey(userId: number, id: string): boolean {
-    return this.repository.deletePasskey(userId, id);
+    const result = this.repository.deletePasskey(userId, id);
+    if (result === "last-sign-in-method") throw lastSignInMethodError();
+    return result === "deleted";
   }
 
   renamePasskey(userId: number, id: string, name: string): PasskeySummary | null {
