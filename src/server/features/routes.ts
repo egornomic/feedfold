@@ -14,3 +14,18 @@ export const idParams = z.object({ id: z.coerce.number().pipe(resourceId) });
 export function missing(reply: FastifyReply, resource: string): FastifyReply {
   return reply.code(404).send({ error: `${resource} was not found.` });
 }
+
+/**
+ * Who may call an API route. Routes are account-only unless they declare otherwise:
+ * "public" skips sign-in, and "recent-auth" also requires a recent sign-in.
+ */
+export type RouteAccess = "public" | "account" | "recent-auth";
+
+declare module "fastify" {
+  interface FastifyContextConfig {
+    access?: RouteAccess;
+  }
+}
+
+export const publicRoute = { config: { access: "public" } } as const;
+export const recentAuthRoute = { config: { access: "recent-auth" } } as const;

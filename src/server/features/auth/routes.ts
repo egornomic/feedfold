@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authInputs } from "../../../shared/api/auth-inputs.js";
 import { OperationForbiddenError } from "../../errors.js";
 import { QuotaExceededError } from "../../quota.js";
+import { publicRoute, recentAuthRoute } from "../routes.js";
 import { type AuthService, type LoginSession, sessionToken } from "./service.js";
 
 const {
@@ -92,13 +93,13 @@ export async function authRoutes(
     beforeDeleteAccount?: (userId: number) => Promise<void>;
   },
 ): Promise<void> {
-  app.get("/api/auth/config", async (request) => ({
+  app.get("/api/auth/config", publicRoute, async (request) => ({
     registrationAvailable: authService.registrationAvailable(),
     registrationMode: authService.registrationMode,
     passkeysAvailable: passkeysAvailable(publicOrigin(request, configuredOrigin)),
   }));
 
-  app.post("/api/auth/login", async (request, reply) => {
+  app.post("/api/auth/login", publicRoute, async (request, reply) => {
     const body = loginCredentials.parse(request.body);
     const rateLimited = limited(reply, authService.consumeLoginAttempt(request.ip, body.username));
     if (rateLimited) return rateLimited;
@@ -108,7 +109,7 @@ export async function authRoutes(
     return sendSession(reply, request, authService, session, configuredOrigin);
   });
 
-  app.post("/api/auth/register", async (request, reply) => {
+  app.post("/api/auth/register", publicRoute, async (request, reply) => {
     const rateLimited = limited(reply, authService.consumeRegistrationAttempt(request.ip));
     if (rateLimited) return rateLimited;
     const body = registrationCredentials.parse(request.body);
@@ -123,7 +124,7 @@ export async function authRoutes(
     return sendSession(reply.code(201), request, authService, session, configuredOrigin);
   });
 
-  app.post("/api/auth/register/passkey/options", async (request, reply) => {
+  app.post("/api/auth/register/passkey/options", publicRoute, async (request, reply) => {
     const rateLimited = limited(reply, authService.consumeRegistrationAttempt(request.ip));
     if (rateLimited) return rateLimited;
     const body = passkeySignup.parse(request.body);
@@ -141,7 +142,7 @@ export async function authRoutes(
     return result;
   });
 
-  app.post("/api/auth/register/passkey", async (request, reply) => {
+  app.post("/api/auth/register/passkey", publicRoute, async (request, reply) => {
     const body = passkeySignupCeremony.parse(request.body);
     try {
       const session = await authService.completePasskeySignup(
@@ -188,7 +189,7 @@ export async function authRoutes(
     return reply.code(204).send();
   });
 
-  app.get("/api/auth/session", async (request, reply) => {
+  app.get("/api/auth/session", publicRoute, async (request, reply) => {
     const user = authenticatedUser(request, authService);
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
     return { user: authService.publicUser(user) };
@@ -251,7 +252,7 @@ export async function authRoutes(
     }
   });
 
-  app.put("/api/auth/password", async (request, reply) => {
+  app.put("/api/auth/password", recentAuthRoute, async (request, reply) => {
     const user = authenticatedUser(request, authService);
     const token = sessionToken(request.headers.cookie);
     if (!user || !token) return reply.code(401).send({ error: "Sign in to continue." });
@@ -260,14 +261,14 @@ export async function authRoutes(
     return reply.code(204).send();
   });
 
-  app.delete("/api/auth/password", async (request, reply) => {
+  app.delete("/api/auth/password", recentAuthRoute, async (request, reply) => {
     const user = authenticatedUser(request, authService);
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
     await authService.removePassword(user.id);
     return reply.code(204).send();
   });
 
-  app.delete("/api/auth/account", async (request, reply) => {
+  app.delete("/api/auth/account", recentAuthRoute, async (request, reply) => {
     const user = authenticatedUser(request, authService);
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
     await beforeDeleteAccount?.(user.id);
@@ -288,7 +289,7 @@ export async function authRoutes(
     return { passkeys: authService.passkeys(user.id), hasPassword: user.hasPassword };
   });
 
-  app.post("/api/auth/passkeys/options", async (request, reply) => {
+  app.post("/api/auth/passkeys/options", recentAuthRoute, async (request, reply) => {
     const user = authenticatedUser(request, authService);
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
     const context = webAuthnContext(request, configuredOrigin);
@@ -299,7 +300,7 @@ export async function authRoutes(
     return result;
   });
 
-  app.post("/api/auth/passkeys", async (request, reply) => {
+  app.post("/api/auth/passkeys", recentAuthRoute, async (request, reply) => {
     const user = authenticatedUser(request, authService);
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
     const body = passkeyCeremony.parse(request.body);
@@ -327,7 +328,7 @@ export async function authRoutes(
       : reply.code(404).send({ error: "That passkey no longer exists." });
   });
 
-  app.delete("/api/auth/passkeys/:id", async (request, reply) => {
+  app.delete("/api/auth/passkeys/:id", recentAuthRoute, async (request, reply) => {
     const user = authenticatedUser(request, authService);
     if (!user) return reply.code(401).send({ error: "Sign in to continue." });
     const id = passkeyId.parse((request.params as { id?: unknown }).id);
@@ -336,7 +337,7 @@ export async function authRoutes(
     return reply.code(204).send();
   });
 
-  app.post("/api/auth/passkey/options", async (request, reply) => {
+  app.post("/api/auth/passkey/options", publicRoute, async (request, reply) => {
     const rateLimited = limited(reply, authService.consumePasskeyLoginAttempt(request.ip));
     if (rateLimited) return rateLimited;
     const context = webAuthnContext(request, configuredOrigin);
@@ -345,7 +346,7 @@ export async function authRoutes(
     return authService.passkeyAuthenticationOptions(context);
   });
 
-  app.post("/api/auth/passkey", async (request, reply) => {
+  app.post("/api/auth/passkey", publicRoute, async (request, reply) => {
     const body = passkeyCeremony.parse(request.body);
     const rateLimited = limited(reply, authService.consumePasskeyAccountAttempt(body.response.id));
     if (rateLimited) return rateLimited;

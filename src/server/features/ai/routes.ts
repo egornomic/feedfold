@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { inputs } from "../../../shared/api/inputs.js";
-import { browserDeviceId, type UserId } from "../routes.js";
+import { browserDeviceId, recentAuthRoute, type UserId } from "../routes.js";
 import type { AiService } from "./service.js";
 
 const aiFeatureParams = z.object({ feature: inputs.aiFeature });
@@ -30,7 +30,7 @@ export async function aiRoutes(
     };
   });
 
-  app.put("/api/ai/providers/:provider/key", async (request) => {
+  app.put("/api/ai/providers/:provider/key", recentAuthRoute, async (request) => {
     const { provider } = aiProviderParams.parse(request.params);
     const { encryptedApiKey } = inputs.saveBrowserAiKey.parse(request.body);
     return ai.setBrowserKey(
@@ -41,7 +41,7 @@ export async function aiRoutes(
     );
   });
 
-  app.delete("/api/ai/providers/:provider/key", async (request) => {
+  app.delete("/api/ai/providers/:provider/key", recentAuthRoute, async (request) => {
     const { provider } = aiProviderParams.parse(request.params);
     return ai.deleteApiKey(userId(request), provider, browserDeviceId(request, true));
   });
