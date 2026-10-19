@@ -329,6 +329,31 @@ describe("hosted account authentication", () => {
     expect(changed.statusCode).toBe(204);
   });
 
+  it("keeps the password when it is the account's only sign-in method", async () => {
+    const { app } = await authApp();
+    const registration = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { username: "reader", password: "reader-password" },
+    });
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/api/auth/password",
+      headers: { cookie: cookieFrom(registration.headers["set-cookie"]) },
+    });
+    expect(removed.statusCode).toBe(409);
+    expect(removed.json()).toMatchObject({ code: "LAST_SIGN_IN_METHOD" });
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "reader", password: "reader-password" },
+    });
+    expect(login.statusCode).toBe(200);
+    expect(login.json()).toMatchObject({ user: { hasPassword: true } });
+  });
+
   it("requires a session for encoded API URLs", async () => {
     const { app } = await authApp();
     for (const url of ["/api/bootstrap", "/%61pi/bootstrap", "/api/%62ootstrap"]) {
@@ -336,35 +361,6 @@ describe("hosted account authentication", () => {
       expect(response.statusCode, url).toBe(401);
       expect(response.headers["cache-control"]).toBe("no-store");
     }
-  });
-
-  it("allows removal of the final login method after valid recent authentication", async () => {
-    const { app } = await authApp();
-    const registration = await app.inject({
-      method: "POST",
-      url: "/api/auth/register",
-      payload: { username: "reader", password: "reader-password" },
-    });
-    const cookie = cookieFrom(registration.headers["set-cookie"]);
-
-    const removed = await app.inject({
-      method: "DELETE",
-      url: "/api/auth/password",
-      headers: { cookie },
-    });
-    expect(removed.statusCode).toBe(204);
-    expect(
-      (await app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie } })).json(),
-    ).toMatchObject({ user: { username: "reader", hasPassword: false } });
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/api/auth/login",
-          payload: { username: "reader", password: "reader-password" },
-        })
-      ).statusCode,
-    ).toBe(401);
   });
 
   it("allows first-run setup, stores an Argon2id hash, and closes account creation", async () => {

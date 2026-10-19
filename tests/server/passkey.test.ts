@@ -368,11 +368,11 @@ describe("passkey authentication", () => {
         resumedStatus: 200,
         addedStatus: 201,
         lastUsedAt: expect.any(String),
-        removalStatuses: [204, 204],
-        remainingPasskeys: 0,
+        removalStatuses: [204, 409],
+        remainingPasskeys: 1,
         sessionStatus: 200,
       });
-      expect(database.connection.prepare("SELECT COUNT(*) FROM passkeys").pluck().get()).toBe(0);
+      expect(database.connection.prepare("SELECT COUNT(*) FROM passkeys").pluck().get()).toBe(1);
     },
   );
 });
