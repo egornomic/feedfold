@@ -360,7 +360,7 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
       database.connection
         .prepare("UPDATE articles SET feed_content_html = ? WHERE title = ?")
         .run(
-          `<p>Prepared body ${index}.</p><img src="${origin}neighbor-image/${index}.svg">`,
+          `<p>Prepared body ${index}.</p><img src="${origin}neighbor-image/${index}.svg"><p>${"Long body. ".repeat(400)}</p><img loading="lazy" src="${origin}neighbor-image/deferred-${index}.svg">`,
           title,
         );
     const page = await open("magazine");
@@ -389,6 +389,8 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
         .toEqual(
           expect.arrayContaining([2, 3, 4, 5].map((index) => `/neighbor-image/${index}.svg`)),
         );
+      // Images an unseen article defers until scrolled to are left for the reader to reach.
+      expect([...requestedImages].filter((path) => /deferred-[245]/.test(path))).toEqual([]);
       // Article content requested from here on never arrives, so only prepared articles can show.
       await page.route(/\/api\/articles\/\d+$/, () => {});
       await page.keyboard.press("k");
