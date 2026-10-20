@@ -197,7 +197,7 @@ describe("reader query coordination", () => {
           counts: { ...data.counts, unread: 0 },
           feeds: data.feeds.map((feed) => ({ ...feed, unreadCount: 0 })),
         }));
-        mutation = fixture.current.data.runCounterMutation(async () => {
+        mutation = fixture.current.data.runCounterMutation([article.id], async () => {
           await gate;
           await fixture.application.invoke({
             operation: "updateArticleState",
@@ -235,7 +235,7 @@ describe("reader query coordination", () => {
       await fixture.mount();
       await waitFor("initial snapshot", () => !!fixture.current.bootstrap.data);
       await act(async () => {
-        mutation = fixture.current.data.runCounterMutation(() => gate);
+        mutation = fixture.current.data.runCounterMutation([], () => gate);
       });
       await waitFor(
         "pending read",

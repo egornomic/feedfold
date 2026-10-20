@@ -1,4 +1,5 @@
 import {
+  type Query,
   type QueryKey,
   useIsMutating,
   useMutation,
@@ -115,20 +116,26 @@ export function useReaderData() {
         );
       },
       runCounterMutation: async <T>(
+        articleIds: readonly number[],
         request: () => Promise<T>,
         optimistic?: () => () => void,
       ): Promise<T> => {
+        const changed = new Set(articleIds);
+        // Another article's content carries no state this change replaces, so its preload continues.
+        const replaced = (query: Query) =>
+          query.queryKey[1] !== "article" || changed.has(query.queryKey[2] as number);
         const interrupted = client
           .getQueryCache()
           .findAll({
             queryKey: readerKeys.all,
             fetchStatus: "fetching",
             predicate: (query) =>
-              query.queryKey[1] === "articles" || query.queryKey[1] === "article",
+              (query.queryKey[1] === "articles" || query.queryKey[1] === "article") &&
+              replaced(query),
           })
           .map((query) => query.queryKey);
         // Cancel stale deliveries before applying the immediate article and count changes.
-        const cancelled = client.cancelQueries({ queryKey: readerKeys.all });
+        const cancelled = client.cancelQueries({ queryKey: readerKeys.all, predicate: replaced });
         const queued = client.isMutating({ mutationKey: counterMutationKey }) > 0;
         let rollback = queued ? undefined : optimistic?.();
         return (await counterMutation({

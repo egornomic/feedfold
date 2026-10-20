@@ -1,5 +1,6 @@
 import { isCancelledError, useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { telegramPostIdentity } from "../../../shared/telegram";
 import type {
   AiSettings,
   AppSettings,
@@ -7,8 +8,14 @@ import type {
   BootstrapData,
   ReadingMode,
 } from "../../../shared/types";
+import { xVideoPostIds } from "../../../shared/x";
 import { ApiError, api, errorMessage } from "../../api/api";
-import { articleQuery, counterMutationKey } from "../../api/query";
+import {
+  articleQuery,
+  counterMutationKey,
+  telegramArticleMediaQuery,
+  xArticleMediaQuery,
+} from "../../api/query";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import type { AppRouteController } from "../../app/route";
 import {
@@ -18,6 +25,7 @@ import {
   EMPTY_ARTICLE_TRANSLATION_STATE,
 } from "./article/article-ai-state";
 import { articleTranslationSourceKind, fullContentToggleAction } from "./article/article-content";
+import { warmArticleImages } from "./article/article-image-url";
 import type { ArticleQueueController } from "./article-queue";
 import type { ReaderData } from "./reader-data";
 import { articleSettingsInvalidation, invalidateArticleSummaries } from "./reader-state";
@@ -86,7 +94,6 @@ export function useArticleEnrichment({
 
   const loadFullArticle = useCallback(
     async (article: Article, retry = false) => {
-      if (changingCounters) return;
       if (queue.fullContentLoadedIds.current.has(article.id)) return;
       if (!retry && articleContentErrors.has(article.id)) return;
 
@@ -100,7 +107,14 @@ export function useArticleEnrichment({
       }
       try {
         const fullArticle = await client.fetchQuery(articleQuery(article.id));
-        if (!fullContentVisibleIdsRef.current.has(article.id)) queue.mergeArticle(fullArticle);
+        if (fullContentVisibleIdsRef.current.has(article.id)) return;
+        warmArticleImages(fullArticle.feedContentHtml);
+        // Media inserted after the text appears pushes it down, so fetch its details with the text.
+        for (const postId of xVideoPostIds(fullArticle.url, fullArticle.feedContentHtml))
+          void client.prefetchQuery(xArticleMediaQuery(fullArticle.id, postId));
+        if (telegramPostIdentity(fullArticle.url))
+          void client.prefetchQuery(telegramArticleMediaQuery(fullArticle.id));
+        queue.mergeArticle(fullArticle);
       } catch (caught) {
         if (isCancelledError(caught)) return;
         setArticleContentErrors((current) =>
@@ -108,13 +122,14 @@ export function useArticleEnrichment({
         );
       }
     },
-    [articleContentErrors, changingCounters, client, queue],
+    [articleContentErrors, client, queue],
   );
 
   useEffect(() => {
     if (readingMode !== "magazine" || queue.loading) return;
-    const start = Math.max(0, queue.activeArticleIndex);
-    for (const article of queue.articles.slice(start, start + 2)) {
+    // Keep the articles one step back and two steps ahead ready, so rapid navigation never waits.
+    const active = Math.max(0, queue.activeArticleIndex);
+    for (const article of queue.articles.slice(Math.max(0, active - 1), active + 3)) {
       void loadFullArticle(article);
     }
   }, [loadFullArticle, queue, readingMode]);

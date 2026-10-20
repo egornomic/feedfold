@@ -4,7 +4,8 @@ import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Article } from "../../../../shared/types";
 import { xPostId } from "../../../../shared/x";
-import { api, errorMessage } from "../../../api/api";
+import { errorMessage } from "../../../api/api";
+import { telegramArticleMediaQuery, xArticleMediaQuery } from "../../../api/query";
 import { articleImageUrl } from "./article-image-url";
 import { ImageLightbox, type ImageLightboxItem, type ImageLightboxState } from "./image-lightbox";
 
@@ -17,10 +18,7 @@ export function XPostVideo({
   postId: string;
   targetId: string | null;
 }) {
-  const mediaQuery = useQuery({
-    queryKey: ["article-media", article.id, "x", postId],
-    queryFn: ({ signal }) => api.xArticleMedia(article.id, postId, signal),
-  });
+  const mediaQuery = useQuery(xArticleMediaQuery(article.id, postId));
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
     setPortalTarget(targetId && article.feedContentHtml ? document.getElementById(targetId) : null);
@@ -69,10 +67,7 @@ export function XPostVideo({
 }
 
 export function TelegramPostMedia({ article }: { article: Article }) {
-  const mediaQuery = useQuery({
-    queryKey: ["article-media", article.id, "telegram"],
-    queryFn: ({ signal }) => api.telegramArticleMedia(article.id, signal),
-  });
+  const mediaQuery = useQuery(telegramArticleMediaQuery(article.id));
   const [lightbox, setLightbox] = useState<ImageLightboxState | null>(null);
   if (mediaQuery.isPending) return null;
   if (mediaQuery.isError) {

@@ -353,4 +353,54 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
       await page.close();
     }
   }, 30_000);
+
+  it("prepares neighboring articles and their images before the reader moves to them", async () => {
+    const sample = seedReaderBacklog(database, "Prepared neighbors", 6, origin);
+    for (const [index, { title }] of sample.articles.entries())
+      database.connection
+        .prepare("UPDATE articles SET feed_content_html = ? WHERE title = ?")
+        .run(
+          `<p>Prepared body ${index}.</p><img src="${origin}neighbor-image/${index}.svg"><p>${"Long body. ".repeat(400)}</p><img loading="lazy" src="${origin}neighbor-image/deferred-${index}.svg">`,
+          title,
+        );
+    const page = await open("magazine");
+    const requestedImages = new Set<string>();
+    await page.route(/\/neighbor-image\//, async (route) => {
+      requestedImages.add(new URL(route.request().url()).pathname);
+      await route.fulfill({
+        contentType: "image/svg+xml",
+        body: "<svg xmlns='http://www.w3.org/2000/svg'/>",
+      });
+    });
+    const shown = async (index: number) => {
+      const layer = page.locator(".article-swipe-layer.is-active");
+      await expect
+        .poll(() => layer.locator(".article-content").textContent())
+        .toContain(`Prepared body ${index}.`);
+    };
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/all`);
+      await page
+        .getByRole("button", { name: `Open ${sample.feed.title} 0003`, exact: true })
+        .click();
+      await shown(3);
+      await expect
+        .poll(() => [...requestedImages])
+        .toEqual(
+          expect.arrayContaining([2, 3, 4, 5].map((index) => `/neighbor-image/${index}.svg`)),
+        );
+      // Images an unseen article defers until scrolled to are left for the reader to reach.
+      expect([...requestedImages].filter((path) => /deferred-[245]/.test(path))).toEqual([]);
+      // Article content requested from here on never arrives, so only prepared articles can show.
+      await page.route(/\/api\/articles\/\d+$/, () => {});
+      await page.keyboard.press("k");
+      await shown(2);
+      for (const index of [3, 4, 5]) {
+        await page.keyboard.press("j");
+        await shown(index);
+      }
+    } finally {
+      await page.close();
+    }
+  }, 20_000);
 });
