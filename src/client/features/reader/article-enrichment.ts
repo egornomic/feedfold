@@ -18,6 +18,7 @@ import {
   EMPTY_ARTICLE_TRANSLATION_STATE,
 } from "./article/article-ai-state";
 import { articleTranslationSourceKind, fullContentToggleAction } from "./article/article-content";
+import { warmArticleImages } from "./article/article-image-url";
 import type { ArticleQueueController } from "./article-queue";
 import type { ReaderData } from "./reader-data";
 import { articleSettingsInvalidation, invalidateArticleSummaries } from "./reader-state";
@@ -86,7 +87,6 @@ export function useArticleEnrichment({
 
   const loadFullArticle = useCallback(
     async (article: Article, retry = false) => {
-      if (changingCounters) return;
       if (queue.fullContentLoadedIds.current.has(article.id)) return;
       if (!retry && articleContentErrors.has(article.id)) return;
 
@@ -100,7 +100,9 @@ export function useArticleEnrichment({
       }
       try {
         const fullArticle = await client.fetchQuery(articleQuery(article.id));
-        if (!fullContentVisibleIdsRef.current.has(article.id)) queue.mergeArticle(fullArticle);
+        if (fullContentVisibleIdsRef.current.has(article.id)) return;
+        warmArticleImages(fullArticle.feedContentHtml);
+        queue.mergeArticle(fullArticle);
       } catch (caught) {
         if (isCancelledError(caught)) return;
         setArticleContentErrors((current) =>
@@ -108,13 +110,14 @@ export function useArticleEnrichment({
         );
       }
     },
-    [articleContentErrors, changingCounters, client, queue],
+    [articleContentErrors, client, queue],
   );
 
   useEffect(() => {
     if (readingMode !== "magazine" || queue.loading) return;
-    const start = Math.max(0, queue.activeArticleIndex);
-    for (const article of queue.articles.slice(start, start + 2)) {
+    // Keep the articles one step back and two steps ahead ready, so rapid navigation never waits.
+    const active = Math.max(0, queue.activeArticleIndex);
+    for (const article of queue.articles.slice(Math.max(0, active - 1), active + 3)) {
       void loadFullArticle(article);
     }
   }, [loadFullArticle, queue, readingMode]);

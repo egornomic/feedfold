@@ -51,6 +51,7 @@ export function useArticleActions({
       }
       try {
         await dataResource.runCounterMutation(
+          ids,
           () => request(ids),
           () => {
             const rollback = updateReaderArticleStates(
