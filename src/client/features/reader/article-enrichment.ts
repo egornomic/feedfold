@@ -1,5 +1,6 @@
 import { isCancelledError, useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { telegramPostIdentity } from "../../../shared/telegram";
 import type {
   AiSettings,
   AppSettings,
@@ -7,8 +8,14 @@ import type {
   BootstrapData,
   ReadingMode,
 } from "../../../shared/types";
+import { xVideoPostIds } from "../../../shared/x";
 import { ApiError, api, errorMessage } from "../../api/api";
-import { articleQuery, counterMutationKey } from "../../api/query";
+import {
+  articleQuery,
+  counterMutationKey,
+  telegramArticleMediaQuery,
+  xArticleMediaQuery,
+} from "../../api/query";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import type { AppRouteController } from "../../app/route";
 import {
@@ -102,6 +109,11 @@ export function useArticleEnrichment({
         const fullArticle = await client.fetchQuery(articleQuery(article.id));
         if (fullContentVisibleIdsRef.current.has(article.id)) return;
         warmArticleImages(fullArticle.feedContentHtml);
+        // Media inserted after the text appears pushes it down, so fetch its details with the text.
+        for (const postId of xVideoPostIds(fullArticle.url, fullArticle.feedContentHtml))
+          void client.prefetchQuery(xArticleMediaQuery(fullArticle.id, postId));
+        if (telegramPostIdentity(fullArticle.url))
+          void client.prefetchQuery(telegramArticleMediaQuery(fullArticle.id));
         queue.mergeArticle(fullArticle);
       } catch (caught) {
         if (isCancelledError(caught)) return;

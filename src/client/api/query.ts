@@ -50,6 +50,16 @@ export const articleQuery = (id: number) =>
     queryKey: readerKeys.article(id),
     queryFn: ({ signal }) => api.article(id, signal),
   });
+export const xArticleMediaQuery = (articleId: number, postId: string) =>
+  queryOptions({
+    queryKey: ["article-media", articleId, "x", postId],
+    queryFn: ({ signal }) => api.xArticleMedia(articleId, postId, signal),
+  });
+export const telegramArticleMediaQuery = (articleId: number) =>
+  queryOptions({
+    queryKey: ["article-media", articleId, "telegram"],
+    queryFn: ({ signal }) => api.telegramArticleMedia(articleId, signal),
+  });
 export const articlePagesQuery = (query: ArticleQuery) =>
   infiniteQueryOptions({
     queryKey: [...readerKeys.lists, query],

@@ -22,6 +22,11 @@ if (import.meta.env.PROD && !isDesktopApp() && "serviceWorker" in navigator) {
     .catch((error) => console.error("Could not register feedfold updates.", error));
 }
 
+// Each script and style downloads on first use; fetch the ones articles commonly need up front,
+// so their text never appears in a fallback font and then re-wraps.
+for (const style of ["normal", "italic"])
+  void document.fonts.load(`${style} 1em "IBM Plex Sans Variable"`, "aąЖ");
+
 const root = document.getElementById("root");
 if (!root) throw new Error("The feedfold root element is missing.");
 const Application = import.meta.env.DEV

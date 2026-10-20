@@ -248,4 +248,95 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
       await page.close();
     }
   });
+
+  it("shows post media and article text in their final form on the first frame", async () => {
+    const sample = seedReaderBacklog(database, "Prepared media", 3, origin);
+    const posts = [
+      ["https://example.test/plain", "<p>Plain opening post.</p>"],
+      [
+        "https://x.com/reader/status/1900000000000000001",
+        '<p>Post text.</p><a href="https://x.com/reader/status/1900000000000000001#m"><br>Video<br><img src="https://pbs.twimg.com/amplify_video_thumb/fixture.jpg"></a>',
+      ],
+      [
+        "https://t.me/readerchannel/42",
+        "<p>Обычный текст канала, <em>выделенный курсивом</em>.</p>",
+      ],
+    ];
+    for (const [index, [url, html]] of posts.entries())
+      database.connection
+        .prepare("UPDATE articles SET url = ?, feed_content_html = ? WHERE title = ?")
+        .run(url, html, sample.articles[index]?.title);
+    const page = await open("magazine");
+    const requestedMedia = new Set<string>();
+    let mediaAvailable = true;
+    await page.route(/\/api\/articles\/\d+\/(x|telegram)-media/, async (route) => {
+      const kind = route.request().url().includes("/x-media/") ? "x" : "telegram";
+      requestedMedia.add(kind);
+      if (!mediaAvailable) return;
+      await route.fulfill({
+        json:
+          kind === "x"
+            ? {
+                sourceUrl: `${origin}test-media/article-video.mp4`,
+                posterUrl: null,
+                aspectRatio: 1.5,
+              }
+            : {
+                items: [
+                  {
+                    kind: "image",
+                    sourceUrl: `${origin}delayed-image.svg`,
+                    posterUrl: null,
+                    aspectRatio: 1.5,
+                  },
+                ],
+              },
+      });
+    });
+    // Font files take as long as on a hosted server.
+    await page.route(/\.woff2(\?|$)/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await route.continue();
+    });
+    const firstFrame = (index: number) =>
+      page.evaluate(
+        (title) =>
+          new Promise<{ xVideo: boolean; telegramMedia: boolean; finalFont: boolean }>(
+            (resolve) => {
+              const check = () => {
+                const layer = document.querySelector(".article-swipe-layer.is-active");
+                if (!layer?.querySelector("h2")?.textContent?.startsWith(title)) {
+                  requestAnimationFrame(check);
+                  return;
+                }
+                resolve({
+                  xVideo: Boolean(layer.querySelector(".x-video-player")),
+                  telegramMedia: Boolean(layer.querySelector(".telegram-media-gallery")),
+                  finalFont: ["normal", "italic"].every((style) =>
+                    document.fonts.check(`${style} 1em "IBM Plex Sans Variable"`, "Ж"),
+                  ),
+                });
+              };
+              check();
+            },
+          ),
+        sample.articles[index]?.title ?? "",
+      );
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/all`);
+      await page.evaluate(() => document.fonts.ready);
+      await page
+        .getByRole("button", { name: `Open ${sample.feed.title} 0000`, exact: true })
+        .click();
+      await expect.poll(() => [...requestedMedia].sort()).toEqual(["telegram", "x"]);
+      // Media requested from here on never arrives, so only prepared media can show.
+      mediaAvailable = false;
+      await page.keyboard.press("j");
+      expect(await firstFrame(1)).toMatchObject({ xVideo: true });
+      await page.keyboard.press("j");
+      expect(await firstFrame(2)).toEqual({ xVideo: false, telegramMedia: true, finalFont: true });
+    } finally {
+      await page.close();
+    }
+  }, 20_000);
 });
