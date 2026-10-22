@@ -13,6 +13,7 @@ import {
   type ContextProp,
   type ItemProps,
   type ListProps,
+  type ListRange,
   Virtuoso,
   type VirtuosoHandle,
 } from "react-virtuoso";
@@ -123,6 +124,7 @@ export function VirtualArticles({
   loadingMore,
   loadMoreError,
   onLoadMore,
+  onRangeChanged,
   children,
 }: {
   articles: Article[];
@@ -136,6 +138,7 @@ export function VirtualArticles({
   loadingMore: boolean;
   loadMoreError: boolean;
   onLoadMore: () => void;
+  onRangeChanged?: (range: ListRange) => void;
   children: (article: Article) => ReactNode;
 }) {
   const virtuoso = useRef<VirtuosoHandle>(null);
@@ -405,6 +408,7 @@ export function VirtualArticles({
         [],
       )}
       increaseViewportBy={{ top: 500, bottom: 700 }}
+      {...(onRangeChanged ? { rangeChanged: onRangeChanged } : {})}
       endReached={() => {
         if (!loadMoreError) loadMore();
       }}

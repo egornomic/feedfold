@@ -30,5 +30,11 @@ export function thumbnailUrl(value: string): string {
     );
   }
 
+  // YouTube serves the same images from i1–i4 shards; one host shares one connection.
+  if (/^i\d\.ytimg\.com$/.test(url.hostname)) {
+    url.hostname = "i.ytimg.com";
+    return url.toString();
+  }
+
   return value;
 }
