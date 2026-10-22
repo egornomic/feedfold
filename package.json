@@ -53,7 +53,7 @@
     "jsdom": "29.1.1",
     "parse-srcset": "1.0.2",
     "playwright": "1.62.0",
-    "sanitize-html": "2.17.7",
+    "sanitize-html": "2.18.1",
     "undici": "8.10.2",
     "zod": "4.5.4"
   },
