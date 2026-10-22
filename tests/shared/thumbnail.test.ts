@@ -28,13 +28,19 @@ describe("thumbnail downloads", () => {
     expect(thumbnailUrl(original)).toBe(expected);
   });
 
+  it("loads every YouTube thumbnail from the same host", () => {
+    expect(thumbnailUrl("https://i3.ytimg.com/vi/short123/hqdefault.jpg")).toBe(
+      "https://i.ytimg.com/vi/short123/hqdefault.jpg",
+    );
+  });
+
   it("leaves ordinary images, application resources, and already small images intact", () => {
     for (const original of [
       "https://example.com/max/2000/photo.jpg",
       "/api/articles/1/telegram-media-preview",
       "https://miro.medium.com/max/320/photo.png",
       "https://ourworldindata.org/cdn-cgi/imagedelivery/account/photo/w=320",
-      "https://i1.ytimg.com/vi/pi0YVKWkqOM/hqdefault.jpg",
+      "https://i.ytimg.com/vi/pi0YVKWkqOM/hqdefault.jpg",
     ]) {
       expect(thumbnailUrl(original)).toBe(original);
     }

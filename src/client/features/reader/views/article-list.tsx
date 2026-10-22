@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { Article } from "../../../../shared/types";
 import { shouldShowArticleDescription } from "../article/article-content";
 import { articleDate, articleLabel, mediaTypeLabel } from "../article/article-format";
-import { articleThumbnailUrl } from "../article/article-image-url";
+import { articleThumbnailUrl, warmThumbnails } from "../article/article-image-url";
 import { ArticleThumbnailPlaceholder } from "../article/article-thumbnail-placeholder";
 import { LinkifiedText } from "../article/linkified-text";
 import { VirtualArticles } from "./virtual-articles";
@@ -70,6 +70,11 @@ export function ArticleList({
       hasMore={hasMore}
       loadingMore={loadingMore}
       onLoadMore={onLoadMore}
+      onRangeChanged={({ endIndex }) =>
+        warmThumbnails(
+          articles.slice(endIndex + 1, endIndex + 21).map((article) => article.imageUrl),
+        )
+      }
     >
       {(article) => (
         <div

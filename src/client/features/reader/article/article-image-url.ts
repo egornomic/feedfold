@@ -9,6 +9,19 @@ export function articleThumbnailUrl(value: string): string {
   return articleImageUrl(thumbnailUrl(value));
 }
 
+const warmedThumbnails = new Set<string>();
+
+// Start downloading thumbnails of rows not yet drawn, so they appear with their rows.
+export function warmThumbnails(imageUrls: (string | null)[]): void {
+  for (const imageUrl of imageUrls) {
+    if (!imageUrl) continue;
+    const url = articleThumbnailUrl(imageUrl);
+    if (warmedThumbnails.has(url)) continue;
+    warmedThumbnails.add(url);
+    new Image().src = url;
+  }
+}
+
 // Start downloading an article's images before it is shown, so they appear with its text.
 // Images the article defers until scrolled to stay deferred, as they would when shown.
 export function warmArticleImages(html: string | null): void {
