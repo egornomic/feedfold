@@ -47,7 +47,7 @@
     "@simplewebauthn/server": "13.3.2",
     "argon2": "0.45.1",
     "better-sqlite3": "13.0.3",
-    "fastify": "5.12.5",
+    "fastify": "5.12.6",
     "feedsmith": "2.9.6",
     "htmlparser2": "10.1.0",
     "jsdom": "29.1.1",
