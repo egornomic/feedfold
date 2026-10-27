@@ -134,6 +134,20 @@ export function useArticleEnrichment({
     }
   }, [loadFullArticle, queue, readingMode]);
 
+  const mergeExtractedArticle = useCallback(
+    (extracted: Article) => {
+      queue.mergeArticle(extracted);
+      if (extracted.extractionStatus !== "complete") return;
+      // A result made from the feed text no longer describes the full article.
+      setArticleSummaryStates((current) => {
+        const state = current.get(extracted.id);
+        if (!state?.summary || state.summary.sourceKind === "full") return current;
+        return new Map(current).set(extracted.id, { ...state, summary: null });
+      });
+    },
+    [queue.mergeArticle],
+  );
+
   const extractingArticle = queue.activeArticle;
   const extraction = useQuery({
     ...articleQuery(extractingArticle?.id ?? 0),
@@ -147,8 +161,8 @@ export function useArticleEnrichment({
   });
   useEffect(() => {
     if (extraction.data && fullContentVisibleIds.has(extraction.data.id))
-      queue.mergeArticle(extraction.data);
-  }, [extraction.data, fullContentVisibleIds, queue.mergeArticle]);
+      mergeExtractedArticle(extraction.data);
+  }, [extraction.data, fullContentVisibleIds, mergeExtractedArticle]);
 
   useEffect(() => {
     if (route.routedArticleId !== null && queue.activeArticle?.id === route.routedArticleId) {
@@ -193,7 +207,7 @@ export function useArticleEnrichment({
       setFullContentVisibleIds((current) => new Set(current).add(article.id));
       if (action === "show") return;
       try {
-        queue.mergeArticle(await mutateRequest(() => api.loadFullContent(article.id)));
+        mergeExtractedArticle(await mutateRequest(() => api.loadFullContent(article.id)));
       } catch (caught) {
         fullContentVisibleIdsRef.current.delete(article.id);
         setFullContentVisibleIds((current) => {
@@ -205,18 +219,23 @@ export function useArticleEnrichment({
         void loadFullArticle(article);
       }
     },
-    [invalidate, loadFullArticle, mutateRequest, patchArticleTranslationState, queue, showToast],
+    [
+      invalidate,
+      loadFullArticle,
+      mergeExtractedArticle,
+      mutateRequest,
+      patchArticleTranslationState,
+      showToast,
+    ],
   );
 
   const patchArticleSummaryState = useCallback(
-    (articleId: number, change: Partial<ArticleSummaryViewState>) => {
+    (articleId: number, change: Partial<ArticleSummaryViewState>, promptId?: string | null) => {
       setArticleSummaryStates((current) => {
-        const next = new Map(current);
-        next.set(articleId, {
-          ...(current.get(articleId) ?? EMPTY_ARTICLE_SUMMARY_STATE),
-          ...change,
-        });
-        return next;
+        const state = current.get(articleId) ?? EMPTY_ARTICLE_SUMMARY_STATE;
+        // A response for an action the reader has since switched away from must not replace it.
+        if (promptId !== undefined && state.promptId !== promptId) return current;
+        return new Map(current).set(articleId, { ...state, ...change });
       });
     },
     [],
@@ -229,26 +248,30 @@ export function useArticleEnrichment({
       const provider = feature
         ? bootstrap?.aiSettings.providers.find((option) => option.id === feature.provider)
         : null;
+      const previous = articleSummaryStates.get(article.id);
+      const start = {
+        visible: true,
+        error: null,
+        promptId,
+        // Updating keeps the current result readable; another action starts from its own skeleton.
+        summary: previous?.promptId === promptId ? previous.summary : null,
+      };
       if (
         !isYouTubeVideo &&
         (!bootstrap?.aiSettings.credentialStorageAvailable || !feature || !provider?.configured)
       ) {
         patchArticleSummaryState(article.id, {
-          visible: true,
+          ...start,
           loading: false,
-          error: null,
           configurationMissing: true,
-          promptId,
         });
         return;
       }
 
       patchArticleSummaryState(article.id, {
-        visible: true,
+        ...start,
         loading: true,
-        error: null,
         configurationMissing: false,
-        promptId,
       });
       try {
         const summary = await client.fetchQuery({
@@ -271,63 +294,58 @@ export function useArticleEnrichment({
           staleTime: regenerate ? 0 : Infinity,
           retry: false,
         });
-        queue.setArticles((current) =>
-          current.map((item) => (item.id === article.id ? { ...item, aiSummary: summary } : item)),
-        );
-        patchArticleSummaryState(article.id, { loading: false });
+        patchArticleSummaryState(article.id, { loading: false, summary }, promptId);
       } catch (caught) {
         if (isCancelledError(caught)) return;
-        patchArticleSummaryState(article.id, { loading: false, error: errorMessage(caught) });
+        patchArticleSummaryState(
+          article.id,
+          { loading: false, error: errorMessage(caught) },
+          promptId,
+        );
       }
     },
     [
+      articleSummaryStates,
       bootstrap?.aiSettings,
       bootstrap?.settings.customPrompts,
       client,
       mutateRequest,
       patchArticleSummaryState,
-      queue,
     ],
-  );
-
-  const toggleArticleSummary = useCallback(
-    (article: Article) => {
-      const state = articleSummaryStates.get(article.id) ?? EMPTY_ARTICLE_SUMMARY_STATE;
-      if (state.loading) return;
-      if (state.visible && article.aiSummary?.promptId === null) {
-        patchArticleSummaryState(article.id, { visible: false });
-        return;
-      }
-      if (article.aiSummary?.promptId === null) {
-        patchArticleSummaryState(article.id, {
-          visible: true,
-          error: null,
-          configurationMissing: false,
-          promptId: null,
-        });
-        return;
-      }
-      void generateArticleSummary(article, null, false);
-    },
-    [articleSummaryStates, generateArticleSummary, patchArticleSummaryState],
   );
 
   const runArticleSummaryPrompt = useCallback(
     (article: Article, promptId: string | null) => {
       const state = articleSummaryStates.get(article.id) ?? EMPTY_ARTICLE_SUMMARY_STATE;
-      if (state.loading) return;
-      if (article.aiSummary?.promptId === promptId) {
+      const shown = { visible: true, error: null, configurationMissing: false };
+      if (state.promptId === promptId && (state.loading || state.summary)) {
+        patchArticleSummaryState(article.id, state.loading ? { visible: true } : shown);
+        return;
+      }
+      if (article.aiSummary && article.aiSummary.promptId === promptId) {
         patchArticleSummaryState(article.id, {
-          visible: true,
-          error: null,
-          configurationMissing: false,
+          ...shown,
+          loading: false,
           promptId,
+          summary: article.aiSummary,
         });
         return;
       }
       void generateArticleSummary(article, promptId, false);
     },
     [articleSummaryStates, generateArticleSummary, patchArticleSummaryState],
+  );
+
+  const toggleArticleSummary = useCallback(
+    (article: Article) => {
+      const state = articleSummaryStates.get(article.id) ?? EMPTY_ARTICLE_SUMMARY_STATE;
+      if (state.visible && state.promptId === null && !state.loading) {
+        patchArticleSummaryState(article.id, { visible: false });
+        return;
+      }
+      runArticleSummaryPrompt(article, null);
+    },
+    [articleSummaryStates, patchArticleSummaryState, runArticleSummaryPrompt],
   );
 
   const regenerateArticleSummary = useCallback(

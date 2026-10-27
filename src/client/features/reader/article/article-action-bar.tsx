@@ -146,7 +146,6 @@ export function ArticleActions({
       <Menu.Root modal={false}>
         <Menu.Trigger
           className="summary-action"
-          disabled={summaryState.loading}
           aria-pressed={summaryState.visible}
           aria-label="Choose an AI action"
           data-tooltip="Choose an AI action"

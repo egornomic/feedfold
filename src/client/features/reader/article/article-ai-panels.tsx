@@ -25,12 +25,28 @@ export function ArticleSummaryPanel({
   const present = useIsPresent();
   const reduced = Boolean(useReducedMotion());
   const displayedState = state;
-  const summary = article.aiSummary;
+  const summary = state.summary;
   const titleId = `article-${article.id}-ai-summary-title`;
-  const displayedPromptId = summary ? summary.promptId : displayedState.promptId;
-  const customPromptName = displayedPromptId
-    ? customPrompts.find((prompt) => prompt.id === displayedPromptId)?.name
+  const customPromptName = state.promptId
+    ? customPrompts.find((prompt) => prompt.id === state.promptId)?.name
     : null;
+  const copy = customPromptName
+    ? {
+        generating: `Running ${customPromptName}`,
+        update: "Run again",
+        updating: "Running again",
+        failed: `Could not run ${customPromptName}`,
+        outdated: "This result is out of date",
+        outdatedHint: "The article text has changed. Run the action again on the current text.",
+      }
+    : {
+        generating: "Generating summary",
+        update: "Update summary",
+        updating: "Updating summary",
+        failed: "Could not create the summary",
+        outdated: "This summary is out of date",
+        outdatedHint: "The article text has changed. Create a summary from the current text.",
+      };
 
   return (
     <motion.section
@@ -74,14 +90,14 @@ export function ArticleSummaryPanel({
             ) : (
               <RefreshCw aria-hidden="true" size={14} />
             )}
-            {displayedState.loading ? "Updating summary" : "Update summary"}
+            {displayedState.loading ? copy.updating : copy.update}
           </button>
         ) : null}
       </div>
 
       {displayedState.loading && !summary ? (
         <div className="article-summary-loading" role="status">
-          <span>Generating summary</span>
+          <span>{copy.generating}</span>
           <div className="article-summary-skeleton" aria-hidden="true">
             <span />
             <span />
@@ -104,11 +120,11 @@ export function ArticleSummaryPanel({
         </div>
       ) : !displayedState.error ? (
         <div className="article-summary-message">
-          <strong>This summary is out of date</strong>
-          <p>The article text has changed. Create a summary from the current text.</p>
+          <strong>{copy.outdated}</strong>
+          <p>{copy.outdatedHint}</p>
           <button className="secondary-button" type="button" onClick={() => onRegenerate(article)}>
             <Sparkles aria-hidden="true" size={14} />
-            Update summary
+            {copy.update}
           </button>
         </div>
       ) : null}
@@ -117,7 +133,7 @@ export function ArticleSummaryPanel({
         <div className="article-summary-error" role="alert">
           <AlertTriangle aria-hidden="true" size={16} />
           <div>
-            <strong>Could not create the summary</strong>
+            <strong>{copy.failed}</strong>
             <p>{displayedState.error}</p>
           </div>
           {!summary ? (
