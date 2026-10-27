@@ -211,3 +211,33 @@ it("switches to another action while the first one is still running", async () =
     await page.close();
   }
 }, 30_000);
+
+it("shows the updated summary after switching away from it and back", async () => {
+  const id = 5;
+  const { revision } = database.connection
+    .prepare("SELECT content_revision AS revision FROM articles WHERE id = ?")
+    .get(id) as { revision: number };
+  database.ai.saveArticleAiSummary(1, id, revision, {
+    promptVersion: 1,
+    promptId: null,
+    sourceKind: "feed",
+    provider: "openai",
+    model: "test-model",
+    text: "Saved summary",
+    usage: { inputTokens: 1, outputTokens: 1 },
+  });
+  const page = await openArticle(id - 1);
+  try {
+    await runAction(page, "Summarize");
+    await panel(page).getByText("Saved summary").waitFor();
+    await panel(page).getByRole("button", { name: "Update summary", exact: true }).click();
+    await panel(page).getByText("Summary result").waitFor();
+    await runAction(page, "Fact-check");
+    await panel(page).getByText("Fact-check result").waitFor();
+    await runAction(page, "Summarize");
+    await panel(page).locator("h3", { hasText: "Summary" }).waitFor();
+    expect(await shownResult(page)).toEqual({ heading: "Summary", text: "Summary result" });
+  } finally {
+    await page.close();
+  }
+}, 30_000);

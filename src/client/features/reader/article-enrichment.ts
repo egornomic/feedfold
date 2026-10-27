@@ -5,6 +5,7 @@ import type {
   AiSettings,
   AppSettings,
   Article,
+  ArticleAiSummary,
   BootstrapData,
   ReadingMode,
 } from "../../../shared/types";
@@ -241,6 +242,17 @@ export function useArticleEnrichment({
     [],
   );
 
+  const summaryQueryKey = useCallback(
+    (articleId: number, promptId: string | null) => [
+      "enrichment",
+      "summary",
+      articleId,
+      promptId,
+      bootstrap?.settings.customPrompts,
+    ],
+    [bootstrap?.settings.customPrompts],
+  );
+
   const generateArticleSummary = useCallback(
     async (article: Article, promptId: string | null, regenerate: boolean) => {
       const isYouTubeVideo = article.media?.provider === "youtube";
@@ -275,13 +287,7 @@ export function useArticleEnrichment({
       });
       try {
         const summary = await client.fetchQuery({
-          queryKey: [
-            "enrichment",
-            "summary",
-            article.id,
-            promptId,
-            bootstrap?.settings.customPrompts,
-          ],
+          queryKey: summaryQueryKey(article.id, promptId),
           queryFn: () =>
             mutateRequest(() =>
               api.summarizeArticle(
@@ -307,10 +313,10 @@ export function useArticleEnrichment({
     [
       articleSummaryStates,
       bootstrap?.aiSettings,
-      bootstrap?.settings.customPrompts,
       client,
       mutateRequest,
       patchArticleSummaryState,
+      summaryQueryKey,
     ],
   );
 
@@ -322,18 +328,23 @@ export function useArticleEnrichment({
         patchArticleSummaryState(article.id, state.loading ? { visible: true } : shown);
         return;
       }
-      if (article.aiSummary && article.aiSummary.promptId === promptId) {
-        patchArticleSummaryState(article.id, {
-          ...shown,
-          loading: false,
-          promptId,
-          summary: article.aiSummary,
-        });
+      // This session's latest result is newer than the one saved with the article.
+      const summary =
+        client.getQueryData<ArticleAiSummary>(summaryQueryKey(article.id, promptId)) ??
+        (article.aiSummary?.promptId === promptId ? article.aiSummary : null);
+      if (summary) {
+        patchArticleSummaryState(article.id, { ...shown, loading: false, promptId, summary });
         return;
       }
       void generateArticleSummary(article, promptId, false);
     },
-    [articleSummaryStates, generateArticleSummary, patchArticleSummaryState],
+    [
+      articleSummaryStates,
+      client,
+      generateArticleSummary,
+      patchArticleSummaryState,
+      summaryQueryKey,
+    ],
   );
 
   const toggleArticleSummary = useCallback(
