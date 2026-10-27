@@ -1,4 +1,4 @@
-import type { ArticleAiTranslation } from "../../../../shared/types";
+import type { ArticleAiSummary, ArticleAiTranslation } from "../../../../shared/types";
 
 export interface ArticleSummaryViewState {
   visible: boolean;
@@ -6,6 +6,7 @@ export interface ArticleSummaryViewState {
   error: string | null;
   configurationMissing: boolean;
   promptId: string | null;
+  summary: ArticleAiSummary | null;
 }
 
 export const EMPTY_ARTICLE_SUMMARY_STATE: ArticleSummaryViewState = {
@@ -14,6 +15,7 @@ export const EMPTY_ARTICLE_SUMMARY_STATE: ArticleSummaryViewState = {
   error: null,
   configurationMissing: false,
   promptId: null,
+  summary: null,
 };
 
 export interface ArticleTranslationViewState {
