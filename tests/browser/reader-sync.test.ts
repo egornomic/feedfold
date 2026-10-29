@@ -70,6 +70,43 @@ describe("reader state across devices and tabs", () => {
     }
   });
 
+  it("removes articles read in another tab from this tab's unread list", async () => {
+    const sample = seedReaderBacklog(database, "Read in another tab", 3);
+    const page = await context.newPage();
+    page.setDefaultTimeout(5000);
+    const [first, second] = database.articles.listArticlePage(1, {
+      feedId: sample.feed.id,
+      state: "unread",
+    }).articles;
+    if (!first || !second) throw new Error("The sync fixture has no articles");
+    const row = (title: string) => page.getByRole("button", { name: `Open ${title}`, exact: true });
+    try {
+      const connected = page.waitForResponse((response) =>
+        response.url().includes("/api/refresh/events"),
+      );
+      await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+      await row(first.title).waitFor();
+      await connected;
+
+      await page.getByRole("button", { name: `Mark ${second.title} as read`, exact: true }).click();
+      await page
+        .getByRole("button", { name: `Mark ${second.title} as unread`, exact: true })
+        .waitFor();
+      expect(
+        (
+          await context.request.patch(`/api/articles/${first.id}/state`, {
+            data: { isRead: true },
+          })
+        ).status(),
+      ).toBe(200);
+      await row(first.title).waitFor({ state: "detached" });
+      // An article this tab marked read keeps its place until the reader leaves the list.
+      await row(second.title).waitFor();
+    } finally {
+      await page.close();
+    }
+  });
+
   it("does not reload its own reader after reading an article", async () => {
     const sample = seedReaderBacklog(database, "Read in this tab", 3);
     const page = await openFeed(context, sample.feed.id);

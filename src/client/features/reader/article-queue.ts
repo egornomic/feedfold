@@ -243,9 +243,19 @@ export function useArticleQueue({
     const current = getArticles();
     // Background deliveries retain the reading queue; explicit changes apply its new contents and order.
     const reading = !reconcile && (route.routedArticleId !== null || sameQueue);
+    const delivered = new Set(candidates.map((article) => article.id));
+    // Articles another reader moved out of this view leave it; this reader's own changes keep their place.
+    const retained = sameQueue
+      ? current.filter(
+          (article) =>
+            delivered.has(article.id) ||
+            article.id === activeArticleId ||
+            !articleMatchesState(article, route.readerRoute.state),
+        )
+      : current;
     let next =
       reading && (sameQueue || anchor === null)
-        ? appendUnseenArticles(current, matchingCandidates).articles
+        ? appendUnseenArticles(retained, matchingCandidates).articles
         : matchingCandidates.map((article) => {
             const complete = current.find((item) => item.id === article.id);
             return complete && fullContentLoadedIds.current.has(article.id)
@@ -290,6 +300,7 @@ export function useArticleQueue({
     pages.isFetching,
     pages.isStale,
     reconciliationRevision,
+    activeArticleId,
     anchor,
     requestKey,
     readingMode,
