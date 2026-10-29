@@ -244,11 +244,17 @@ export function useArticleQueue({
     // Background deliveries retain the reading queue; explicit changes apply its new contents and order.
     const reading = !reconcile && (route.routedArticleId !== null || sameQueue);
     const delivered = new Set(candidates.map((article) => article.id));
+    // Newer deliveries can push loaded articles past the refreshed pages without changing them.
+    const refreshedThrough =
+      pages.data.pages.at(-1)?.nextCursor === null
+        ? current.length
+        : current.findLastIndex((article) => delivered.has(article.id));
     // Articles another reader moved out of this view leave it; this reader's own changes keep their place.
     const retained = sameQueue
       ? current.filter(
-          (article) =>
+          (article, index) =>
             delivered.has(article.id) ||
+            index > refreshedThrough ||
             article.id === activeArticleId ||
             !articleMatchesState(article, route.readerRoute.state),
         )
