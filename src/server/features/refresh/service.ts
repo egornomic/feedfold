@@ -7,7 +7,7 @@ import type { FeedRecord } from "../shared.js";
 export class FeedRefreshService {
   private readonly pending: Array<{ feed: FeedRecord; scheduled: boolean }> = [];
   private readonly requestedIds = new Set<number>();
-  private readonly listeners = new Map<number, Set<() => void>>();
+  private readonly listeners = new Map<number, Set<(sourceReaderId?: string) => void>>();
   private active = 0;
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
@@ -57,8 +57,8 @@ export class FeedRefreshService {
     return { requested: accepted.length, refreshingFeedIds };
   }
 
-  subscribe(userId: number, listener: () => void): () => void {
-    const listeners = this.listeners.get(userId) ?? new Set<() => void>();
+  subscribe(userId: number, listener: (sourceReaderId?: string) => void): () => void {
+    const listeners = this.listeners.get(userId) ?? new Set<(sourceReaderId?: string) => void>();
     listeners.add(listener);
     this.listeners.set(userId, listeners);
     return () => {
@@ -155,10 +155,10 @@ export class FeedRefreshService {
     for (const resolve of resolvers) resolve();
   }
 
-  notifyDataChanged(userId: number): void {
+  notifyDataChanged(userId: number, sourceReaderId?: string): void {
     for (const listener of this.listeners.get(userId) ?? []) {
       try {
-        listener();
+        listener(sourceReaderId);
       } catch {
         // A disconnected client must not leave the refresh queue permanently active.
       }

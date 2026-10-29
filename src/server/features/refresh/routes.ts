@@ -29,6 +29,7 @@ export async function refreshRoutes(
   app.get("/api/refresh/events", (request, reply) => {
     const accountId = userId(request);
     const token = sessionToken(request.headers.cookie);
+    const { reader } = request.query as { reader?: string };
     const stream = reply.raw;
     reply.hijack();
     stream.writeHead(200, {
@@ -52,7 +53,9 @@ export async function refreshRoutes(
       if (!stream.destroyed && !stream.writableEnded) stream.end();
     };
     const sessionActive = () => authService.userForToken(token)?.id === accountId;
-    const sendChange = () => {
+    const sendChange = (sourceReaderId?: string) => {
+      // The reader that made a change has already applied it.
+      if (sourceReaderId !== undefined && sourceReaderId === reader) return;
       if (!sessionActive()) {
         close();
         return;

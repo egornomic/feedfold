@@ -1,8 +1,16 @@
-import { createContext, type ReactNode, useContext, useLayoutEffect, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
 import { useStore } from "zustand";
 import {
   applyReaderAppearance,
   createReaderPreferencesStore,
+  followReaderPreferences,
 } from "../features/reader/reader-preferences";
 import { createInterfaceStore } from "./interface-state";
 
@@ -25,6 +33,7 @@ export function SessionStateProvider({
     interface: createInterfaceStore(),
     preferences: createReaderPreferencesStore(userId),
   }));
+  useEffect(() => followReaderPreferences(stores.preferences, userId), [stores, userId]);
   return (
     <SessionStateContext value={stores}>
       <ReaderAppearance />

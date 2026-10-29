@@ -11,7 +11,7 @@ import Fastify, {
 } from "fastify";
 import { matchAppRoute } from "../shared/app-routes.js";
 import { normalizeBasePath } from "../shared/base-path.js";
-import { readerMutationRoutes } from "../shared/reader-mutations.js";
+import { readerMutationRoutes, sharedReaderStateRoutes } from "../shared/reader-mutations.js";
 import { socialUrlMetadata } from "../shared/social-metadata.js";
 import { applicationError } from "./application-error.js";
 import { ApplicationService, type ApplicationServices } from "./application-service.js";
@@ -70,7 +70,10 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
     return user.id;
   };
 
-  const mutationRoutes = new Set<string>(Object.values(readerMutationRoutes));
+  const mutationRoutes = new Set<string>([
+    ...Object.values(readerMutationRoutes),
+    ...Object.values(sharedReaderStateRoutes),
+  ]);
   app.addHook("onResponse", async (request, reply) => {
     const account = requestUsers.get(request);
     if (
@@ -79,7 +82,11 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
       reply.statusCode < 300 &&
       mutationRoutes.has(`${request.method} ${request.routeOptions.url}`)
     ) {
-      services.refreshService.notifyDataChanged(account.id);
+      const reader = request.headers["x-feedfold-reader"];
+      services.refreshService.notifyDataChanged(
+        account.id,
+        typeof reader === "string" ? reader : undefined,
+      );
     }
   });
 
