@@ -99,8 +99,8 @@ interface ReaderPreferencesState {
   toggleDesktopSidebar: () => void;
 }
 
-export function createReaderPreferencesStore(userId: string, storage = window.localStorage) {
-  const store = createStore<ReaderPreferencesState>()((set) => ({
+function storedPreferences(userId: string, storage: Storage) {
+  return {
     readingMode: storedValue<ReadingMode>(
       storage,
       accountStorageKey(userId, "reading-mode"),
@@ -131,6 +131,12 @@ export function createReaderPreferencesStore(userId: string, storage = window.lo
       accountStorageKey(userId, "desktop-sidebar-collapsed"),
       false,
     ),
+  };
+}
+
+export function createReaderPreferencesStore(userId: string, storage = window.localStorage) {
+  const store = createStore<ReaderPreferencesState>()((set) => ({
+    ...storedPreferences(userId, storage),
     setReadingMode: (readingMode) => set({ readingMode }),
     setTheme: (theme) => set({ theme }),
     setColorPalette: (mode, palette) =>
@@ -158,4 +164,18 @@ export function createReaderPreferencesStore(userId: string, storage = window.lo
     }
   });
   return store;
+}
+
+/** Applies the choices another tab saves for the account, so neither tab overwrites the other's. */
+export function followReaderPreferences(
+  store: ReturnType<typeof createReaderPreferencesStore>,
+  userId: string,
+  storage = window.localStorage,
+) {
+  const sync = (event: StorageEvent) => {
+    if (event.storageArea === storage && event.key?.startsWith(accountStorageKey(userId, "")))
+      store.setState(storedPreferences(userId, storage));
+  };
+  window.addEventListener("storage", sync);
+  return () => window.removeEventListener("storage", sync);
 }

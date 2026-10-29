@@ -232,6 +232,29 @@ describe("feed refresh delivery events", () => {
     expect(await within(nextEvent())).toBe("data: changed");
     expect(database.bootstrap.getBootstrap(accountId).counts.unread).toBe(1);
 
+    const sourceResponse = await fetch(`${origin}/api/refresh/events?reader=source-tab`, {
+      headers: { Cookie: cookie },
+      signal: controller.signal,
+    });
+    const sourceReader = sourceResponse.body?.getReader();
+    if (!sourceReader) throw new Error("The source tab's event stream has no response body");
+    const nextSourceEvent = eventReader(sourceReader);
+    expect(await within(nextSourceEvent())).toBe("event: connected\ndata: ready");
+    const providerChange = await fetch(`${origin}/api/ai/features/article_summary`, {
+      method: "PATCH",
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/json",
+        "X-Feedfold-Reader": "source-tab",
+      },
+      body: JSON.stringify({ provider: "openai" }),
+    });
+    expect(providerChange.status).toBe(200);
+    expect(await within(nextEvent())).toBe("data: changed");
+    const sourceEvent = nextSourceEvent();
+    sourceEvent.catch(() => {});
+    await expect(within(sourceEvent, 300)).rejects.toThrow("The operation timed out.");
+
     const logout = await fetch(`${origin}/api/auth/logout`, {
       method: "POST",
       headers: { Cookie: cookie },

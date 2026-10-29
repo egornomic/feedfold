@@ -15,3 +15,12 @@ export const readerMutationRoutes = {
   updateSettings: "PATCH /api/settings",
   importOpml: "POST /api/opml/import",
 } satisfies Partial<Record<ApiOperation, string>>;
+
+/** Hosted changes the changing reader applies itself, which the account's other readers must receive. */
+export const sharedReaderStateRoutes = {
+  updateArticleState: "PATCH /api/articles/:id/state",
+  markRead: "POST /api/articles/mark-read",
+  updateAiFeature: "PATCH /api/ai/features/:feature",
+  saveAiProviderKey: "PUT /api/ai/providers/:provider/key",
+  deleteAiProviderKey: "DELETE /api/ai/providers/:provider/key",
+} satisfies Partial<Record<ApiOperation, string>>;

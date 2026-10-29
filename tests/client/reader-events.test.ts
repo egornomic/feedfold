@@ -26,7 +26,7 @@ it.each(["none", "before-pending", "before-settled", "during"])(
       release = resolve;
     });
     server.app.addHook("onRequest", async (request, reply) => {
-      if (request.url === "/api/refresh/events") stream = reply.raw;
+      if (request.url.startsWith("/api/refresh/events?")) stream = reply.raw;
     });
     server.app.addHook("onSend", async (request, _reply, payload) => {
       if (request.url === "/api/bootstrap" && ++snapshots === 1) await initialResponse;

@@ -6,7 +6,7 @@ import {
   type ReaderDataInvalidation,
 } from "./api-client.js";
 import { ApiError, appUrl } from "./api-contract.js";
-import { createBrowserRequest } from "./browser-api.js";
+import { createBrowserRequest, readerTabId } from "./browser-api.js";
 import { httpRequest } from "./http-request.js";
 
 export type {
@@ -45,6 +45,8 @@ async function request<K extends ApiOperation>(
   }
 }
 
+const STREAM_RECONNECT_DELAY_MS = 5_000;
+
 function subscribeReaderDataInvalidations(
   listener: (reason: ReaderDataInvalidation) => void,
 ): () => void {
@@ -60,15 +62,30 @@ function subscribeReaderDataInvalidations(
         return unsubscribe;
       })()
     : (() => {
-        const events = new EventSource(appUrl("/api/refresh/events"), { withCredentials: true });
         let connected = false;
-        events.addEventListener("connected", () => {
-          if (active) listener(connected ? "change" : "connected");
-          connected = true;
-        });
-        events.addEventListener("message", invalidate);
-        events.addEventListener("error", invalidate);
-        return () => events.close();
+        let reconnect: ReturnType<typeof setTimeout> | undefined;
+        let events: EventSource;
+        const connect = () => {
+          events = new EventSource(appUrl(`/api/refresh/events?reader=${readerTabId}`), {
+            withCredentials: true,
+          });
+          events.addEventListener("connected", () => {
+            if (active) listener(connected ? "change" : "connected");
+            connected = true;
+          });
+          events.addEventListener("message", invalidate);
+          events.addEventListener("error", () => {
+            invalidate();
+            // Browsers stop retrying after an error response, such as a proxy's during a restart.
+            if (events.readyState === EventSource.CLOSED)
+              reconnect = setTimeout(connect, STREAM_RECONNECT_DELAY_MS);
+          });
+        };
+        connect();
+        return () => {
+          clearTimeout(reconnect);
+          events.close();
+        };
       })();
 
   const reconcileVisible = () => {

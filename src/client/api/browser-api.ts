@@ -6,6 +6,10 @@ import { browserRequests } from "./browser-requests.js";
 
 type HttpRequest = <T>(path: string, init?: RequestInit) => Promise<T>;
 
+/** Identifies this tab so the server does not echo its own changes back to it. */
+export const READER_TAB_HEADER = "X-Feedfold-Reader";
+export const readerTabId = Math.random().toString(36).slice(2);
+
 export function createBrowserRequest(httpRequest: HttpRequest): ApiRuntime["request"] {
   let accountId: string | null = null;
 
@@ -19,7 +23,7 @@ export function createBrowserRequest(httpRequest: HttpRequest): ApiRuntime["requ
     const aiProvider = options?.aiProvider;
     const account = accountId;
     const device = account ? await aiDevice(account).catch(() => null) : null;
-    const headers = new Headers();
+    const headers = new Headers({ [READER_TAB_HEADER]: readerTabId });
     if (account) headers.set("X-Feedfold-Account", account);
     if (device) headers.set("X-Feedfold-Device", device.id);
 
