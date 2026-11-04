@@ -218,6 +218,22 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
     },
   );
 
+  it("shows a feed's articles after leaving a link to an article that could not load", async () => {
+    const sample = seedReaderBacklog(database, "Unavailable link recovery", 3);
+    const page = await open("magazine");
+    try {
+      await page.goto(`${origin}articles/999999999`);
+      await page.getByRole("alert").waitFor();
+      await page.locator(`.feed-nav-item[data-management-feed-id="${sample.feed.id}"]`).click();
+      await page.getByRole("heading", { name: sample.feed.title, exact: true }).waitFor();
+      await expect
+        .poll(() => page.locator(".virtual-article-row").first().textContent())
+        .toContain(sample.articles[0]?.title);
+    } finally {
+      await page.close();
+    }
+  });
+
   it("clears a shared article selection when navigating between its feed and folder", async () => {
     const sample = seedReaderBacklog(database, "Selection reset", 30);
     const folder = database.folders.createFolder(1, { name: "Selection reset folder" });
