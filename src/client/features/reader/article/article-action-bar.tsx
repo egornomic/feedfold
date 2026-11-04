@@ -90,13 +90,15 @@ export function ArticleActions({
         : cachedFullContent
           ? FileText
           : Download;
-  const translationLabel = translationState.loading
-    ? `Translating to ${translationLanguage}`
-    : translationState.visible
-      ? "Show original article"
-      : translationState.error
-        ? `Retry ${translationLanguage} translation`
-        : `Translate to ${translationLanguage}`;
+  const summaryOpen = summaryState.kind !== "closed";
+  const translationLabel =
+    translationState.kind === "translating"
+      ? `Translating to ${translationLanguage}`
+      : translationState.kind === "translated"
+        ? "Show original article"
+        : translationState.kind === "failed"
+          ? `Retry ${translationLanguage} translation`
+          : `Translate to ${translationLanguage}`;
   const readTooltip = article.isRead ? "Mark as unread (U)" : "Mark as read (U)";
   const savedTooltip = article.isSaved ? "Remove from Saved (S)" : "Save article (S)";
   return (
@@ -146,20 +148,16 @@ export function ArticleActions({
       <Menu.Root modal={false}>
         <Menu.Trigger
           className="summary-action"
-          aria-pressed={summaryState.visible}
+          aria-pressed={summaryOpen}
           aria-label="Choose an AI action"
           data-tooltip="Choose an AI action"
         >
-          {summaryState.loading ? (
+          {summaryState.kind === "loading" ? (
             <LoaderCircle className="spin" aria-hidden="true" size={16} />
-          ) : summaryState.error && !summaryState.visible ? (
+          ) : summaryState.kind === "closed" && summaryState.failed ? (
             <RefreshCw aria-hidden="true" size={16} />
           ) : (
-            <Sparkles
-              aria-hidden="true"
-              size={16}
-              fill={summaryState.visible ? "currentColor" : "none"}
-            />
+            <Sparkles aria-hidden="true" size={16} fill={summaryOpen ? "currentColor" : "none"} />
           )}
           <ChevronDown className="summary-action-chevron" aria-hidden="true" size={10} />
         </Menu.Trigger>
@@ -195,15 +193,15 @@ export function ArticleActions({
       <button
         className="translation-action"
         type="button"
-        disabled={translationState.loading}
-        aria-pressed={translationState.visible}
+        disabled={translationState.kind === "translating"}
+        aria-pressed={translationState.kind === "translated"}
         onClick={() => onToggleTranslation(article)}
         aria-label={`${translationLabel} (T)`}
         data-tooltip={`${translationLabel} (T)`}
       >
-        {translationState.loading ? (
+        {translationState.kind === "translating" ? (
           <LoaderCircle className="spin" aria-hidden="true" size={16} />
-        ) : translationState.visible ? (
+        ) : translationState.kind === "translated" ? (
           <BookOpenText aria-hidden="true" size={16} />
         ) : (
           <Languages aria-hidden="true" size={16} />
@@ -286,14 +284,14 @@ export function ArticleActions({
             </>
           ) : null}
           <MenuItem
-            disabled={translationState.loading}
+            disabled={translationState.kind === "translating"}
             onClick={() => {
               onToggleTranslation(article);
             }}
           >
-            {translationState.loading ? (
+            {translationState.kind === "translating" ? (
               <LoaderCircle className="spin" aria-hidden="true" size={15} />
-            ) : translationState.visible ? (
+            ) : translationState.kind === "translated" ? (
               <BookOpenText aria-hidden="true" size={15} />
             ) : (
               <Languages aria-hidden="true" size={15} />
