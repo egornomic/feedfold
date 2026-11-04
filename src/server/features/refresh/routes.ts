@@ -39,19 +39,6 @@ export async function refreshRoutes(
       "X-Accel-Buffering": "no",
     });
     let closed = false;
-    let heartbeat: NodeJS.Timeout | null = null;
-    let unsubscribe = () => {};
-    const cleanup = () => {
-      if (closed) return;
-      closed = true;
-      if (heartbeat) clearInterval(heartbeat);
-      unsubscribe();
-      closeEventStreams.delete(close);
-    };
-    const close = () => {
-      cleanup();
-      if (!stream.destroyed && !stream.writableEnded) stream.end();
-    };
     const sessionActive = () => authService.userForToken(token)?.id === accountId;
     const sendChange = (sourceReaderId?: string) => {
       // The reader that made a change has already applied it.
@@ -62,8 +49,8 @@ export async function refreshRoutes(
       }
       writeEvent(stream, "data: changed\n\n");
     };
-    unsubscribe = refreshService.subscribe(accountId, sendChange);
-    heartbeat = setInterval(() => {
+    const unsubscribe = refreshService.subscribe(accountId, sendChange);
+    const heartbeat = setInterval(() => {
       if (!sessionActive()) {
         close();
         return;
@@ -71,6 +58,17 @@ export async function refreshRoutes(
       writeEvent(stream, ": keep-alive\n\n");
     }, 15_000);
     heartbeat.unref();
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      unsubscribe();
+      closeEventStreams.delete(close);
+    };
+    const close = () => {
+      cleanup();
+      if (!stream.destroyed && !stream.writableEnded) stream.end();
+    };
     closeEventStreams.add(close);
     stream.once("close", cleanup);
     stream.once("finish", cleanup);
