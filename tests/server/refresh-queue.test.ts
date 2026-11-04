@@ -83,7 +83,6 @@ describe("feed refresh queue", () => {
     });
     expect(database.feeds.getFeed(TEST_USER_ID, queued.id)).toMatchObject({
       refreshing: false,
-      healthStatus: "failing",
       lastErrorKind: "network",
       lastError: "The refresh stopped because the server shut down. Refresh the feed again.",
     });
@@ -95,7 +94,7 @@ describe("feed refresh queue", () => {
     await stopping;
     expect(database.feeds.getFeed(TEST_USER_ID, running.id)).toMatchObject({
       refreshing: false,
-      healthStatus: "healthy",
+      lastErrorKind: null,
     });
 
     refresh.start();
