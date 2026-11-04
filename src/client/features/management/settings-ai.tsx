@@ -53,11 +53,13 @@ export function AiSettingsSection({
   });
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [savingFeature, setSavingFeature] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
-  const [removingKey, setRemovingKey] = useState(false);
-  const [savingPrompts, setSavingPrompts] = useState(false);
-  const [savingCustomPrompt, setSavingCustomPrompt] = useState(false);
+  const [pendingAction, setPendingAction] = useState<
+    "feature" | "key" | "remove-key" | "prompts" | "custom-prompt" | null
+  >(null);
+  const savingFeature = pendingAction === "feature";
+  const savingKey = pendingAction === "key";
+  const savingPrompts = pendingAction === "prompts";
+  const savingCustomPrompt = pendingAction === "custom-prompt";
   const [summaryPrompt, setSummaryPrompt] = useState(settings.summaryPrompt);
   const [translationPrompt, setTranslationPrompt] = useState(settings.translationPrompt);
   const [editingCustomPrompt, setEditingCustomPrompt] = useState<AiCustomPrompt | null>(null);
@@ -102,10 +104,10 @@ export function AiSettingsSection({
   const defaultPromptsSelected =
     summaryPrompt.trim() === DEFAULT_ARTICLE_SUMMARY_PROMPT &&
     translationPrompt.trim() === DEFAULT_ARTICLE_TRANSLATION_PROMPT;
-  const busy = savingFeature || savingKey || removingKey || savingPrompts || savingCustomPrompt;
+  const busy = pendingAction !== null;
 
   const updateFeature = async (nextProvider: AiProvider, nextModel: string) => {
-    setSavingFeature(true);
+    setPendingAction("feature");
     setError(null);
     try {
       onAiSettings(
@@ -120,7 +122,7 @@ export function AiSettingsSection({
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setSavingFeature(false);
+      setPendingAction(null);
     }
   };
 
@@ -148,7 +150,7 @@ export function AiSettingsSection({
     const nextKey = apiKey.trim();
     const nextModel = modelId.trim();
     if (!nextKey || !nextModel) return;
-    setSavingKey(true);
+    setPendingAction("key");
     setError(null);
     try {
       const keySettings = await runSensitive(() =>
@@ -172,7 +174,7 @@ export function AiSettingsSection({
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setSavingKey(false);
+      setPendingAction(null);
     }
   };
 
@@ -184,7 +186,7 @@ export function AiSettingsSection({
     ) {
       return;
     }
-    setRemovingKey(true);
+    setPendingAction("remove-key");
     setError(null);
     try {
       onAiSettings(
@@ -196,7 +198,7 @@ export function AiSettingsSection({
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setRemovingKey(false);
+      setPendingAction(null);
     }
   };
 
@@ -216,7 +218,7 @@ export function AiSettingsSection({
     const nextSummaryPrompt = summaryPrompt.trim();
     const nextTranslationPrompt = translationPrompt.trim();
     if (!nextSummaryPrompt || !nextTranslationPrompt || !promptsChanged) return;
-    setSavingPrompts(true);
+    setPendingAction("prompts");
     setError(null);
     setPromptError(null);
     try {
@@ -233,7 +235,7 @@ export function AiSettingsSection({
     } catch (caught) {
       setPromptError(errorMessage(caught));
     } finally {
-      setSavingPrompts(false);
+      setPendingAction(null);
     }
   };
 
@@ -264,7 +266,7 @@ export function AiSettingsSection({
           item.id === editingCustomPrompt.id ? nextPrompt : item,
         )
       : [...settings.customPrompts, nextPrompt];
-    setSavingCustomPrompt(true);
+    setPendingAction("custom-prompt");
     setCustomPromptError(null);
     try {
       onSettings(await mutateRequest(() => api.updateSettings({ customPrompts })));
@@ -273,13 +275,13 @@ export function AiSettingsSection({
     } catch (caught) {
       setCustomPromptError(errorMessage(caught));
     } finally {
-      setSavingCustomPrompt(false);
+      setPendingAction(null);
     }
   };
 
   const deleteCustomPrompt = async (prompt: AiCustomPrompt) => {
     if (!window.confirm(`Delete the custom prompt “${prompt.name}”?`)) return;
-    setSavingCustomPrompt(true);
+    setPendingAction("custom-prompt");
     setError(null);
     try {
       onSettings(
@@ -293,7 +295,7 @@ export function AiSettingsSection({
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setSavingCustomPrompt(false);
+      setPendingAction(null);
     }
   };
 

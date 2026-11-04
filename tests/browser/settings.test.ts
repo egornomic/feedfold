@@ -348,6 +348,9 @@ it("asks for the password again before a sensitive change and retries after a wr
     const stepUp = page.getByRole("dialog", { name: "Authenticate to continue", exact: true });
 
     await change();
+    await stepUp.waitFor();
+    // The dialog hides the page from accessibility queries, so find the button by its section.
+    expect(await page.locator(".account-delete-setting button").isDisabled()).toBe(true);
     await stepUp.getByRole("button", { name: "Cancel", exact: true }).click();
     await stepUp.waitFor({ state: "hidden" });
     await page.getByText("Authentication was cancelled.", { exact: true }).waitFor();
