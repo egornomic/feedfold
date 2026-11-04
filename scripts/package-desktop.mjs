@@ -15,8 +15,7 @@ const electronBuilderCli = join(
 const electron = JSON.parse(await readFile("node_modules/electron/package.json", "utf8"));
 
 // Consume the built renderer and runtime. Signing must consume these artifacts too.
-await readFile("dist/client/index.html");
-await readFile("dist/desktop/main.js");
+await Promise.all([readFile("dist/client/index.html"), readFile("dist/desktop/main.js")]);
 await run(npm, ["run", "desktop:prepare-browser"]);
 const builderArguments = [
   electronBuilderCli,
