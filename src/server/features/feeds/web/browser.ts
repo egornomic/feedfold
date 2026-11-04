@@ -493,18 +493,19 @@ export class WebFeedBrowserLoader {
 
   async publicCandidates<T extends { articleUrls: string[] }>(candidates: T[]): Promise<T[]> {
     if (this.#allowPrivateNetworks) return candidates;
-    const accepted: T[] = [];
     const cache: HostValidationCache = new Map();
-    for (const candidate of candidates) {
-      try {
-        await this.#validateUrls(candidate.articleUrls, cache);
-        accepted.push(candidate);
-      } catch (error) {
-        if (error instanceof WebFeedError && error.kind === "inaccessible") continue;
-        throw error;
-      }
-    }
-    return accepted;
+    const accessible = await Promise.all(
+      candidates.map((candidate) =>
+        this.#validateUrls(candidate.articleUrls, cache).then(
+          () => true,
+          (error: unknown) => {
+            if (error instanceof WebFeedError && error.kind === "inaccessible") return false;
+            throw error;
+          },
+        ),
+      ),
+    );
+    return candidates.filter((_, index) => accessible[index]);
   }
 
   async validateArticleUrls(urls: string[]): Promise<void> {
@@ -512,9 +513,11 @@ export class WebFeedBrowserLoader {
   }
 
   async #validateUrls(urls: string[], cache: HostValidationCache): Promise<void> {
-    for (const url of urls) {
-      await assertPublicPageUrl(url, this.#allowPrivateNetworks, cache, this.#addressResolver);
-    }
+    await Promise.all(
+      urls.map((url) =>
+        assertPublicPageUrl(url, this.#allowPrivateNetworks, cache, this.#addressResolver),
+      ),
+    );
   }
 
   async #browser(): Promise<Browser> {
@@ -815,9 +818,11 @@ export class WebFeedBrowserLoader {
         );
       }
       if (fatalError) throw fatalError;
-      const title =
-        singleLine(await page.title()) || new URL(page.url()).hostname.replace(/^www\./, "");
-      const bodyText = await page.evaluate(() => document.body?.innerText ?? "");
+      const [pageTitle, bodyText] = await Promise.all([
+        page.title(),
+        page.evaluate(() => document.body?.innerText ?? ""),
+      ]);
+      const title = singleLine(pageTitle) || new URL(page.url()).hostname.replace(/^www\./, "");
       if (challengeDetected(title, bodyText.slice(0, 50_000))) {
         throw new WebFeedError(
           "This page requires a CAPTCHA or bot check that feedfold cannot complete. Choose another page.",

@@ -6,12 +6,13 @@ const modules = await realpath("node_modules");
 const directory = dirname(modules);
 const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
 const lock = JSON.parse(await readFile(join(modules, ".package-lock.json"), "utf8"));
-const installed = [];
-for (const path of Object.keys(lock.packages)) {
-  const packagePath = join(directory, path, "package.json");
-  await access(packagePath);
-  installed.push(JSON.parse(await readFile(packagePath, "utf8")));
-}
+const installed = await Promise.all(
+  Object.keys(lock.packages).map(async (path) => {
+    const packagePath = join(directory, path, "package.json");
+    await access(packagePath);
+    return JSON.parse(await readFile(packagePath, "utf8"));
+  }),
+);
 const packagingTools = installed.filter(({ name }) =>
   /^(electron-builder|app-builder-lib|app-builder-bin|builder-util|builder-util-runtime|dmg-builder|electron-winstaller|7zip-bin|@electron\/.*)$/.test(
     name,
@@ -30,14 +31,16 @@ if (profile === "desktop" && installed.some(({ name }) => name === "electron-bui
 if (["desktop", "packaging"].includes(profile)) {
   await access(join(modules, "electron/path.txt"));
 }
-for (const [name, version] of Object.entries({
-  ...manifest.dependencies,
-  ...(process.argv.includes("--omit-dev") ? {} : manifest.devDependencies),
-})) {
-  const actual = JSON.parse(await readFile(join(modules, name, "package.json"), "utf8"));
-  if (actual.version !== version)
-    throw new Error(`${name}: expected ${version}, got ${actual.version}`);
-}
+await Promise.all(
+  Object.entries({
+    ...manifest.dependencies,
+    ...(process.argv.includes("--omit-dev") ? {} : manifest.devDependencies),
+  }).map(async ([name, version]) => {
+    const actual = JSON.parse(await readFile(join(modules, name, "package.json"), "utf8"));
+    if (actual.version !== version)
+      throw new Error(`${name}: expected ${version}, got ${actual.version}`);
+  }),
+);
 console.log(
   `${profile}: ${installed.length} installed packages; ${packagingTools.length} Electron tools`,
 );
