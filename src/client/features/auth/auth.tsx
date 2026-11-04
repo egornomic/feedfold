@@ -5,7 +5,7 @@ import {
 } from "@simplewebauthn/browser";
 import { useQuery } from "@tanstack/react-query";
 import { KeyRound, LoaderCircle, LogIn, UserPlus, X } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
   INVITE_CODE_INPUT_MAX_LENGTH,
   INVITE_CODE_LENGTH,
@@ -42,6 +42,19 @@ export function AuthLegalLinks() {
   );
 }
 
+type AuthMode = "login" | "register";
+
+type AuthStage =
+  | {
+      kind: "form";
+      mode: AuthMode;
+      pending: "password" | "passkey" | null;
+      error: string | null;
+    }
+  | { kind: "onboarding"; user: SessionUser };
+
+type AuthForm = Extract<AuthStage, { kind: "form" }>;
+
 export function LoginDialog({
   onAuthenticated,
   onDismiss,
@@ -54,23 +67,39 @@ export function LoginDialog({
   initialOnboardingUser?: SessionUser | undefined;
 }) {
   const { run: mutateRequest } = useRequestMutation();
-  const [setupUser, setSetupUser] = useState(initialOnboardingUser ?? null);
+  const [stage, setStage] = useState<AuthStage>(() =>
+    initialOnboardingUser
+      ? { kind: "onboarding", user: initialOnboardingUser }
+      : {
+          kind: "form",
+          mode: window.location.pathname.replace(/\/$/, "").endsWith("/join")
+            ? "register"
+            : "login",
+          pending: null,
+          error: null,
+        },
+  );
   const [inviteCode, setInviteCode] = useState(() =>
     window.location.pathname.replace(/\/$/, "").endsWith("/join")
       ? normalizeInviteCode(window.location.hash.slice(1))
       : "",
-  );
-  const [mode, setMode] = useState<"login" | "register">(
-    window.location.pathname.replace(/\/$/, "").endsWith("/join") ? "register" : "login",
   );
   const config = useQuery({ queryKey: ["auth-config"], queryFn: api.authConfig });
   const registrationMode = config.data?.registrationMode ?? "closed";
   const configLoaded = !!initialOnboardingUser || !config.isPending;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [usingPasskey, setUsingPasskey] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const setupUser = stage.kind === "onboarding" ? stage.user : null;
+  const form = stage.kind === "form" ? stage : null;
+  const mode = form?.mode ?? "login";
+  const error = form?.error ?? null;
+  const submitting = form?.pending === "password";
+  const usingPasskey = form?.pending === "passkey";
+  const updateForm = useCallback(
+    (change: Partial<AuthForm>) =>
+      setStage((current) => (current.kind === "form" ? { ...current, ...change } : current)),
+    [],
+  );
   const registrationAvailable = config.data?.registrationAvailable ?? false;
   const passkeysAvailable = !!config.data?.passkeysAvailable && browserSupportsWebAuthn();
   const dialog = useDialog(
@@ -90,19 +119,22 @@ export function LoginDialog({
 
   useEffect(() => {
     const requireAuthentication = () => {
-      setSetupUser(null);
-      setMode("login");
+      setStage({
+        kind: "form",
+        mode: "login",
+        pending: null,
+        error: "Your session has ended. Sign in to continue.",
+      });
       setPassword("");
-      setError("Your session has ended. Sign in to continue.");
     };
     window.addEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
     return () => window.removeEventListener(AUTH_REQUIRED_EVENT, requireAuthentication);
   }, []);
 
   useEffect(() => {
-    if (config.data && !config.data.registrationAvailable) setMode("login");
-    if (config.error) setError(errorMessage(config.error));
-  }, [config.data, config.error]);
+    if (config.data && !config.data.registrationAvailable) updateForm({ mode: "login" });
+    if (config.error) updateForm({ error: errorMessage(config.error) });
+  }, [config.data, config.error, updateForm]);
 
   useEffect(() => {
     if (configLoaded) onReady();
@@ -115,74 +147,75 @@ export function LoginDialog({
     if (created) {
       saveOnboardingStep(user.id, "feeds");
       setPassword("");
-      setSetupUser(user);
+      setStage({ kind: "onboarding", user });
     } else onAuthenticated(user);
   };
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
+  const attempt = async (
+    pending: "password" | "passkey",
+    action: () => Promise<void>,
+    cancelledMessage?: string,
+  ) => {
+    updateForm({ pending, error: null });
     try {
+      await action();
+      updateForm({ pending: null });
+    } catch (caught) {
+      updateForm({
+        pending: null,
+        error:
+          cancelledMessage && caught instanceof DOMException && caught.name === "NotAllowedError"
+            ? cancelledMessage
+            : errorMessage(caught),
+      });
+    }
+  };
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void attempt("password", async () =>
       authenticated(
         mode === "login"
           ? await mutateRequest(() => api.login(username, password))
           : await mutateRequest(() => api.register(username, password, inviteCode)),
         mode === "register",
-      );
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setSubmitting(false);
-    }
+      ),
+    );
   };
 
   const switchMode = () => {
-    setMode((current) => (current === "login" ? "register" : "login"));
+    updateForm({ mode: mode === "login" ? "register" : "login", error: null });
     setPassword("");
-    setError(null);
   };
 
-  const signInWithPasskey = async () => {
-    setUsingPasskey(true);
-    setError(null);
-    try {
-      const { ceremonyId, options } = await mutateRequest(() => api.passkeyAuthenticationOptions());
-      const response = await startAuthentication({ optionsJSON: options });
-      authenticated(await mutateRequest(() => api.passkeyLogin(ceremonyId, response)));
-    } catch (caught) {
-      setError(
-        caught instanceof DOMException && caught.name === "NotAllowedError"
-          ? "Passkey sign-in was cancelled or timed out."
-          : errorMessage(caught),
-      );
-    } finally {
-      setUsingPasskey(false);
-    }
-  };
+  const signInWithPasskey = () =>
+    attempt(
+      "passkey",
+      async () => {
+        const { ceremonyId, options } = await mutateRequest(() =>
+          api.passkeyAuthenticationOptions(),
+        );
+        const response = await startAuthentication({ optionsJSON: options });
+        authenticated(await mutateRequest(() => api.passkeyLogin(ceremonyId, response)));
+      },
+      "Passkey sign-in was cancelled or timed out.",
+    );
 
-  const createAccountWithPasskey = async () => {
-    setUsingPasskey(true);
-    setError(null);
-    try {
-      const { registrationId, options } = await mutateRequest(() =>
-        api.passkeySignupOptions(username, inviteCode),
-      );
-      const response = await startRegistration({ optionsJSON: options });
-      authenticated(
-        await mutateRequest(() => api.completePasskeySignup(registrationId, response)),
-        true,
-      );
-    } catch (caught) {
-      setError(
-        caught instanceof DOMException && caught.name === "NotAllowedError"
-          ? "Passkey creation was cancelled or timed out."
-          : errorMessage(caught),
-      );
-    } finally {
-      setUsingPasskey(false);
-    }
-  };
+  const createAccountWithPasskey = () =>
+    attempt(
+      "passkey",
+      async () => {
+        const { registrationId, options } = await mutateRequest(() =>
+          api.passkeySignupOptions(username, inviteCode),
+        );
+        const response = await startRegistration({ optionsJSON: options });
+        authenticated(
+          await mutateRequest(() => api.completePasskeySignup(registrationId, response)),
+          true,
+        );
+      },
+      "Passkey creation was cancelled or timed out.",
+    );
 
   const registering = mode === "register";
   const actionLabel = registering ? "Create account" : "Sign in";
