@@ -22,8 +22,14 @@ import type { AppRouteController } from "../../app/route";
 import {
   type ArticleSummaryViewState,
   type ArticleTranslationViewState,
+  closeSummary,
+  dropFeedTextSummary,
   EMPTY_ARTICLE_SUMMARY_STATE,
   EMPTY_ARTICLE_TRANSLATION_STATE,
+  settleSummary,
+  settleTranslation,
+  showOriginal,
+  startSummary,
 } from "./article/article-ai-state";
 import { articleTranslationSourceKind, fullContentToggleAction } from "./article/article-content";
 import { warmArticleImages } from "./article/article-image-url";
@@ -38,6 +44,17 @@ interface ArticleEnrichmentOptions {
   dataResource: ReaderData;
   readingMode: ReadingMode;
   showToast: (message: string) => void;
+}
+
+function updateArticleState<T>(
+  states: Map<number, T>,
+  articleId: number,
+  empty: T,
+  update: (state: T) => T,
+): Map<number, T> {
+  const state = states.get(articleId) ?? empty;
+  const next = update(state);
+  return next === state ? states : new Map(states).set(articleId, next);
 }
 
 export function useArticleEnrichment({
@@ -62,6 +79,23 @@ export function useArticleEnrichment({
     () => new Map(),
   );
   const fullContentVisibleIdsRef = useRef(new Set<number>());
+  const updateArticleSummaryState = useCallback(
+    (articleId: number, update: (state: ArticleSummaryViewState) => ArticleSummaryViewState) =>
+      setArticleSummaryStates((current) =>
+        updateArticleState(current, articleId, EMPTY_ARTICLE_SUMMARY_STATE, update),
+      ),
+    [],
+  );
+  const updateArticleTranslationState = useCallback(
+    (
+      articleId: number,
+      update: (state: ArticleTranslationViewState) => ArticleTranslationViewState,
+    ) =>
+      setArticleTranslationStates((current) =>
+        updateArticleState(current, articleId, EMPTY_ARTICLE_TRANSLATION_STATE, update),
+      ),
+    [],
+  );
   const invalidate = useCallback(
     (kind: "summary" | "translation", articleId?: number) => {
       const queryKey =
@@ -139,14 +173,9 @@ export function useArticleEnrichment({
     (extracted: Article) => {
       queue.mergeArticle(extracted);
       if (extracted.extractionStatus !== "complete") return;
-      // A result made from the feed text no longer describes the full article.
-      setArticleSummaryStates((current) => {
-        const state = current.get(extracted.id);
-        if (!state?.summary || state.summary.sourceKind === "full") return current;
-        return new Map(current).set(extracted.id, { ...state, summary: null });
-      });
+      updateArticleSummaryState(extracted.id, dropFeedTextSummary);
     },
-    [queue.mergeArticle],
+    [queue.mergeArticle, updateArticleSummaryState],
   );
 
   const extractingArticle = queue.activeArticle;
@@ -171,20 +200,6 @@ export function useArticleEnrichment({
     }
   }, [loadFullArticle, queue.activeArticle, route.routedArticleId]);
 
-  const patchArticleTranslationState = useCallback(
-    (articleId: number, change: Partial<ArticleTranslationViewState>) => {
-      setArticleTranslationStates((current) => {
-        const next = new Map(current);
-        next.set(articleId, {
-          ...(current.get(articleId) ?? EMPTY_ARTICLE_TRANSLATION_STATE),
-          ...change,
-        });
-        return next;
-      });
-    },
-    [],
-  );
-
   const toggleFullContent = useCallback(
     async (article: Article) => {
       if (!article.url || article.media) return;
@@ -194,7 +209,7 @@ export function useArticleEnrichment({
       );
       if (action === "wait") return;
       invalidate("translation", article.id);
-      patchArticleTranslationState(article.id, { visible: false, loading: false });
+      updateArticleTranslationState(article.id, showOriginal);
       if (action === "hide") {
         fullContentVisibleIdsRef.current.delete(article.id);
         setFullContentVisibleIds((current) => {
@@ -225,21 +240,9 @@ export function useArticleEnrichment({
       loadFullArticle,
       mergeExtractedArticle,
       mutateRequest,
-      patchArticleTranslationState,
+      updateArticleTranslationState,
       showToast,
     ],
-  );
-
-  const patchArticleSummaryState = useCallback(
-    (articleId: number, change: Partial<ArticleSummaryViewState>, promptId?: string | null) => {
-      setArticleSummaryStates((current) => {
-        const state = current.get(articleId) ?? EMPTY_ARTICLE_SUMMARY_STATE;
-        // A response for an action the reader has since switched away from must not replace it.
-        if (promptId !== undefined && state.promptId !== promptId) return current;
-        return new Map(current).set(articleId, { ...state, ...change });
-      });
-    },
-    [],
   );
 
   const summaryQueryKey = useCallback(
@@ -260,31 +263,11 @@ export function useArticleEnrichment({
       const provider = feature
         ? bootstrap?.aiSettings.providers.find((option) => option.id === feature.provider)
         : null;
-      const previous = articleSummaryStates.get(article.id);
-      const start = {
-        visible: true,
-        error: null,
-        promptId,
-        // Updating keeps the current result readable; another action starts from its own skeleton.
-        summary: previous?.promptId === promptId ? previous.summary : null,
-      };
-      if (
-        !isYouTubeVideo &&
-        (!bootstrap?.aiSettings.credentialStorageAvailable || !feature || !provider?.configured)
-      ) {
-        patchArticleSummaryState(article.id, {
-          ...start,
-          loading: false,
-          configurationMissing: true,
-        });
-        return;
-      }
-
-      patchArticleSummaryState(article.id, {
-        ...start,
-        loading: true,
-        configurationMissing: false,
-      });
+      const configured =
+        isYouTubeVideo ||
+        (!!bootstrap?.aiSettings.credentialStorageAvailable && !!feature && !!provider?.configured);
+      updateArticleSummaryState(article.id, (state) => startSummary(state, promptId, configured));
+      if (!configured) return;
       try {
         const summary = await client.fetchQuery({
           queryKey: summaryQueryKey(article.id, promptId),
@@ -300,40 +283,30 @@ export function useArticleEnrichment({
           staleTime: regenerate ? 0 : Infinity,
           retry: false,
         });
-        patchArticleSummaryState(article.id, { loading: false, summary }, promptId);
+        updateArticleSummaryState(article.id, (state) =>
+          settleSummary(state, promptId, { summary }),
+        );
       } catch (caught) {
         if (isCancelledError(caught)) return;
-        patchArticleSummaryState(
-          article.id,
-          { loading: false, error: errorMessage(caught) },
-          promptId,
+        updateArticleSummaryState(article.id, (state) =>
+          settleSummary(state, promptId, { error: errorMessage(caught) }),
         );
       }
     },
-    [
-      articleSummaryStates,
-      bootstrap?.aiSettings,
-      client,
-      mutateRequest,
-      patchArticleSummaryState,
-      summaryQueryKey,
-    ],
+    [bootstrap?.aiSettings, client, mutateRequest, updateArticleSummaryState, summaryQueryKey],
   );
 
   const runArticleSummaryPrompt = useCallback(
     (article: Article, promptId: string | null) => {
       const state = articleSummaryStates.get(article.id) ?? EMPTY_ARTICLE_SUMMARY_STATE;
-      const shown = { visible: true, error: null, configurationMissing: false };
-      if (state.promptId === promptId && (state.loading || state.summary)) {
-        patchArticleSummaryState(article.id, state.loading ? { visible: true } : shown);
-        return;
-      }
+      if (state.promptId === promptId && state.kind === "loading") return;
       // This session's latest result is newer than the one saved with the article.
       const summary =
+        (state.promptId === promptId ? state.summary : null) ??
         client.getQueryData<ArticleAiSummary>(summaryQueryKey(article.id, promptId)) ??
         (article.aiSummary?.promptId === promptId ? article.aiSummary : null);
       if (summary) {
-        patchArticleSummaryState(article.id, { ...shown, loading: false, promptId, summary });
+        updateArticleSummaryState(article.id, () => ({ kind: "ready", promptId, summary }));
         return;
       }
       void generateArticleSummary(article, promptId, false);
@@ -342,7 +315,7 @@ export function useArticleEnrichment({
       articleSummaryStates,
       client,
       generateArticleSummary,
-      patchArticleSummaryState,
+      updateArticleSummaryState,
       summaryQueryKey,
     ],
   );
@@ -350,13 +323,13 @@ export function useArticleEnrichment({
   const toggleArticleSummary = useCallback(
     (article: Article) => {
       const state = articleSummaryStates.get(article.id) ?? EMPTY_ARTICLE_SUMMARY_STATE;
-      if (state.visible && state.promptId === null && !state.loading) {
-        patchArticleSummaryState(article.id, { visible: false });
+      if (state.kind !== "closed" && state.kind !== "loading" && state.promptId === null) {
+        updateArticleSummaryState(article.id, closeSummary);
         return;
       }
       runArticleSummaryPrompt(article, null);
     },
-    [articleSummaryStates, patchArticleSummaryState, runArticleSummaryPrompt],
+    [articleSummaryStates, updateArticleSummaryState, runArticleSummaryPrompt],
   );
 
   const regenerateArticleSummary = useCallback(
@@ -375,12 +348,10 @@ export function useArticleEnrichment({
         fullContentVisibleIdsRef.current.has(article.id),
       );
 
-      patchArticleTranslationState(article.id, {
-        visible: false,
-        loading: true,
-        error: null,
-        configurationMissing: false,
-      });
+      updateArticleTranslationState(article.id, ({ translation }) => ({
+        kind: "translating",
+        translation,
+      }));
       try {
         const translation = await client.fetchQuery({
           queryKey: [
@@ -408,13 +379,12 @@ export function useArticleEnrichment({
               fullContentVisibleIdsRef.current.has(article.id),
             )
           : sourceKind;
-        patchArticleTranslationState(article.id, {
-          visible:
-            currentSourceKind === translation.sourceKind &&
-            translation.language === translationLanguageRef.current,
-          loading: false,
-          translation,
-        });
+        const current =
+          currentSourceKind === translation.sourceKind &&
+          translation.language === translationLanguageRef.current;
+        updateArticleTranslationState(article.id, (state) =>
+          settleTranslation(state, { translation, current }),
+        );
       } catch (caught) {
         if (isCancelledError(caught)) return;
         const configurationMissing =
@@ -422,12 +392,9 @@ export function useArticleEnrichment({
           ["AI_NOT_CONFIGURED", "AI_KEY_MISSING", "AI_CREDENTIAL_STORAGE_UNAVAILABLE"].includes(
             caught.code ?? "",
           );
-        patchArticleTranslationState(article.id, {
-          visible: false,
-          loading: false,
-          error: configurationMissing ? null : errorMessage(caught),
-          configurationMissing,
-        });
+        updateArticleTranslationState(article.id, (state) =>
+          settleTranslation(state, { error: errorMessage(caught), configurationMissing }),
+        );
       }
     },
     [
@@ -435,7 +402,7 @@ export function useArticleEnrichment({
       bootstrap?.settings.translationLanguage,
       client,
       mutateRequest,
-      patchArticleTranslationState,
+      updateArticleTranslationState,
       queue.getArticles,
     ],
   );
@@ -443,9 +410,9 @@ export function useArticleEnrichment({
   const toggleArticleTranslation = useCallback(
     (article: Article) => {
       const state = articleTranslationStates.get(article.id) ?? EMPTY_ARTICLE_TRANSLATION_STATE;
-      if (state.loading) return;
-      if (state.visible) {
-        patchArticleTranslationState(article.id, { visible: false });
+      if (state.kind === "translating") return;
+      if (state.kind === "translated") {
+        updateArticleTranslationState(article.id, showOriginal);
         return;
       }
       const sourceKind = articleTranslationSourceKind(
@@ -458,11 +425,7 @@ export function useArticleEnrichment({
         translation.language === bootstrap?.settings.translationLanguage &&
         translation.sourceKind === sourceKind
       ) {
-        patchArticleTranslationState(article.id, {
-          visible: true,
-          error: null,
-          configurationMissing: false,
-        });
+        updateArticleTranslationState(article.id, () => ({ kind: "translated", translation }));
         return;
       }
       void generateArticleTranslation(article);
@@ -471,7 +434,7 @@ export function useArticleEnrichment({
       articleTranslationStates,
       bootstrap?.settings.translationLanguage,
       generateArticleTranslation,
-      patchArticleTranslationState,
+      updateArticleTranslationState,
     ],
   );
 

@@ -2,12 +2,25 @@ import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
+import {
+  type ArticleTranslationViewState,
+  closeSummary,
+  dropFeedTextSummary,
+  EMPTY_ARTICLE_SUMMARY_STATE,
+  EMPTY_ARTICLE_TRANSLATION_STATE,
+  settleSummary,
+  settleTranslation,
+  showOriginal,
+  startSummary,
+} from "../../src/client/features/reader/article/article-ai-state.js";
 import { DemoStore } from "../../src/demo/store.js";
 import type { ApiOperation, ApiOutput, ApiRequest } from "../../src/shared/api/operations.js";
 import type { DesktopResponse, FeedfoldDesktopBridge } from "../../src/shared/desktop.js";
 import type {
+  AiArticleSourceKind,
   AppSettings,
   Article,
+  ArticleAiSummary,
   ArticleAiTranslation,
   BootstrapData,
 } from "../../src/shared/types.js";
@@ -17,10 +30,7 @@ type HarnessState = {
   bootstrap: BootstrapData;
   queue: { articles: Article[] };
   enrichment: {
-    articleTranslationStates: ReadonlyMap<
-      number,
-      { visible: boolean; loading: boolean; translation: ArticleAiTranslation | null }
-    >;
+    articleTranslationStates: ReadonlyMap<number, ArticleTranslationViewState>;
     fullContentVisibleIds: ReadonlySet<number>;
     applySettings: (settings: AppSettings) => void;
     toggleArticleTranslation: (article: Article) => void;
@@ -145,7 +155,7 @@ describe("article AI state", () => {
           return createElement(
             "output",
             { "data-testid": "translation-state" },
-            `${bootstrap.settings.translationLanguage}:${state?.loading ? "loading" : state?.visible ? `${state.translation?.language}:${state.translation?.sourceKind}` : "hidden"}`,
+            `${bootstrap.settings.translationLanguage}:${state?.kind === "translating" ? "loading" : state?.kind === "translated" ? `${state.translation.language}:${state.translation.sourceKind}` : "hidden"}`,
           );
         }
 
@@ -225,4 +235,159 @@ describe("article AI state", () => {
       }
     },
   );
+});
+
+function summary(promptId: string | null, sourceKind: AiArticleSourceKind): ArticleAiSummary {
+  return {
+    text: `${promptId ?? "summary"} from ${sourceKind}`,
+    promptId,
+    provider: "openai",
+    model: "test-model",
+    sourceKind,
+    generatedAt: "2026-11-04T00:00:00.000Z",
+    usage: { inputTokens: null, outputTokens: null },
+    grounding: null,
+  };
+}
+
+function translation(language: string): ArticleAiTranslation {
+  return {
+    html: `<p>${language}</p>`,
+    language,
+    provider: "openai",
+    model: "test-model",
+    sourceKind: "feed",
+    generatedAt: "2026-11-04T00:00:00.000Z",
+    usage: { inputTokens: null, outputTokens: null },
+  };
+}
+
+describe("article summary panel", () => {
+  it("keeps the current result readable while the same action updates it", () => {
+    const ready = settleSummary(startSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, true), null, {
+      summary: summary(null, "feed"),
+    });
+    expect(startSummary(ready, null, true)).toEqual({
+      kind: "loading",
+      promptId: null,
+      summary: summary(null, "feed"),
+    });
+    expect(startSummary(ready, "bullets", true)).toEqual({
+      kind: "loading",
+      promptId: "bullets",
+      summary: null,
+    });
+  });
+
+  it("asks for setup instead of loading when no AI provider is configured", () => {
+    expect(startSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, false)).toEqual({
+      kind: "setup-needed",
+      promptId: null,
+      summary: null,
+    });
+  });
+
+  it("ignores a response for an action the reader switched away from", () => {
+    const switched = startSummary(
+      startSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, true),
+      "bullets",
+      true,
+    );
+    expect(settleSummary(switched, null, { summary: summary(null, "feed") })).toBe(switched);
+    expect(settleSummary(switched, null, { error: "Too slow" })).toBe(switched);
+  });
+
+  it("ignores a response that arrives after the panel was reset", () => {
+    expect(
+      settleSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, { summary: summary(null, "feed") }),
+    ).toBe(EMPTY_ARTICLE_SUMMARY_STATE);
+  });
+
+  it("keeps the previous result next to the error when an update fails", () => {
+    const updating = startSummary(
+      settleSummary(startSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, true), null, {
+        summary: summary(null, "feed"),
+      }),
+      null,
+      true,
+    );
+    expect(settleSummary(updating, null, { error: "Rate limited" })).toEqual({
+      kind: "failed",
+      promptId: null,
+      summary: summary(null, "feed"),
+      error: "Rate limited",
+    });
+  });
+
+  it("remembers a failure after the panel closes so the action can offer a retry", () => {
+    const failed = settleSummary(startSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, true), null, {
+      error: "Rate limited",
+    });
+    expect(closeSummary(failed)).toMatchObject({ kind: "closed", failed: true });
+    expect(closeSummary(startSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, false))).toMatchObject({
+      kind: "closed",
+      failed: false,
+    });
+  });
+
+  it("marks a summary of the feed text out of date once the full article loads", () => {
+    const fromFeed = settleSummary(startSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, true), null, {
+      summary: summary(null, "feed"),
+    });
+    expect(dropFeedTextSummary(fromFeed)).toEqual({
+      kind: "outdated",
+      promptId: null,
+      summary: null,
+    });
+    expect(dropFeedTextSummary(startSummary(fromFeed, null, true))).toEqual({
+      kind: "loading",
+      promptId: null,
+      summary: null,
+    });
+    const fromFullText = settleSummary(
+      startSummary(EMPTY_ARTICLE_SUMMARY_STATE, null, true),
+      null,
+      { summary: summary(null, "full") },
+    );
+    expect(dropFeedTextSummary(fromFullText)).toBe(fromFullText);
+  });
+});
+
+describe("article translation panel", () => {
+  const translating = { kind: "translating", translation: null } as const;
+
+  it("shows a finished translation only when it still matches the article and language", () => {
+    expect(
+      settleTranslation(translating, { translation: translation("German"), current: true }),
+    ).toEqual({ kind: "translated", translation: translation("German") });
+    expect(
+      settleTranslation(translating, { translation: translation("German"), current: false }),
+    ).toEqual({ kind: "original", translation: translation("German") });
+  });
+
+  it("ignores a translation that arrives after the reader went back to the original", () => {
+    const original = showOriginal(translating);
+    expect(original).toEqual(EMPTY_ARTICLE_TRANSLATION_STATE);
+    expect(settleTranslation(original, { translation: translation("German"), current: true })).toBe(
+      original,
+    );
+  });
+
+  it("asks for setup when the AI provider is missing and keeps the earlier translation", () => {
+    const withEarlier = { kind: "translating", translation: translation("German") } as const;
+    expect(settleTranslation(withEarlier, { error: "No key", configurationMissing: true })).toEqual(
+      { kind: "setup-needed", translation: translation("German") },
+    );
+    expect(
+      settleTranslation(withEarlier, { error: "Rate limited", configurationMissing: false }),
+    ).toEqual({ kind: "failed", translation: translation("German"), error: "Rate limited" });
+  });
+
+  it("keeps a translation error on screen when the article text changes", () => {
+    const failed = settleTranslation(translating, {
+      error: "Rate limited",
+      configurationMissing: false,
+    });
+    expect(showOriginal(failed)).toBe(failed);
+  });
 });

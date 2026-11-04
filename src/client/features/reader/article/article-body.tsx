@@ -26,7 +26,7 @@ export function ArticleBody({
   const translation = shouldShowArticleDescription(article, showYouTubeDescriptions)
     ? translationState.translation
     : null;
-  const translationVisible = Boolean(translationState.visible && translation);
+  const translationVisible = translationState.kind === "translated" && translation !== null;
   const contentView = articleContentView(article, fullContentVisible);
   const inlineXVideos = contentView !== "full" && !translationVisible;
 

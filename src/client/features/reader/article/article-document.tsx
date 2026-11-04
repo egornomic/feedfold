@@ -135,7 +135,7 @@ export function ArticleDocument({
           {contentPlaceholder ?? (
             <LayoutGroup>
               <AnimatePresence initial={false} custom={{ reduced }}>
-                {summaryState.visible ? (
+                {summaryState.kind !== "closed" ? (
                   <ArticleSummaryPanel
                     article={article}
                     state={summaryState}

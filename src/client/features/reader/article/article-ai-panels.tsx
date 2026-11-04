@@ -24,8 +24,8 @@ export function ArticleSummaryPanel({
 }) {
   const present = useIsPresent();
   const reduced = Boolean(useReducedMotion());
-  const displayedState = state;
   const summary = state.summary;
+  const loading = state.kind === "loading";
   const titleId = `article-${article.id}-ai-summary-title`;
   const customPromptName = state.promptId
     ? customPrompts.find((prompt) => prompt.id === state.promptId)?.name
@@ -71,7 +71,7 @@ export function ArticleSummaryPanel({
       aria-labelledby={titleId}
       aria-hidden={!present}
       aria-live="polite"
-      aria-busy={displayedState.loading}
+      aria-busy={loading}
     >
       <div className="article-ai-summary-heading">
         <div>
@@ -82,20 +82,20 @@ export function ArticleSummaryPanel({
           <button
             className="quiet-button article-summary-regenerate"
             type="button"
-            disabled={displayedState.loading}
+            disabled={loading}
             onClick={() => onRegenerate(article)}
           >
-            {displayedState.loading ? (
+            {loading ? (
               <LoaderCircle className="spin" aria-hidden="true" size={14} />
             ) : (
               <RefreshCw aria-hidden="true" size={14} />
             )}
-            {displayedState.loading ? copy.updating : copy.update}
+            {loading ? copy.updating : copy.update}
           </button>
         ) : null}
       </div>
 
-      {displayedState.loading && !summary ? (
+      {loading && !summary ? (
         <div className="article-summary-loading" role="status">
           <span>{copy.generating}</span>
           <div className="article-summary-skeleton" aria-hidden="true">
@@ -104,7 +104,7 @@ export function ArticleSummaryPanel({
             <span />
           </div>
         </div>
-      ) : displayedState.configurationMissing ? (
+      ) : state.kind === "setup-needed" ? (
         <div className="article-summary-message">
           <strong>Set up summaries first</strong>
           <p>In Settings, choose an AI provider and save its API key.</p>
@@ -118,7 +118,7 @@ export function ArticleSummaryPanel({
             <AiMarkdown text={summary.text} grounding={summary.grounding} />
           </Suspense>
         </div>
-      ) : !displayedState.error ? (
+      ) : state.kind === "outdated" ? (
         <div className="article-summary-message">
           <strong>{copy.outdated}</strong>
           <p>{copy.outdatedHint}</p>
@@ -129,18 +129,17 @@ export function ArticleSummaryPanel({
         </div>
       ) : null}
 
-      {displayedState.error ? (
+      {state.kind === "failed" ? (
         <div className="article-summary-error" role="alert">
           <AlertTriangle aria-hidden="true" size={16} />
           <div>
             <strong>{copy.failed}</strong>
-            <p>{displayedState.error}</p>
+            <p>{state.error}</p>
           </div>
           {!summary ? (
             <button
               className="secondary-button"
               type="button"
-              disabled={displayedState.loading}
               onClick={() => onRegenerate(article)}
             >
               <RefreshCw aria-hidden="true" size={14} />
@@ -162,8 +161,8 @@ export function ArticleTranslationNotice({
   language: string;
   onOpenSettings: () => void;
 }) {
-  if (state.visible || (!state.loading && !state.configurationMissing && !state.error)) return null;
-  if (state.loading) {
+  if (state.kind === "original" || state.kind === "translated") return null;
+  if (state.kind === "translating") {
     return (
       <div className="article-extraction-state article-translation-state" role="status">
         <LoaderCircle className="spin" aria-hidden="true" size={18} />
@@ -174,7 +173,7 @@ export function ArticleTranslationNotice({
       </div>
     );
   }
-  if (state.configurationMissing) {
+  if (state.kind === "setup-needed") {
     return (
       <div className="article-extraction-state article-translation-state" role="note">
         <Languages aria-hidden="true" size={18} />
