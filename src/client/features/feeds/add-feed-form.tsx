@@ -97,6 +97,20 @@ const ADD_FEED_INPUTS: Record<
   },
 };
 
+type AddFeedStage =
+  | { kind: "source" }
+  | { kind: "address"; sourceType: AddFeedSourceType }
+  | { kind: "finding"; sourceType: AddFeedSourceType }
+  | { kind: "analyzing"; sourceType: AddFeedSourceType }
+  | { kind: "published-review"; sourceType: AddFeedSourceType; preview: FeedPreview }
+  | { kind: "web-offer"; sourceType: AddFeedSourceType; webPage: WebPageFeedDiscovery }
+  | {
+      kind: "web-review";
+      sourceType: AddFeedSourceType;
+      analysis: WebFeedAnalysis;
+      selectedCandidateId: string | null;
+    };
+
 function FeedConfirmationSettings({
   title,
   folderId,
@@ -246,24 +260,18 @@ export function AddFeedForm({
   onSaved: (feed: Feed) => Promise<void> | void;
 }) {
   const { run: mutateRequest } = useRequestMutation();
-  const [sourceType, setSourceType] = useState<AddFeedSourceType | null>(
-    initialSourceType ?? (initialSourceUrl ? "rss" : null),
-  );
+  const [stage, setStage] = useState<AddFeedStage>(() => {
+    const sourceType = initialSourceType ?? (initialSourceUrl ? "rss" : null);
+    return sourceType ? { kind: "address", sourceType } : { kind: "source" };
+  });
   const [sourceInputs, setSourceInputs] = useState<Record<AddFeedSourceType, string>>({
     rss: initialSourceUrl,
     youtube: "",
     telegram: "",
     x: "",
   });
-  const [previewSourceType, setPreviewSourceType] = useState<AddFeedSourceType>("rss");
-  const [preview, setPreview] = useState<FeedPreview | null>(null);
-  const [webPage, setWebPage] = useState<WebPageFeedDiscovery | null>(null);
-  const [webAnalysis, setWebAnalysis] = useState<WebFeedAnalysis | null>(null);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [folderId, setFolderId] = useState<number | null>(null);
-  const [discovering, setDiscovering] = useState(false);
-  const [analyzingWebPage, setAnalyzingWebPage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -272,38 +280,37 @@ export function AddFeedForm({
   const flowRef = useRef<HTMLElement>(null);
   const previewFocusFrame = useRef<number | null>(null);
   const autoDiscoveryStarted = useRef(false);
+  const sourceType = stage.kind === "source" ? null : stage.sourceType;
   const sourceInput = sourceType ? sourceInputs[sourceType] : "";
   const inputConfig = sourceType ? ADD_FEED_INPUTS[sourceType] : null;
   const sourceOption = sourceType
     ? ADD_FEED_SOURCE_OPTIONS.find((option) => option.value === sourceType)
     : null;
   const SelectedSourceIcon = sourceOption?.icon ?? Rss;
-  const SourcePreviewIcon =
-    ADD_FEED_SOURCE_OPTIONS.find((option) => option.value === previewSourceType)?.icon ?? Rss;
   const selectedCandidate =
-    webAnalysis?.candidates.find((candidate) => candidate.id === selectedCandidateId) ?? null;
-  const currentSourceUrl = preview?.feedUrl ?? webAnalysis?.pageUrl ?? webPage?.pageUrl;
+    stage.kind === "web-review"
+      ? (stage.analysis.candidates.find(
+          (candidate) => candidate.id === stage.selectedCandidateId,
+        ) ?? null)
+      : null;
+  const currentSourceUrl =
+    stage.kind === "published-review"
+      ? stage.preview.feedUrl
+      : stage.kind === "web-review"
+        ? stage.analysis.pageUrl
+        : stage.kind === "web-offer"
+          ? stage.webPage.pageUrl
+          : undefined;
   const existingFeed = currentSourceUrl
     ? feeds.find((feed) => feed.feedUrl === currentSourceUrl)
     : undefined;
-  const stageKey =
-    sourceType === null
-      ? "source"
-      : discovering || analyzingWebPage
-        ? "loading"
-        : preview
-          ? "published-review"
-          : webAnalysis
-            ? "web-review"
-            : webPage
-              ? "web-offer"
-              : "address";
+  const loading = stage.kind === "finding" || stage.kind === "analyzing";
 
   useLayoutEffect(() => {
-    void stageKey;
+    void stage.kind;
     const scrollContainer = flowRef.current?.closest<HTMLElement>(".management-page");
     if (scrollContainer) scrollContainer.scrollTop = 0;
-  }, [stageKey]);
+  }, [stage.kind]);
 
   useEffect(
     () => () => {
@@ -314,31 +321,20 @@ export function AddFeedForm({
     [],
   );
 
-  const clearDiscoveryResult = () => {
-    setPreview(null);
-    setWebPage(null);
-    setWebAnalysis(null);
-    setSelectedCandidateId(null);
-    setTitle("");
+  const editAddress = (addressSourceType: AddFeedSourceType) => {
+    setStage({ kind: "address", sourceType: addressSourceType });
     setError(null);
+    window.requestAnimationFrame(() => addressInputRef.current?.focus());
   };
 
   const selectSourceType = (nextSourceType: AddFeedSourceType) => {
-    if (nextSourceType === sourceType) return;
-    setSourceType(nextSourceType);
-    clearDiscoveryResult();
-    window.requestAnimationFrame(() => addressInputRef.current?.focus());
+    if (nextSourceType !== sourceType) editAddress(nextSourceType);
   };
 
   const chooseAnotherSource = () => {
-    clearDiscoveryResult();
-    setSourceType(null);
+    setStage({ kind: "source" });
+    setError(null);
     window.requestAnimationFrame(() => sourceHeadingRef.current?.focus());
-  };
-
-  const editAddress = () => {
-    clearDiscoveryResult();
-    window.requestAnimationFrame(() => addressInputRef.current?.focus());
   };
 
   const discover = useCallback(
@@ -347,20 +343,19 @@ export function AddFeedForm({
         window.cancelAnimationFrame(previewFocusFrame.current);
         previewFocusFrame.current = null;
       }
-      setDiscovering(true);
+      setStage({ kind: "finding", sourceType: requestedSourceType });
       setError(null);
-      setPreview(null);
-      setWebPage(null);
-      setWebAnalysis(null);
-      setSelectedCandidateId(null);
       try {
         const result = await mutateRequest(() => api.discoverFeed(url));
         if (result.kind === "published") {
-          setPreview(result.preview);
-          setPreviewSourceType(requestedSourceType);
+          setStage({
+            kind: "published-review",
+            sourceType: requestedSourceType,
+            preview: result.preview,
+          });
           setTitle(result.preview.title);
         } else {
-          setWebPage(result);
+          setStage({ kind: "web-offer", sourceType: requestedSourceType, webPage: result });
           setTitle(result.title);
         }
         previewFocusFrame.current = window.requestAnimationFrame(() => {
@@ -368,9 +363,8 @@ export function AddFeedForm({
           previewHeadingRef.current?.focus({ preventScroll: true });
         });
       } catch (error) {
+        setStage({ kind: "address", sourceType: requestedSourceType });
         setError(errorMessage(error));
-      } finally {
-        setDiscovering(false);
       }
     },
     [mutateRequest],
@@ -382,51 +376,55 @@ export function AddFeedForm({
     void discover(feedSourceUrl("rss", initialSourceUrl), "rss");
   }, [discover, initialSourceUrl]);
 
-  const analyzeWebPage = async (url: string) => {
-    setAnalyzingWebPage(true);
+  const analyzeWebPage = async (pageSourceType: AddFeedSourceType, url: string) => {
+    setStage({ kind: "analyzing", sourceType: pageSourceType });
     setError(null);
-    setPreview(null);
-    setWebPage(null);
-    setWebAnalysis(null);
-    setSelectedCandidateId(null);
     try {
       const result = await mutateRequest(() => api.analyzeWebPage(url));
-      setWebAnalysis(result);
-      setSelectedCandidateId(result.selectedCandidateId);
+      setStage({
+        kind: "web-review",
+        sourceType: pageSourceType,
+        analysis: result,
+        selectedCandidateId: result.selectedCandidateId,
+      });
       setTitle(result.title);
     } catch (caught) {
+      setStage({ kind: "address", sourceType: pageSourceType });
       setError(errorMessage(caught));
-    } finally {
-      setAnalyzingWebPage(false);
     }
   };
 
+  const selectCandidate = (candidateId: string | null) =>
+    setStage((current) =>
+      current.kind === "web-review" ? { ...current, selectedCandidateId: candidateId } : current,
+    );
+
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if ((!preview && !selectedCandidate) || existingFeed) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const feed = preview
-        ? await mutations.createFeed({
-            title: title.trim() || preview.title,
-            feedUrl: preview.feedUrl,
-            siteUrl: preview.siteUrl,
+    const input =
+      stage.kind === "published-review"
+        ? {
+            title: title.trim() || stage.preview.title,
+            feedUrl: stage.preview.feedUrl,
+            siteUrl: stage.preview.siteUrl,
             folderId,
-            sourceKind: "published",
-          })
-        : selectedCandidate
-          ? await mutations.createFeed({
-              title: title.trim() || webAnalysis?.title || selectedCandidate.config.pageUrl,
+            sourceKind: "published" as const,
+          }
+        : stage.kind === "web-review" && selectedCandidate
+          ? {
+              title: title.trim() || stage.analysis.title || selectedCandidate.config.pageUrl,
               feedUrl: selectedCandidate.config.pageUrl,
               siteUrl: selectedCandidate.config.pageUrl,
               folderId,
-              sourceKind: "web",
+              sourceKind: "web" as const,
               webConfig: selectedCandidate.config,
-            })
+            }
           : null;
-      if (!feed) return;
-      await onSaved(feed);
+    if (!input || existingFeed) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSaved(await mutations.createFeed(input));
     } catch (error) {
       setError(`Could not add this feed. ${errorMessage(error)}`);
     } finally {
@@ -435,12 +433,8 @@ export function AddFeedForm({
   };
 
   return (
-    <section
-      ref={flowRef}
-      className="add-feed-flow"
-      aria-busy={discovering || analyzingWebPage || saving}
-    >
-      {sourceType === null ? (
+    <section ref={flowRef} className="add-feed-flow" aria-busy={loading || saving}>
+      {stage.kind === "source" ? (
         <div className="add-feed-stage add-feed-source-stage">
           <header className="add-feed-stage-heading">
             <span className="add-feed-step">Step 1 of 3 · Choose a source</span>
@@ -479,13 +473,15 @@ export function AddFeedForm({
             })}
           </div>
         </div>
-      ) : discovering || analyzingWebPage ? (
+      ) : loading ? (
         <div className="add-feed-stage add-feed-loading-stage" role="status">
           <LoaderCircle className="spin" aria-hidden="true" size={24} />
           <span className="add-feed-step">Step 2 of 3 · Find the source</span>
-          <h2>{analyzingWebPage ? "Finding repeatable entries" : inputConfig?.loading}</h2>
+          <h2>
+            {stage.kind === "analyzing" ? "Finding repeatable entries" : inputConfig?.loading}
+          </h2>
           <p>
-            {analyzingWebPage
+            {stage.kind === "analyzing"
               ? "Feedfold is loading the page and looking for groups of links that repeat."
               : sourceType === "youtube"
                 ? "Loading the channel's feed and its latest videos."
@@ -501,7 +497,7 @@ export function AddFeedForm({
             <div className="skeleton-line short" />
           </div>
         </div>
-      ) : preview ? (
+      ) : stage.kind === "published-review" ? (
         <form
           className="add-feed-stage feed-confirmation-form"
           onSubmit={(event) => void save(event)}
@@ -514,7 +510,11 @@ export function AddFeedForm({
               </h2>
               <p>Check the recent entries, then choose its name and folder.</p>
             </div>
-            <button className="quiet-button" type="button" onClick={editAddress}>
+            <button
+              className="quiet-button"
+              type="button"
+              onClick={() => editAddress(stage.sourceType)}
+            >
               <ArrowLeft aria-hidden="true" size={15} />
               Edit address
             </button>
@@ -530,21 +530,21 @@ export function AddFeedForm({
           <section className="feed-preview" aria-labelledby="feed-preview-heading">
             <div className="feed-preview-header">
               <div className="feed-preview-mark" aria-hidden="true">
-                <SourcePreviewIcon size={20} />
+                <SelectedSourceIcon size={20} />
               </div>
               <div className="feed-preview-title-copy">
-                <h3 id="feed-preview-heading">{preview.title}</h3>
+                <h3 id="feed-preview-heading">{stage.preview.title}</h3>
                 <div className="feed-preview-links">
-                  {preview.siteUrl ? (
-                    <a href={preview.siteUrl} target="_blank" rel="noreferrer">
-                      {feedHost(preview.siteUrl)}
+                  {stage.preview.siteUrl ? (
+                    <a href={stage.preview.siteUrl} target="_blank" rel="noreferrer">
+                      {feedHost(stage.preview.siteUrl)}
                       <ExternalLink aria-hidden="true" size={12} />
                     </a>
                   ) : (
-                    <span>{feedHost(preview.feedUrl)}</span>
+                    <span>{feedHost(stage.preview.feedUrl)}</span>
                   )}
                   <span aria-hidden="true">·</span>
-                  <a href={preview.feedUrl} target="_blank" rel="noreferrer">
+                  <a href={stage.preview.feedUrl} target="_blank" rel="noreferrer">
                     Open feed source
                     <ExternalLink aria-hidden="true" size={12} />
                   </a>
@@ -552,10 +552,13 @@ export function AddFeedForm({
               </div>
             </div>
 
-            <FeedEntriesPreview articles={preview.articles} totalEntries={preview.totalArticles} />
+            <FeedEntriesPreview
+              articles={stage.preview.articles}
+              totalEntries={stage.preview.totalArticles}
+            />
 
             <FeedConfirmationBar
-              sourceType={previewSourceType}
+              sourceType={stage.sourceType}
               title={title}
               folderId={folderId}
               folders={folders}
@@ -568,7 +571,7 @@ export function AddFeedForm({
             />
           </section>
         </form>
-      ) : webAnalysis ? (
+      ) : stage.kind === "web-review" ? (
         <form
           className="add-feed-stage web-feed-confirmation-form"
           onSubmit={(event) => void save(event)}
@@ -581,12 +584,12 @@ export function AddFeedForm({
             </div>
           ) : null}
           <WebFeedSetup
-            analysis={webAnalysis}
-            selectedCandidateId={selectedCandidateId}
+            analysis={stage.analysis}
+            selectedCandidateId={stage.selectedCandidateId}
             disabled={saving}
             busyLabel="Adding web feed…"
-            onSelect={setSelectedCandidateId}
-            onBack={editAddress}
+            onSelect={selectCandidate}
+            onBack={() => editAddress(stage.sourceType)}
             confirmation={
               selectedCandidate ? (
                 <>
@@ -613,7 +616,7 @@ export function AddFeedForm({
             }
           />
         </form>
-      ) : webPage ? (
+      ) : stage.kind === "web-offer" ? (
         <div className="add-feed-stage">
           <header className="add-feed-stage-heading">
             <span className="add-feed-step">Step 2 of 3 · Find the source</span>
@@ -633,13 +636,17 @@ export function AddFeedForm({
               </p>
             </div>
             <div className="add-feed-fallback-actions">
-              <button className="secondary-button" type="button" onClick={editAddress}>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => editAddress(stage.sourceType)}
+              >
                 Try another address
               </button>
               <button
                 className="primary-button"
                 type="button"
-                onClick={() => void analyzeWebPage(webPage.pageUrl)}
+                onClick={() => void analyzeWebPage(stage.sourceType, stage.webPage.pageUrl)}
               >
                 <Globe2 aria-hidden="true" size={16} />
                 Set up web feed
@@ -647,7 +654,7 @@ export function AddFeedForm({
             </div>
           </div>
         </div>
-      ) : inputConfig && sourceOption ? (
+      ) : stage.kind === "address" && inputConfig && sourceOption ? (
         <div className="add-feed-stage add-feed-address-stage">
           <header className="add-feed-stage-heading">
             <span className="add-feed-step">Step 2 of 3 · Enter the source</span>
@@ -673,8 +680,8 @@ export function AddFeedForm({
             onSubmit={(event) => {
               event.preventDefault();
               try {
-                const url = feedSourceUrl(sourceType, sourceInput);
-                void discover(url, sourceType);
+                const url = feedSourceUrl(stage.sourceType, sourceInput);
+                void discover(url, stage.sourceType);
               } catch (caught) {
                 setError(errorMessage(caught));
               }
@@ -691,7 +698,7 @@ export function AddFeedForm({
                 <input
                   ref={addressInputRef}
                   type="text"
-                  inputMode={sourceType === "rss" ? "url" : "text"}
+                  inputMode={stage.sourceType === "rss" ? "url" : "text"}
                   required
                   value={sourceInput}
                   pattern={inputConfig.pattern}
@@ -705,9 +712,9 @@ export function AddFeedForm({
                   onChange={(event) => {
                     setSourceInputs((current) => ({
                       ...current,
-                      [sourceType]: event.target.value,
+                      [stage.sourceType]: event.target.value,
                     }));
-                    clearDiscoveryResult();
+                    setError(null);
                   }}
                 />
               </span>
