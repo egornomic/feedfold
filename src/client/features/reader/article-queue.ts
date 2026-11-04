@@ -63,6 +63,13 @@ export interface ArticleQueueController {
   retryRoutedArticle: () => void;
 }
 
+// An article opened by link loads before its list; the list then loads around that article
+// until the reader returns to it.
+type ListAnchor =
+  | { phase: "awaiting-article"; articleId: number }
+  | { phase: "around-article"; articleId: number }
+  | { phase: "unanchored" };
+
 interface ArticleQueueOptions {
   route: AppRouteController;
   mutationRevision: number;
@@ -125,8 +132,12 @@ export function useArticleQueue({
   const [queryRevision, setQueryRevision] = useState(0);
   const fullContentLoadedIds = useRef(new Set<number>());
   const contextReturn = useRef<(ContextArticleReturn & { route: ReaderRoute }) | null>(null);
-  const [anchor, setAnchor] = useState<number | null>(() => route.routedArticleId);
-  const [anchorReady, setAnchorReady] = useState(route.routedArticleId === null);
+  const [listAnchor, setListAnchor] = useState<ListAnchor>(() =>
+    route.routedArticleId === null
+      ? { phase: "unanchored" }
+      : { phase: "awaiting-article", articleId: route.routedArticleId },
+  );
+  const anchor = listAnchor.phase === "unanchored" ? null : listAnchor.articleId;
   const applied = useRef<{
     key: string;
     data: unknown;
@@ -149,7 +160,11 @@ export function useArticleQueue({
   const requestKey = JSON.stringify(options.queryKey);
   const pages = useInfiniteQuery({
     ...options,
-    enabled: enabled && anchorReady && route.view === "reader" && !changingCounters,
+    enabled:
+      enabled &&
+      listAnchor.phase !== "awaiting-article" &&
+      route.view === "reader" &&
+      !changingCounters,
   });
   const latestRequestKey = useRef(requestKey);
   latestRequestKey.current = requestKey;
@@ -172,7 +187,7 @@ export function useArticleQueue({
         : [article, ...current],
     );
     setActiveArticleId(article.id);
-    if (!anchorReady) {
+    if (listAnchor.phase === "awaiting-article") {
       const context = route.articleContext();
       const surrounding: ReaderRoute = context?.route ?? {
         kind: "reader",
@@ -183,12 +198,12 @@ export function useArticleQueue({
       };
       route.setArticleContext(surrounding, context?.articleIndex);
       setLoadedReaderRoute(surrounding);
-      setAnchorReady(true);
+      setListAnchor({ phase: "around-article", articleId: listAnchor.articleId });
     }
   }, [
     detail.data,
     route.routedArticleId,
-    anchorReady,
+    listAnchor,
     changingCounters,
     route.articleContext,
     route.setArticleContext,
@@ -201,7 +216,7 @@ export function useArticleQueue({
     const returning = previousRouteKind.current === "article" && route.route.kind === "reader";
     previousRouteKind.current = route.route.kind;
     if (!returning) return;
-    setAnchor(null);
+    setListAnchor({ phase: "unanchored" });
     setActiveArticleId(null);
     setExpandedKeyboardTargetId(null);
     const target = contextReturn.current;
