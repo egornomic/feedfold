@@ -19,7 +19,6 @@ function feed(id: number, folderId: number | null): Feed {
     siteUrl: "https://example.com",
     folderId,
     sourceKind: "published",
-    healthStatus: "healthy",
     lastError: null,
     lastErrorKind: null,
     lastMatchCount: null,

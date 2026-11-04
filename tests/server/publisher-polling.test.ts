@@ -93,7 +93,7 @@ describe("publisher-aware polling over HTTP", () => {
     await app.check([feed.id]);
     expect(app.database.feeds.getFeed(1, feed.id)).toMatchObject({
       totalCount: 2,
-      healthStatus: "healthy",
+      lastErrorKind: null,
       pollIntervalMinutes: 10,
     });
     const next = Date.parse(app.database.feeds.getFeed(1, feed.id)?.nextPollAt as string);
@@ -105,7 +105,7 @@ describe("publisher-aware polling over HTTP", () => {
     expect(origin.requests).toEqual(["/feed.xml", "/feed.xml"]);
     expect(app.database.feeds.getFeed(1, feed.id)).toMatchObject({
       totalCount: 2,
-      healthStatus: "healthy",
+      lastErrorKind: null,
     });
   });
 
@@ -410,7 +410,7 @@ describe("publisher policy at the actual request destination", () => {
     expect(secondary.requests).toHaveLength(2);
     expect(app.database.feeds.getFeed(1, first.id)).toMatchObject({
       totalCount: 1,
-      healthStatus: "healthy",
+      lastErrorKind: null,
       lastHttpStatus: 200,
     });
     at(start + 239 * minute);
@@ -524,7 +524,7 @@ describe("publisher policy at the actual request destination", () => {
       expect(destination.requests).toEqual(["/posts", "/limited", "/posts"]);
       expect(app.database.feeds.getFeed(1, feed.id)).toMatchObject({
         totalCount: 3,
-        healthStatus: "healthy",
+        lastErrorKind: null,
       });
     },
   );
@@ -622,7 +622,7 @@ describe("publisher policy at the actual request destination", () => {
     expect(primary.requests).toHaveLength(2);
     expect(fallback.requests).toHaveLength(1);
     expect(available.requests).toHaveLength(2);
-    expect(app.database.feeds.getFeed(1, two.id)?.healthStatus).toBe("healthy");
+    expect(app.database.feeds.getFeed(1, two.id)?.lastErrorKind).toBeNull();
     await app.restart();
     await app.check([one.id]);
     expect(fallback.requests).toHaveLength(1);

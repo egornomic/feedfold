@@ -193,7 +193,6 @@ describe("web feed persistence", () => {
         folderId: folder.id,
         sourceKind: "web",
         pollIntervalMinutes: 180,
-        healthStatus: "healthy",
         lastErrorKind: null,
         lastMatchCount: 3,
         totalCount: 2,
@@ -291,7 +290,6 @@ describe("web feed persistence", () => {
         httpStatus: 200,
         error: "Stale selection failed",
         errorKind: "selection_broken",
-        healthStatus: "needs_attention",
         retryMinutes: 20,
         expectedSelectionRevision: 1,
       });
@@ -308,7 +306,6 @@ describe("web feed persistence", () => {
         expectedSelectionRevision: 1,
       });
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
-        healthStatus: "healthy",
         lastErrorKind: null,
         lastMatchCount: 2,
         totalCount: 3,
@@ -324,11 +321,9 @@ describe("web feed persistence", () => {
         httpStatus: null,
         error: "The page could not be reached",
         errorKind: "network",
-        healthStatus: "failing",
         retryMinutes: 20,
       });
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
-        healthStatus: "failing",
         lastErrorKind: "network",
         lastMatchCount: 2,
         totalCount: 3,
@@ -336,18 +331,15 @@ describe("web feed persistence", () => {
       database.feeds.markSourceRefreshing(database.feeds.sourceIdForFeed(feed.id));
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
         refreshing: true,
-        healthStatus: "failing",
         lastErrorKind: "network",
       });
       failFeedRefresh(database.feeds, feed.id, {
         httpStatus: 200,
         error: "The saved page selection no longer matches meaningful items",
         errorKind: "selection_broken",
-        healthStatus: "needs_attention",
         retryMinutes: 20,
       });
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
-        healthStatus: "needs_attention",
         lastErrorKind: "selection_broken",
         lastMatchCount: 0,
         totalCount: 3,
@@ -361,7 +353,6 @@ describe("web feed persistence", () => {
         webMatchCount: 2,
       });
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
-        healthStatus: "healthy",
         lastErrorKind: null,
         lastError: null,
         lastMatchCount: 2,
@@ -466,7 +457,6 @@ describe("web feed persistence", () => {
       });
       expect(published).toMatchObject({
         sourceKind: "published",
-        healthStatus: "healthy",
         lastErrorKind: null,
         lastMatchCount: null,
       });

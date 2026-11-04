@@ -215,7 +215,6 @@ describe("X RSS instances", () => {
     await refresh.waitForIdle();
 
     expect(database.feeds.getFeed(1, feed.id)).toMatchObject({
-      healthStatus: "failing",
       lastHttpStatus: 403,
       lastErrorKind: "access_blocked",
       totalCount: 0,
@@ -276,7 +275,7 @@ describe("X RSS instances", () => {
     expect(database.feeds.getFeed(1, feed.id)).toMatchObject({
       feedUrl: FEED_URL,
       totalCount: 2,
-      healthStatus: "healthy",
+      lastErrorKind: null,
     });
     expect(database.articles.getArticle(1, article.id)).toMatchObject({
       isRead: true,
@@ -290,7 +289,7 @@ describe("X RSS instances", () => {
     expect(database.feeds.getFeed(1, feed.id)).toMatchObject({
       feedUrl: FEED_URL,
       totalCount: 3,
-      healthStatus: "healthy",
+      lastErrorKind: null,
     });
     expect(database.articles.getArticle(1, article.id)).toMatchObject({
       isRead: true,

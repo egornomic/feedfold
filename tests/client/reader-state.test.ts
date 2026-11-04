@@ -40,7 +40,6 @@ function feed(id: number, folderId: number | null, title: string): Feed {
     feedUrl: `https://example.test/${id}.xml`,
     siteUrl: null,
     sourceKind: "published",
-    healthStatus: "healthy",
     lastErrorKind: null,
     lastMatchCount: null,
     createdAt: "2026-07-28T12:00:00.000Z",

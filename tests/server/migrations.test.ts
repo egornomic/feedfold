@@ -1019,14 +1019,12 @@ Return only the summary in plain text.`,
         {
           title: "Migration feed",
           sourceKind: "published",
-          healthStatus: "failing",
           lastErrorKind: "http",
           lastMatchCount: null,
         },
         {
           title: "person / @person",
           sourceKind: "published",
-          healthStatus: "healthy",
           lastErrorKind: null,
           lastMatchCount: null,
         },
@@ -1186,7 +1184,7 @@ Return only the summary in plain text.`,
           )
           .pluck()
           .all(),
-      ).toEqual(["health_status", "last_error_kind", "poll_interval_minutes", "source_kind"]);
+      ).toEqual(["last_error_kind", "poll_interval_minutes", "source_kind"]);
       expect(
         database.connection
           .prepare(

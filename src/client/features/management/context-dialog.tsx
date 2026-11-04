@@ -34,6 +34,7 @@ import { useRequestMutation } from "../../api/use-request-mutation";
 import { Modal, useDialog } from "../../ui/dialog";
 import { DropdownSelect } from "../../ui/dropdown";
 import { formatNumber } from "../../ui/number-format";
+import { FEED_STATUS_LABELS, visibleFeedStatus } from "../feeds/feed-filters";
 import type { ManagementRequest } from "../feeds/feed-management";
 import { folderPathLabel } from "../feeds/folder-hierarchy";
 import type { ReaderDataMutations } from "../reader/reader-data";
@@ -162,30 +163,27 @@ function FeedSettingsPanel({
     }
   };
 
-  const status =
-    details.healthStatus === "needs_attention"
-      ? "Selection needs repair"
-      : details.healthStatus === "failing"
-        ? "Refresh failed"
-        : details.paused
-          ? "Paused"
-          : details.refreshing
-            ? "Refreshing"
-            : "Healthy";
+  const status = visibleFeedStatus(details);
+  const statusLabel =
+    status !== "needs_attention"
+      ? FEED_STATUS_LABELS[status]
+      : details.lastErrorKind === "selection_broken"
+        ? "Selection needs repair"
+        : "Refresh failed";
 
   return (
     <>
       <div className="management-dialog-body feed-settings-body" aria-busy={loading}>
         <div className="feed-settings-summary">
           <span
-            className={`feed-settings-status${details.healthStatus !== "healthy" ? " has-error" : ""}`}
+            className={`feed-settings-status${status === "needs_attention" ? " has-error" : ""}`}
           >
-            {details.healthStatus !== "healthy" ? (
+            {status === "needs_attention" ? (
               <AlertTriangle aria-hidden="true" size={15} />
             ) : (
               <CheckCircle2 aria-hidden="true" size={15} />
             )}
-            {status}
+            {statusLabel}
           </span>
           <span>
             <strong>{formatNumber(details.totalCount)}</strong>{" "}

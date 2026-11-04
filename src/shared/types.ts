@@ -22,7 +22,6 @@ export type FolderSortDirection = "newest" | "oldest";
 export type ReadingMode = "magazine" | "expanded";
 type ExtractionStatus = "pending" | "processing" | "complete" | "failed" | "feed";
 export type FeedSourceKind = "published" | "web";
-export type FeedHealthStatus = "healthy" | "failing" | "needs_attention";
 export type FeedErrorKind =
   | "network"
   | "http"
@@ -181,7 +180,6 @@ export interface Feed {
   feedUrl: string;
   siteUrl: string | null;
   sourceKind: FeedSourceKind;
-  healthStatus: FeedHealthStatus;
   lastErrorKind: FeedErrorKind | null;
   lastMatchCount: number | null;
   createdAt: string;

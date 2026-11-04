@@ -2,7 +2,6 @@ import type Sqlite from "better-sqlite3";
 import type {
   Feed,
   FeedErrorKind,
-  FeedHealthStatus,
   FeedPollIntervalMinutes,
   WebFeedConfig,
 } from "../../../shared/types.js";
@@ -69,7 +68,6 @@ export class FeedRepository {
         `SELECT feeds.id, feeds.folder_id AS folderId, feeds.title,
                 feed_sources.feed_url AS feedUrl, feed_sources.site_url AS siteUrl,
                 feed_sources.source_kind AS sourceKind,
-                feed_sources.health_status AS healthStatus,
                 feed_sources.last_error_kind AS lastErrorKind,
                 source_web_feed_configs.last_match_count AS lastMatchCount,
                 feeds.created_at AS createdAt,
@@ -534,7 +532,7 @@ export class FeedRepository {
     this.sqlite
       .prepare(
         `UPDATE feed_sources
-         SET refreshing = 0, health_status = 'healthy', last_success_at = ?,
+         SET refreshing = 0, last_success_at = ?,
              last_http_status = ?, last_error_kind = NULL, last_error = NULL,
              etag = COALESCE(?, etag), last_modified = COALESCE(?, last_modified),
              poll_interval_minutes = ?, next_poll_at = ? WHERE id = ?`,
@@ -564,7 +562,6 @@ export class FeedRepository {
       httpStatus: number | null;
       error: string;
       errorKind: FeedErrorKind;
-      healthStatus: FeedHealthStatus;
       retryMinutes: number;
       expectedSelectionRevision?: number;
     },
@@ -584,17 +581,10 @@ export class FeedRepository {
       this.sqlite
         .prepare(
           `UPDATE feed_sources
-           SET refreshing = 0, health_status = ?, last_http_status = ?, last_error_kind = ?,
+           SET refreshing = 0, last_http_status = ?, last_error_kind = ?,
                last_error = ?, next_poll_at = ? WHERE id = ?`,
         )
-        .run(
-          input.healthStatus,
-          input.httpStatus,
-          input.errorKind,
-          input.error,
-          nextPollAt,
-          sourceId,
-        );
+        .run(input.httpStatus, input.errorKind, input.error, nextPollAt, sourceId);
       if (input.errorKind === "selection_broken") {
         this.sqlite
           .prepare(

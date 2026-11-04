@@ -1,4 +1,4 @@
-import type { FeedErrorKind, FeedHealthStatus } from "../shared/types.js";
+import type { FeedErrorKind } from "../shared/types.js";
 import { xFeedUrl } from "../shared/x.js";
 import { ApplicationApiError } from "./errors.js";
 import {
@@ -31,7 +31,6 @@ export class FeedSourceError extends Error {
     readonly failure: {
       httpStatus: number | null;
       errorKind: FeedErrorKind;
-      healthStatus: FeedHealthStatus;
     },
     options?: ErrorOptions,
   ) {
@@ -90,31 +89,28 @@ function failureDetails(
 ): {
   httpStatus: number | null;
   errorKind: FeedErrorKind;
-  healthStatus: FeedHealthStatus;
 } {
   if (sourceKind === "web" && error instanceof WebFeedError) {
     return {
       httpStatus: error.httpStatus ?? httpStatus,
       errorKind: error.kind,
-      healthStatus: error.kind === "selection_broken" ? "needs_attention" : "failing",
     };
   }
   if (error instanceof FeedHttpError || error instanceof XFeedError) {
-    return { httpStatus: error.status, errorKind: error.kind, healthStatus: "failing" };
+    return { httpStatus: error.status, errorKind: error.kind };
   }
   if (error instanceof ApplicationApiError && error.code === "unsupported_content") {
-    return { httpStatus, errorKind: "unsupported_content", healthStatus: "failing" };
+    return { httpStatus, errorKind: "unsupported_content" };
   }
   if (
     error instanceof DOMException &&
     (error.name === "TimeoutError" || error.name === "AbortError")
   ) {
-    return { httpStatus, errorKind: "timeout", healthStatus: "failing" };
+    return { httpStatus, errorKind: "timeout" };
   }
   return {
     httpStatus,
     errorKind: httpStatus === null ? "network" : "parse",
-    healthStatus: "failing",
   };
 }
 

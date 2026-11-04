@@ -126,7 +126,6 @@ export class FeedRefreshService {
           : {
               httpStatus,
               errorKind: httpStatus === null ? ("network" as const) : ("parse" as const),
-              healthStatus: "failing" as const,
             };
       this.feeds.failSourceRefresh(feed.id, {
         ...failure,
@@ -152,7 +151,6 @@ export class FeedRefreshService {
         httpStatus: null,
         error: "The refresh stopped because the server shut down. Refresh the feed again.",
         errorKind: "network",
-        healthStatus: "failing",
         retryMinutes: feed.pollIntervalMinutes,
       });
     }

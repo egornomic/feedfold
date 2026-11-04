@@ -37,6 +37,7 @@ import {
   useFeedDraggable,
   useFeedDropTarget,
 } from "../feeds/feed-drag";
+import { FEED_STATUS_LABELS, visibleFeedStatus } from "../feeds/feed-filters";
 import {
   FeedActionMenuItems,
   type FeedManagementAction,
@@ -677,10 +678,8 @@ function SidebarFeed({
   onSelect: () => void;
   onOpenMenu: (feed: Feed, trigger: HTMLButtonElement, left: number, top: number) => void;
 }) {
-  const healthClass =
-    feed.healthStatus !== "healthy" ? "failed" : feed.paused ? "paused" : "healthy";
-  const healthLabel =
-    feed.healthStatus !== "healthy" ? "Needs attention" : feed.paused ? "Paused" : "Healthy";
+  const status = visibleFeedStatus(feed);
+  const healthLabel = FEED_STATUS_LABELS[status];
   const { ref: dragRef, isDragging: dragging } = useFeedDraggable(feed);
   const moving = feedDrag.movingFeedId === feed.id;
 
@@ -711,7 +710,7 @@ function SidebarFeed({
           }}
         >
           <span
-            className={`status-dot ${healthClass}`}
+            className={`status-dot ${status}`}
             role="img"
             aria-label={`Feed health: ${healthLabel}`}
             title={feed.lastError ?? healthLabel}

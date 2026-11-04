@@ -67,7 +67,6 @@ function createFeed(
     feedUrl: options.source?.feedUrl ?? `https://example.com/${feedSlug}/feed.xml`,
     siteUrl: options.source?.siteUrl ?? `https://example.com/${feedSlug}`,
     sourceKind: id === 6 ? "web" : "published",
-    healthStatus: "healthy",
     lastErrorKind: null,
     lastMatchCount: id === 6 ? 18 : null,
     createdAt,
