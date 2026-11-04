@@ -323,3 +323,48 @@ it("loads the next account's saved settings without carrying over drafts", async
     await account.close();
   }
 });
+
+it("asks for the password again before a sensitive change and retries after a wrong one", async () => {
+  const auth = new AuthService(database.auth, 20, { maxAccounts: 100 });
+  const reader = await auth.register("step-up-reader", "step-up-password");
+  if (!reader) throw new Error("Could not create the step-up account");
+  const account = await browser.newContext({ baseURL: origin });
+  try {
+    const login = await account.request.post("/api/auth/login", {
+      data: { username: "step-up-reader", password: "step-up-password" },
+    });
+    expect(login.status()).toBe(200);
+    database.connection
+      .prepare("UPDATE sessions SET recent_auth_at = ? WHERE user_id = ?")
+      .run(new Date(0).toISOString(), reader.user.id);
+    const page = await account.newPage();
+    page.setDefaultTimeout(3000);
+    await page.goto("/settings/account");
+    const change = async () => {
+      await page.getByLabel("New password", { exact: true }).fill("a-brand-new-password");
+      await page.getByLabel("Confirm new password", { exact: true }).fill("a-brand-new-password");
+      await page.getByRole("button", { name: "Change password", exact: true }).click();
+    };
+    const stepUp = page.getByRole("dialog", { name: "Authenticate to continue", exact: true });
+
+    await change();
+    await stepUp.getByRole("button", { name: "Cancel", exact: true }).click();
+    await stepUp.waitFor({ state: "hidden" });
+    await page.getByText("Authentication was cancelled.", { exact: true }).waitFor();
+
+    await change();
+    await stepUp.getByLabel("Password", { exact: true }).fill("not-the-password");
+    await stepUp.getByRole("button", { name: "Continue", exact: true }).click();
+    await stepUp.getByRole("alert").waitFor();
+    await stepUp.getByLabel("Password", { exact: true }).fill("step-up-password");
+    expect(await stepUp.getByRole("alert").count()).toBe(0);
+    await stepUp.getByRole("button", { name: "Continue", exact: true }).click();
+    await stepUp.waitFor({ state: "hidden" });
+    await page
+      .getByText("Password changed. Other sessions were signed out", { exact: true })
+      .waitFor();
+    expect(await auth.login("step-up-reader", "a-brand-new-password")).not.toBeNull();
+  } finally {
+    await account.close();
+  }
+});
