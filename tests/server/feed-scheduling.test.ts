@@ -155,12 +155,11 @@ describe("adaptive feed scheduling", () => {
         httpStatus: 503,
         error: "Unavailable",
         errorKind: "http",
-        healthStatus: "failing",
         retryMinutes: 10,
       });
       expect(database.feeds.getFeed(1, feed.id)).toMatchObject({
         pollIntervalMinutes: 10,
-        healthStatus: "failing",
+        lastErrorKind: "http",
       });
     } finally {
       database.close();

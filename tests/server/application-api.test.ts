@@ -419,7 +419,7 @@ describe("local application API", () => {
       await client.updateFeed(feed.id, { paused: false });
       await client.refresh([feed.id]);
       await services.refreshService.waitForIdle();
-      expect((await client.feed(feed.id)).healthStatus).toBe("healthy");
+      expect((await client.feed(feed.id)).lastErrorKind).toBeNull();
       const opml = (outlines: string) =>
         new File(
           [`<?xml version="1.0"?><opml version="2.0"><body>${outlines}</body></opml>`],

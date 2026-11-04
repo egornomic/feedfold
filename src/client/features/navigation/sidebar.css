@@ -318,7 +318,7 @@
   background: var(--accent);
 }
 
-.status-dot.failed {
+.status-dot.needs_attention {
   background: var(--warning);
 }
 

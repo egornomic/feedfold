@@ -643,7 +643,7 @@ describe("service policy", () => {
       expect(database.connection.prepare("SELECT COUNT(*) FROM feed_articles").pluck().get()).toBe(
         0,
       );
-      expect(database.feeds.getFeed(1, feed.id)).toMatchObject({ healthStatus: "healthy" });
+      expect(database.feeds.getFeed(1, feed.id)).toMatchObject({ lastErrorKind: null });
 
       // A publisher's 304 can still retry an earlier delivery blocked by the quota.
       expect(

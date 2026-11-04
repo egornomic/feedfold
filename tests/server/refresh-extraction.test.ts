@@ -74,7 +74,6 @@ describe("feed refresh and full-text extraction", () => {
     refresh.request([feed.id]);
     await refresh.waitForIdle();
     expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
-      healthStatus: "failing",
       lastErrorKind: "unsupported_content",
     });
     expect(database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles).toEqual([]);
@@ -83,7 +82,7 @@ describe("feed refresh and full-text extraction", () => {
     refresh.request([feed.id]);
     await refresh.waitForIdle();
     expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
-      healthStatus: "healthy",
+      lastErrorKind: null,
     });
     expect(
       database.articles.listArticlePage(TEST_USER_ID, { state: "all" }).articles,

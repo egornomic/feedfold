@@ -6,10 +6,17 @@ export type FeedStatusFilter = "all" | "healthy" | "needs_attention" | "paused" 
 
 export type VisibleFeedStatus = Exclude<FeedStatusFilter, "all">;
 
+export const FEED_STATUS_LABELS: Record<VisibleFeedStatus, string> = {
+  healthy: "Healthy",
+  needs_attention: "Needs attention",
+  paused: "Paused",
+  refreshing: "Refreshing",
+};
+
 export function visibleFeedStatus(
-  feed: Pick<Feed, "healthStatus" | "paused" | "refreshing">,
+  feed: Pick<Feed, "lastErrorKind" | "paused" | "refreshing">,
 ): VisibleFeedStatus {
-  if (feed.healthStatus !== "healthy") return "needs_attention";
+  if (feed.lastErrorKind !== null) return "needs_attention";
   if (feed.paused) return "paused";
   if (feed.refreshing) return "refreshing";
   return "healthy";

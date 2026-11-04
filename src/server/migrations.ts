@@ -1812,6 +1812,9 @@ const migrations: Migration[] = [
       ANALYZE;
     `,
   },
+  {
+    sql: "ALTER TABLE feed_sources DROP COLUMN health_status;",
+  },
 ];
 
 export function migrateDatabase(

@@ -271,7 +271,6 @@ export class DemoStore {
       feedUrl: input.feedUrl,
       siteUrl: input.siteUrl ?? null,
       sourceKind: input.sourceKind,
-      healthStatus: "healthy",
       lastErrorKind: null,
       lastMatchCount: input.sourceKind === "web" ? 3 : null,
       createdAt: now,

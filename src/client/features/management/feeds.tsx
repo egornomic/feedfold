@@ -30,9 +30,11 @@ import {
   useFeedDropTarget,
 } from "../feeds/feed-drag";
 import {
+  FEED_STATUS_LABELS,
   type FeedStatusFilter,
   type FeedTypeFilter,
   filterFeeds,
+  type VisibleFeedStatus,
   visibleFeedStatus,
 } from "../feeds/feed-filters";
 import { feedHost } from "../feeds/feed-format";
@@ -179,7 +181,7 @@ function FeedsPageContent({
   const rootFolders = orderedFolders.filter(({ depth }) => depth === 0).map(({ folder }) => folder);
   const feedDrag = useFeedDrag();
   const [expandedLocations, setExpandedLocations] = useState<Set<FeedDropTarget>>(() => new Set());
-  const statusCounts: Record<Exclude<FeedStatusFilter, "all">, number> = {
+  const statusCounts: Record<VisibleFeedStatus, number> = {
     healthy: 0,
     needs_attention: 0,
     paused: 0,
@@ -352,19 +354,10 @@ function FeedsPageContent({
                           value: "all",
                           label: `All statuses (${formatNumber(bootstrap.feeds.length)})`,
                         },
-                        {
-                          value: "healthy",
-                          label: `Healthy (${formatNumber(statusCounts.healthy)})`,
-                        },
-                        {
-                          value: "needs_attention",
-                          label: `Needs attention (${formatNumber(statusCounts.needs_attention)})`,
-                        },
-                        { value: "paused", label: `Paused (${formatNumber(statusCounts.paused)})` },
-                        {
-                          value: "refreshing",
-                          label: `Refreshing (${formatNumber(statusCounts.refreshing)})`,
-                        },
+                        ...Object.entries(FEED_STATUS_LABELS).map(([status, label]) => ({
+                          value: status,
+                          label: `${label} (${formatNumber(statusCounts[status as VisibleFeedStatus])})`,
+                        })),
                       ]}
                       onChange={(value) => setFeedStatusFilter(value as FeedStatusFilter)}
                     />
@@ -521,11 +514,8 @@ function feedFailureLabel(feed: Feed): string {
   return "Refresh failed";
 }
 
-function feedStatusLabel(feed: Feed, status: ReturnType<typeof visibleFeedStatus>): string {
-  if (status === "needs_attention") return feedFailureLabel(feed);
-  if (status === "paused") return "Paused";
-  if (status === "refreshing") return "Refreshing";
-  return "Healthy";
+function feedStatusLabel(feed: Feed, status: VisibleFeedStatus): string {
+  return status === "needs_attention" ? feedFailureLabel(feed) : FEED_STATUS_LABELS[status];
 }
 
 function FeedSourceIcon({
@@ -536,7 +526,7 @@ function FeedSourceIcon({
 }: {
   feed: Feed;
   sourceUrl: string;
-  status: ReturnType<typeof visibleFeedStatus>;
+  status: VisibleFeedStatus;
   statusLabel: string;
 }) {
   const faviconUrl = feedFaviconUrl(sourceUrl);

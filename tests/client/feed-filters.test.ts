@@ -4,7 +4,7 @@ import type { Feed } from "../../src/shared/types.js";
 
 function feed(
   id: number,
-  overrides: Partial<Pick<Feed, "sourceKind" | "healthStatus" | "paused" | "refreshing">> = {},
+  overrides: Partial<Pick<Feed, "sourceKind" | "lastErrorKind" | "paused" | "refreshing">> = {},
 ): Feed {
   return {
     id,
@@ -13,7 +13,6 @@ function feed(
     siteUrl: "https://example.com",
     folderId: null,
     sourceKind: "published",
-    healthStatus: "healthy",
     lastError: null,
     lastErrorKind: null,
     lastMatchCount: null,
@@ -40,7 +39,7 @@ describe("feed filters", () => {
     expect(
       visibleFeedStatus(
         feed(4, {
-          healthStatus: "failing",
+          lastErrorKind: "http",
           paused: true,
           refreshing: true,
         }),
@@ -52,8 +51,8 @@ describe("feed filters", () => {
     const feeds = [
       feed(1),
       feed(2, { sourceKind: "web" }),
-      feed(3, { sourceKind: "web", healthStatus: "needs_attention" }),
-      feed(4, { healthStatus: "failing" }),
+      feed(3, { sourceKind: "web", lastErrorKind: "selection_broken" }),
+      feed(4, { lastErrorKind: "http" }),
     ];
 
     expect(

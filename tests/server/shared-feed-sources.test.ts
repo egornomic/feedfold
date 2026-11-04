@@ -315,7 +315,7 @@ describe("shared feed sources", () => {
       database.articles.listArticlePage(availableUser.id, { state: "all" }).articles,
     ).toMatchObject([{ title: "Shared article" }]);
     expect(database.feeds.getFeed(availableUser.id, deliveredFeed.id)).toMatchObject({
-      healthStatus: "healthy",
+      lastErrorKind: null,
       lastHttpStatus: 200,
     });
   });

@@ -293,7 +293,6 @@ describe("authenticated web-feed API", () => {
     expect(created).toMatchObject({
       title: "Tracked updates",
       sourceKind: "web",
-      healthStatus: "healthy",
       lastErrorKind: null,
       lastMatchCount: 3,
       totalCount: 3,
@@ -352,7 +351,7 @@ describe("authenticated web-feed API", () => {
     });
     expect(refreshedArticles.some(({ url }) => url === `${pageUrl}/updates/beta`)).toBe(true);
     expect(database.feeds.getFeed(1, created.id)).toMatchObject({
-      healthStatus: "healthy",
+      lastErrorKind: null,
       lastMatchCount: 3,
       totalCount: 4,
     });
@@ -360,7 +359,6 @@ describe("authenticated web-feed API", () => {
     mode = "http_error";
     await refresh();
     expect(database.feeds.getFeed(1, created.id)).toMatchObject({
-      healthStatus: "failing",
       lastErrorKind: "http",
       lastHttpStatus: 503,
       lastMatchCount: 3,
@@ -371,7 +369,6 @@ describe("authenticated web-feed API", () => {
     mode = "changed";
     await refresh();
     expect(database.feeds.getFeed(1, created.id)).toMatchObject({
-      healthStatus: "needs_attention",
       lastErrorKind: "selection_broken",
       lastHttpStatus: 200,
       lastMatchCount: 0,
@@ -400,7 +397,6 @@ describe("authenticated web-feed API", () => {
     expect(repairResponse.statusCode).toBe(200);
     expect(repairResponse.json<Feed>()).toMatchObject({
       feedUrl: `${pageUrl}/changelog`,
-      healthStatus: "healthy",
       lastErrorKind: null,
       lastError: null,
       lastMatchCount: 3,

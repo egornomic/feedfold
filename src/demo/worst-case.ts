@@ -94,7 +94,6 @@ function worstData(data: DemoData, now: Date): DemoData {
     title: feedNames[index] ?? feed.title,
     feedUrl: `https://example.com/publications/${feed.id}/research-and-community-dispatch/feed.xml`,
     siteUrl: index === 6 ? null : LONG_URL,
-    healthStatus: index === 1 ? "failing" : index === 2 ? "needs_attention" : "healthy",
     lastErrorKind: index === 1 ? "http" : index === 2 ? "selection_broken" : null,
     lastError:
       index === 1
