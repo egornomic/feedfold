@@ -7,29 +7,56 @@ import { youtubeQuery } from "../../api/query";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import { Modal, useDialog } from "../../ui/dialog";
 
+type YouTubeActivity =
+  | { phase: "idle"; message: { kind: "notice" | "error"; text: string } | null }
+  | { phase: "confirming-disconnect"; error: string | null }
+  | { phase: "working"; action: "connect" | "disconnect" | "status" };
+
+const IDLE: YouTubeActivity = { phase: "idle", message: null };
+
 export function YouTubeSettings({ userId }: { userId: string }) {
   const statusQuery = useQuery(youtubeQuery(userId));
   const status = statusQuery.data ?? null;
   const { run: mutateRequest } = useRequestMutation();
-  const [busy, setBusy] = useState(false);
-  const [actionError, setError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<YouTubeActivity>(IDLE);
+  const busy = activity.phase === "working";
+  const actionError =
+    activity.phase === "confirming-disconnect"
+      ? activity.error
+      : activity.phase === "idle" && activity.message?.kind === "error"
+        ? activity.message.text
+        : null;
   const error = actionError ?? (statusQuery.error ? errorMessage(statusQuery.error) : null);
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const connectDialog = useDialog(() => setError(null), { autoOpen: false });
+  const notice =
+    activity.phase === "idle" && activity.message?.kind === "notice" ? activity.message.text : null;
+  const confirmDisconnect =
+    activity.phase === "confirming-disconnect" ||
+    (activity.phase === "working" && activity.action === "disconnect");
+  const connectDialog = useDialog(
+    () =>
+      setActivity((current) =>
+        current.phase === "idle" && current.message?.kind === "error" ? IDLE : current,
+      ),
+    { autoOpen: false },
+  );
   const headers = { "X-Feedfold-Account": userId };
 
   useEffect(() => {
     const url = new URL(window.location.href);
     const result = url.searchParams.get("youtube");
     if (result) {
-      setNotice(
-        result === "connected"
-          ? "YouTube connected and subscriptions synced."
-          : result === "cancelled"
-            ? "YouTube connection cancelled. Your feeds have not changed."
-            : "YouTube could not finish connecting. Check the connection status below and try again.",
-      );
+      setActivity({
+        phase: "idle",
+        message: {
+          kind: "notice",
+          text:
+            result === "connected"
+              ? "YouTube connected and subscriptions synced."
+              : result === "cancelled"
+                ? "YouTube connection cancelled. Your feeds have not changed."
+                : "YouTube could not finish connecting. Check the connection status below and try again.",
+        },
+      });
       url.searchParams.delete("youtube");
       window.history.replaceState(window.history.state, "", url);
     }
@@ -39,9 +66,11 @@ export function YouTubeSettings({ userId }: { userId: string }) {
     action: "connect" | "disconnect-keep" | "disconnect-remove" | "status",
     filterShorts = false,
   ) => {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
+    const disconnecting = action === "disconnect-keep" || action === "disconnect-remove";
+    setActivity({
+      phase: "working",
+      action: disconnecting ? "disconnect" : action === "connect" ? "connect" : "status",
+    });
     try {
       if (action === "connect") {
         const { url } = await mutateRequest(() =>
@@ -54,7 +83,8 @@ export function YouTubeSettings({ userId }: { userId: string }) {
         window.location.assign(url);
         return;
       }
-      if (action === "disconnect-keep" || action === "disconnect-remove") {
+      let notice: string | null = null;
+      if (disconnecting) {
         const removeFeeds = action === "disconnect-remove";
         await mutateRequest(() =>
           httpRequest<void>("/api/youtube", {
@@ -63,19 +93,20 @@ export function YouTubeSettings({ userId }: { userId: string }) {
             body: JSON.stringify({ removeFeeds }),
           }),
         );
-        setConfirmDisconnect(false);
-        setNotice(
-          removeFeeds
-            ? "YouTube disconnected. Imported channels and their reading history were removed."
-            : "YouTube disconnected. Imported channels and their reading history were kept.",
-        );
+        notice = removeFeeds
+          ? "YouTube disconnected. Imported channels and their reading history were removed."
+          : "YouTube disconnected. Imported channels and their reading history were kept.";
       }
       await statusQuery.refetch();
+      setActivity({ phase: "idle", message: notice ? { kind: "notice", text: notice } : null });
     } catch (caught) {
-      setError(errorMessage(caught));
       await statusQuery.refetch();
+      setActivity(
+        disconnecting
+          ? { phase: "confirming-disconnect", error: errorMessage(caught) }
+          : { phase: "idle", message: { kind: "error", text: errorMessage(caught) } },
+      );
     }
-    setBusy(false);
   };
 
   if (status && !status.available) return null;
@@ -120,7 +151,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
               className="secondary-button"
               type="button"
               disabled={busy}
-              onClick={() => setConfirmDisconnect(true)}
+              onClick={() => setActivity({ phase: "confirming-disconnect", error: null })}
             >
               Disconnect
             </button>
@@ -130,7 +161,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
               type="button"
               disabled={busy}
               onClick={() => {
-                setError(null);
+                setActivity(IDLE);
                 connectDialog.open();
               }}
             >
@@ -169,7 +200,7 @@ export function YouTubeSettings({ userId }: { userId: string }) {
               className="secondary-button"
               type="button"
               disabled={busy}
-              onClick={() => setConfirmDisconnect(false)}
+              onClick={() => setActivity(IDLE)}
             >
               Cancel
             </button>

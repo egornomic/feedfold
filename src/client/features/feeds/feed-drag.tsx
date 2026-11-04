@@ -22,6 +22,13 @@ interface FeedFocusTarget {
   folderId: number | null;
 }
 
+type FeedDragPhase =
+  | { phase: "idle"; focusAfterMove: FeedFocusTarget | null }
+  | { phase: "dragging"; feed: Feed }
+  | { phase: "moving"; feed: Feed };
+
+const IDLE: FeedDragPhase = { phase: "idle", focusAfterMove: null };
+
 const FeedDragContext = createContext<
   FeedDragState & { focusAfterMove: FeedFocusTarget | null; clearFocusAfterMove: () => void }
 >({ draggedFeed: null, movingFeedId: null, focusAfterMove: null, clearFocusAfterMove: () => {} });
@@ -61,11 +68,14 @@ export function FeedDragProvider({
   children: ReactNode;
   onMoveFeed: (feed: Feed, folderId: number | null) => Promise<boolean>;
 }) {
-  const [draggedFeed, setDraggedFeed] = useState<Feed | null>(null);
-  const [movingFeedId, setMovingFeedId] = useState<number | null>(null);
-
-  const [focusAfterMove, setFocusAfterMove] = useState<FeedFocusTarget | null>(null);
-  const clearFocusAfterMove = useCallback(() => setFocusAfterMove(null), []);
+  const [drag, setDrag] = useState<FeedDragPhase>(IDLE);
+  const clearFocusAfterMove = useCallback(
+    () => setDrag((current) => (current.phase === "idle" ? IDLE : current)),
+    [],
+  );
+  const draggedFeed = drag.phase === "dragging" ? drag.feed : null;
+  const movingFeedId = drag.phase === "moving" ? drag.feed.id : null;
+  const focusAfterMove = drag.phase === "idle" ? drag.focusAfterMove : null;
 
   return (
     <DragDropProvider
@@ -76,25 +86,27 @@ export function FeedDragProvider({
         Feedback.configure({ feedback: "clone", dropAnimation: null }),
       ]}
       onDragStart={({ operation }) => {
-        setFocusAfterMove(null);
-        setDraggedFeed(operation.source?.data.feed ?? null);
+        const feed: Feed | undefined = operation.source?.data.feed;
+        setDrag(feed ? { phase: "dragging", feed } : IDLE);
       }}
       onDragEnd={async ({ operation, canceled }) => {
-        setDraggedFeed(null);
         const feed: Feed | undefined = operation.source?.data.feed;
         const destination = operation.target?.data;
-        if (canceled || !feed || !destination || feed.folderId === destination.folderId) return;
-        setMovingFeedId(feed.id);
+        if (canceled || !feed || !destination || feed.folderId === destination.folderId) {
+          setDrag(IDLE);
+          return;
+        }
+        setDrag({ phase: "moving", feed });
+        let focusAfterMove: FeedFocusTarget | null = null;
         try {
           if (await onMoveFeed(feed, destination.folderId)) {
             destination.onMoved?.();
             if (operation.activatorEvent instanceof KeyboardEvent) {
-              // A fast move can batch away the moving state; focus needs its own update.
-              setFocusAfterMove({ feedId: feed.id, folderId: destination.folderId });
+              focusAfterMove = { feedId: feed.id, folderId: destination.folderId };
             }
           }
         } finally {
-          setMovingFeedId(null);
+          setDrag({ phase: "idle", focusAfterMove });
         }
       }}
     >

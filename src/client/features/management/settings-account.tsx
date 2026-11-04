@@ -39,14 +39,18 @@ export function AccountSettingsSection({
       (current: Awaited<ReturnType<typeof api.passkeys>> | undefined) =>
         current ? { ...current, hasPassword } : current,
     );
-  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<
+    "passkey" | "rename-passkey" | "password" | "delete-account" | null
+  >(null);
+  const busy = pendingAction !== null;
+  const passkeyBusy = pendingAction === "passkey";
+  const renamingPasskey = pendingAction === "rename-passkey";
+  const changingPassword = pendingAction === "password";
+  const deletingAccount = pendingAction === "delete-account";
   const [editingPasskeyId, setEditingPasskeyId] = useState<string | null>(null);
   const [passkeyName, setPasskeyName] = useState("");
-  const [renamingPasskey, setRenamingPasskey] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [deletingAccount, setDeletingAccount] = useState(false);
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const passkeyNameRef = useRef<HTMLInputElement>(null);
@@ -60,7 +64,7 @@ export function AccountSettingsSection({
 
   const addPasskey = async () => {
     setEditingPasskeyId(null);
-    setPasskeyBusy(true);
+    setPendingAction("passkey");
     setError(null);
     try {
       const passkey = await runSensitive(async () => {
@@ -75,7 +79,7 @@ export function AccountSettingsSection({
         setError(errorMessage(caught));
       }
     } finally {
-      setPasskeyBusy(false);
+      setPendingAction(null);
     }
   };
 
@@ -103,7 +107,7 @@ export function AccountSettingsSection({
       cancelRenamingPasskey();
       return;
     }
-    setRenamingPasskey(true);
+    setPendingAction("rename-passkey");
     setError(null);
     try {
       const { passkey } = await mutateRequest(() => api.renamePasskey(id, name));
@@ -114,12 +118,12 @@ export function AccountSettingsSection({
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setRenamingPasskey(false);
+      setPendingAction(null);
     }
   };
 
   const removePasskey = async (id: string) => {
-    setPasskeyBusy(true);
+    setPendingAction("passkey");
     setError(null);
     try {
       await runSensitive(() => mutateRequest(() => api.deletePasskey(id)));
@@ -128,7 +132,7 @@ export function AccountSettingsSection({
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setPasskeyBusy(false);
+      setPendingAction(null);
     }
   };
 
@@ -138,7 +142,7 @@ export function AccountSettingsSection({
       setError("The new passwords do not match.");
       return;
     }
-    setChangingPassword(true);
+    setPendingAction("password");
     setError(null);
     try {
       await runSensitive(() => mutateRequest(() => api.changePassword(newPassword)));
@@ -149,12 +153,12 @@ export function AccountSettingsSection({
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setChangingPassword(false);
+      setPendingAction(null);
     }
   };
 
   const removePassword = async () => {
-    setChangingPassword(true);
+    setPendingAction("password");
     setError(null);
     try {
       await runSensitive(() => mutateRequest(() => api.removePassword()));
@@ -165,7 +169,7 @@ export function AccountSettingsSection({
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      setChangingPassword(false);
+      setPendingAction(null);
     }
   };
 
@@ -175,7 +179,7 @@ export function AccountSettingsSection({
 
   const deleteAccount = async (event: FormEvent) => {
     event.preventDefault();
-    setDeletingAccount(true);
+    setPendingAction("delete-account");
     setAccountDeleteError(null);
     try {
       await runSensitive(() => mutateRequest(() => api.deleteAccount()));
@@ -183,7 +187,7 @@ export function AccountSettingsSection({
       onAccountDeleted();
     } catch (caught) {
       setAccountDeleteError(errorMessage(caught));
-      setDeletingAccount(false);
+      setPendingAction(null);
     }
   };
 
@@ -206,7 +210,7 @@ export function AccountSettingsSection({
             <button
               className="secondary-button"
               type="button"
-              disabled={!passkeysAvailable || loadingPasskeys || passkeyBusy}
+              disabled={!passkeysAvailable || loadingPasskeys || busy}
               onClick={() => void addPasskey()}
             >
               {passkeyBusy ? (
@@ -287,7 +291,7 @@ export function AccountSettingsSection({
                       className="icon-button"
                       type="button"
                       aria-label={`Rename ${passkey.name}`}
-                      disabled={passkeyBusy || renamingPasskey}
+                      disabled={busy}
                       onClick={() => startRenamingPasskey(passkey.id, passkey.name)}
                     >
                       <Pencil aria-hidden="true" size={15} />
@@ -297,7 +301,7 @@ export function AccountSettingsSection({
                         className="icon-button danger-action"
                         type="button"
                         aria-label={`Remove ${passkey.name}`}
-                        disabled={passkeyBusy || renamingPasskey}
+                        disabled={busy}
                         onClick={() => void removePasskey(passkey.id)}
                       >
                         <Trash2 aria-hidden="true" size={15} />
@@ -348,9 +352,7 @@ export function AccountSettingsSection({
           <button
             className="secondary-button"
             type="submit"
-            disabled={
-              changingPassword || newPassword.length < 15 || newPassword !== confirmPassword
-            }
+            disabled={busy || newPassword.length < 15 || newPassword !== confirmPassword}
           >
             {changingPassword ? (
               <LoaderCircle className="spin" aria-hidden="true" size={15} />
@@ -361,7 +363,7 @@ export function AccountSettingsSection({
             <button
               className="danger-button"
               type="button"
-              disabled={changingPassword}
+              disabled={busy}
               onClick={() => void removePassword()}
             >
               Remove password
@@ -374,7 +376,12 @@ export function AccountSettingsSection({
           <strong>Delete account</strong>
           <p>Permanently delete your subscriptions, reading state, passkeys, and saved API keys.</p>
         </div>
-        <button className="danger-button" type="button" onClick={accountDialog.open}>
+        <button
+          className="danger-button"
+          type="button"
+          disabled={busy}
+          onClick={accountDialog.open}
+        >
           <Trash2 aria-hidden="true" size={15} />
           Delete account
         </button>

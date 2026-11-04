@@ -62,29 +62,34 @@ function subscribeReaderDataInvalidations(
         return unsubscribe;
       })()
     : (() => {
-        let connected = false;
-        let reconnect: ReturnType<typeof setTimeout> | undefined;
-        let events: EventSource;
+        let connectedBefore = false;
+        let stream:
+          | { phase: "open"; events: EventSource }
+          | { phase: "waiting"; reconnect: ReturnType<typeof setTimeout> };
         const connect = () => {
-          events = new EventSource(appUrl(`/api/refresh/events?reader=${readerTabId}`), {
+          const events = new EventSource(appUrl(`/api/refresh/events?reader=${readerTabId}`), {
             withCredentials: true,
           });
+          stream = { phase: "open", events };
           events.addEventListener("connected", () => {
-            if (active) listener(connected ? "change" : "connected");
-            connected = true;
+            if (active) listener(connectedBefore ? "change" : "connected");
+            connectedBefore = true;
           });
           events.addEventListener("message", invalidate);
           events.addEventListener("error", () => {
             invalidate();
             // Browsers stop retrying after an error response, such as a proxy's during a restart.
             if (events.readyState === EventSource.CLOSED)
-              reconnect = setTimeout(connect, STREAM_RECONNECT_DELAY_MS);
+              stream = {
+                phase: "waiting",
+                reconnect: setTimeout(connect, STREAM_RECONNECT_DELAY_MS),
+              };
           });
         };
         connect();
         return () => {
-          clearTimeout(reconnect);
-          events.close();
+          if (stream.phase === "waiting") clearTimeout(stream.reconnect);
+          else stream.events.close();
         };
       })();
 

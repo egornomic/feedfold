@@ -8,24 +8,30 @@ import { Modal, useDialog } from "../../ui/dialog";
 
 export type SensitiveAction = <T>(action: () => Promise<T>) => Promise<T>;
 
-interface PendingSensitiveAction {
+interface StepUpRequest {
   operationId: string;
   action: () => Promise<unknown>;
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
+  hasPassword: boolean;
+  hasPasskey: boolean;
 }
+
+type StepUpState =
+  | { phase: "idle" }
+  | { phase: "asking"; request: StepUpRequest; error: string | null }
+  | { phase: "checking"; request: StepUpRequest };
 
 export function useSensitiveAction() {
   const { run: mutateRequest } = useRequestMutation();
   const queryClient = useQueryClient();
-  const [pendingSensitive, setPendingSensitive] = useState<PendingSensitiveAction | null>(null);
+  const [stepUp, setStepUp] = useState<StepUpState>({ phase: "idle" });
   const [stepUpPassword, setStepUpPassword] = useState("");
-  const [stepUpBusy, setStepUpBusy] = useState(false);
-  const [stepUpError, setStepUpError] = useState<string | null>(null);
-  const [stepUpHasPassword, setStepUpHasPassword] = useState(false);
-  const [stepUpHasPasskey, setStepUpHasPasskey] = useState(false);
   const stepUpDialog = useDialog(() => cancelStepUp(), { autoOpen: false });
   const stepUpPasswordRef = useRef<HTMLInputElement>(null);
+  const request = stepUp.phase === "idle" ? null : stepUp.request;
+  const checking = stepUp.phase === "checking";
+  const stepUpError = stepUp.phase === "asking" ? stepUp.error : null;
 
   const runSensitive = useCallback<SensitiveAction>(
     async <T,>(action: () => Promise<T>) => {
@@ -43,16 +49,19 @@ export function useSensitiveAction() {
           queryFn: api.passkeys,
           staleTime: 0,
         });
-        setStepUpHasPassword(credentials.hasPassword);
-        setStepUpHasPasskey(credentials.passkeys.length > 0);
         setStepUpPassword("");
-        setStepUpError(null);
         return await new Promise<T>((resolve, reject) => {
-          setPendingSensitive({
-            operationId: caught.operationId as string,
-            action,
-            resolve: resolve as (value: unknown) => void,
-            reject,
+          setStepUp({
+            phase: "asking",
+            request: {
+              operationId: caught.operationId as string,
+              action,
+              resolve: resolve as (value: unknown) => void,
+              reject,
+              hasPassword: credentials.hasPassword,
+              hasPasskey: credentials.passkeys.length > 0,
+            },
+            error: null,
           });
           stepUpDialog.open();
         });
@@ -61,38 +70,33 @@ export function useSensitiveAction() {
     [stepUpDialog.open, queryClient.fetchQuery],
   );
 
-  const finishStepUp = async (authenticate: () => Promise<void>) => {
-    const pending = pendingSensitive;
-    if (!pending) return;
-    setStepUpBusy(true);
-    setStepUpError(null);
+  const finishStepUp = async (authenticate: (request: StepUpRequest) => Promise<void>) => {
+    if (stepUp.phase !== "asking") return;
+    const { request } = stepUp;
+    setStepUp({ phase: "checking", request });
     try {
-      await authenticate();
-      const result = await pending.action();
-      pending.resolve(result);
-      setPendingSensitive(null);
+      await authenticate(request);
+      request.resolve(await request.action());
+      setStepUp({ phase: "idle" });
       setStepUpPassword("");
       stepUpDialog.close();
     } catch (caught) {
-      setStepUpError(errorMessage(caught));
-    } finally {
-      setStepUpBusy(false);
+      setStepUp({ phase: "asking", request, error: errorMessage(caught) });
     }
   };
 
   const authenticateWithPassword = async (event: FormEvent) => {
     event.preventDefault();
-    if (!pendingSensitive || !stepUpPassword) return;
-    await finishStepUp(() =>
-      mutateRequest(() => api.stepUpPassword(pendingSensitive.operationId, stepUpPassword)),
+    if (!stepUpPassword) return;
+    await finishStepUp((request) =>
+      mutateRequest(() => api.stepUpPassword(request.operationId, stepUpPassword)),
     );
   };
 
   const authenticateWithPasskey = async () => {
-    if (!pendingSensitive) return;
-    await finishStepUp(async () => {
+    await finishStepUp(async (request) => {
       const { ceremonyId, options } = await mutateRequest(() =>
-        api.stepUpPasskeyOptions(pendingSensitive.operationId),
+        api.stepUpPasskeyOptions(request.operationId),
       );
       const response = await startAuthentication({ optionsJSON: options });
       await mutateRequest(() => api.stepUpPasskey(ceremonyId, response));
@@ -100,9 +104,9 @@ export function useSensitiveAction() {
   };
 
   const cancelStepUp = () => {
-    if (stepUpBusy) return;
-    pendingSensitive?.reject(new DOMException("Authentication was cancelled.", "AbortError"));
-    setPendingSensitive(null);
+    if (stepUp.phase !== "asking") return;
+    stepUp.request.reject(new DOMException("Authentication was cancelled.", "AbortError"));
+    setStepUp({ phase: "idle" });
     setStepUpPassword("");
     stepUpDialog.close();
   };
@@ -115,7 +119,7 @@ export function useSensitiveAction() {
         initialFocus={stepUpPasswordRef}
         className="management-dialog passkey-dialog"
         aria-labelledby="step-up-dialog-title"
-        dismissible={!stepUpBusy}
+        dismissible={!checking}
       >
         <form
           className="passkey-dialog-form"
@@ -131,7 +135,7 @@ export function useSensitiveAction() {
             <button
               className="icon-button"
               type="button"
-              disabled={stepUpBusy}
+              disabled={checking}
               onClick={cancelStepUp}
               aria-label="Close authentication"
             >
@@ -139,7 +143,7 @@ export function useSensitiveAction() {
             </button>
           </header>
           <div className="management-dialog-body passkey-dialog-body">
-            {stepUpHasPassword ? (
+            {request?.hasPassword ? (
               <label className="passkey-dialog-field" htmlFor="step-up-password">
                 <span>Password</span>
                 <input
@@ -150,19 +154,21 @@ export function useSensitiveAction() {
                   value={stepUpPassword}
                   maxLength={128}
                   required
-                  disabled={stepUpBusy}
+                  disabled={checking}
                   onChange={(event) => {
                     setStepUpPassword(event.target.value);
-                    setStepUpError(null);
+                    setStepUp((current) =>
+                      current.phase === "asking" ? { ...current, error: null } : current,
+                    );
                   }}
                 />
               </label>
             ) : null}
-            {stepUpHasPasskey ? (
+            {request?.hasPasskey ? (
               <button
                 className="secondary-button"
                 type="button"
-                disabled={stepUpBusy}
+                disabled={checking}
                 onClick={() => void authenticateWithPasskey()}
               >
                 <KeyRound aria-hidden="true" size={15} />
@@ -182,20 +188,18 @@ export function useSensitiveAction() {
               <button
                 className="secondary-button"
                 type="button"
-                disabled={stepUpBusy}
+                disabled={checking}
                 onClick={cancelStepUp}
               >
                 Cancel
               </button>
-              {stepUpHasPassword ? (
+              {request?.hasPassword ? (
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={stepUpBusy || !stepUpPassword}
+                  disabled={checking || !stepUpPassword}
                 >
-                  {stepUpBusy ? (
-                    <LoaderCircle className="spin" aria-hidden="true" size={15} />
-                  ) : null}
+                  {checking ? <LoaderCircle className="spin" aria-hidden="true" size={15} /> : null}
                   Continue
                 </button>
               ) : null}
