@@ -297,6 +297,17 @@ function FeedSettingsPanel({
   );
 }
 
+type WebFeedSelectionState =
+  | { phase: "loading" }
+  | { phase: "load-failed"; error: string }
+  | {
+      phase: "choosing";
+      analysis: WebFeedAnalysis;
+      selectedCandidateId: string | null;
+      error: string | null;
+    }
+  | { phase: "saving"; analysis: WebFeedAnalysis; selectedCandidateId: string };
+
 function WebFeedSelectionPanel({
   feed,
   mutations,
@@ -309,23 +320,26 @@ function WebFeedSelectionPanel({
   showToast: (message: string) => void;
 }) {
   const { run: mutateRequest } = useRequestMutation();
-  const [analysis, setAnalysis] = useState<WebFeedAnalysis | null>(null);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<WebFeedSelectionState>({ phase: "loading" });
+  const loading = state.phase === "loading";
+  const saving = state.phase === "saving";
+  const analysis = state.phase === "choosing" || saving ? state.analysis : null;
+  const selectedCandidateId =
+    state.phase === "choosing" || saving ? state.selectedCandidateId : null;
+  const error = state.phase === "load-failed" || state.phase === "choosing" ? state.error : null;
 
   const loadPage = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setState({ phase: "loading" });
     try {
       const result = await mutateRequest(() => api.analyzeWebFeed(feed.id));
-      setAnalysis(result);
-      setSelectedCandidateId(result.selectedCandidateId ?? result.suggestedCandidateIds[0] ?? null);
+      setState({
+        phase: "choosing",
+        analysis: result,
+        selectedCandidateId: result.selectedCandidateId ?? result.suggestedCandidateIds[0] ?? null,
+        error: null,
+      });
     } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setLoading(false);
+      setState({ phase: "load-failed", error: errorMessage(caught) });
     }
   }, [feed.id, mutateRequest]);
 
@@ -333,19 +347,28 @@ function WebFeedSelectionPanel({
     void loadPage();
   }, [loadPage]);
 
+  const selectCandidate = (candidateId: string | null) =>
+    setState((current) =>
+      current.phase === "choosing" ? { ...current, selectedCandidateId: candidateId } : current,
+    );
+
   const saveSelection = async () => {
-    const candidate = analysis?.candidates.find((item) => item.id === selectedCandidateId);
+    if (state.phase !== "choosing") return;
+    const { analysis, selectedCandidateId } = state;
+    const candidate = analysis.candidates.find((item) => item.id === selectedCandidateId);
     if (!candidate) return;
-    setSaving(true);
-    setError(null);
+    setState({ phase: "saving", analysis, selectedCandidateId: candidate.id });
     try {
       const updated = await mutations.updateWebFeedSelection(feed.id, candidate.config);
       showToast(`Page selection updated for ${updated.title}`);
       onClose();
     } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setSaving(false);
+      setState({
+        phase: "choosing",
+        analysis,
+        selectedCandidateId: candidate.id,
+        error: errorMessage(caught),
+      });
     }
   };
 
@@ -377,7 +400,7 @@ function WebFeedSelectionPanel({
               analysis={analysis}
               selectedCandidateId={selectedCandidateId}
               disabled={saving}
-              onSelect={setSelectedCandidateId}
+              onSelect={selectCandidate}
             />
           </>
         ) : null}
