@@ -39,6 +39,19 @@ export function useMotionPresence(visible: boolean): {
   };
 }
 
+// A leaving element gives its space back while it fades, so its siblings close the gap in the same
+// motion instead of jumping once the fade ends.
+export function collapseWhileExiting(element: HTMLElement, duration: number) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  element.animate(
+    [
+      { height: `${element.offsetHeight}px`, paddingBlock: getComputedStyle(element).paddingBlock },
+      { height: "0px", paddingBlock: "0px" },
+    ],
+    { duration, easing: "cubic-bezier(0.23, 1, 0.32, 1)", fill: "forwards" },
+  );
+}
+
 // Share the CSS timing tokens with coordinated React transitions.
 export function surfaceTransition(reduced: boolean, exiting = false) {
   const styles = window.getComputedStyle(document.documentElement);
