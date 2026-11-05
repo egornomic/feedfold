@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import { AppDatabase } from "../../src/server/database.js";
 import { AuthService } from "../../src/server/features/auth/service.js";
@@ -575,6 +575,35 @@ describe("service policy", () => {
       "today's outbound request limit",
     );
     expect(first.connection.prepare("SELECT COUNT(*) FROM quota_leases").pluck().get()).toBe(0);
+  });
+
+  it("keeps a concurrency slot for work that runs longer than the crash-recovery lease", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    cleanups.push(() => {
+      vi.useRealTimers();
+    });
+    const database = new AppDatabase(
+      ":memory:",
+      20,
+      serverPolicy({ FEEDFOLD_QUOTA_CHROMIUM_CONCURRENT: "1" }),
+    );
+    cleanups.push(() => database.close());
+    let finishLongPage: (() => void) | undefined;
+    const longPage = database.quotas.runChromium(
+      () =>
+        new Promise<void>((resolve) => {
+          finishLongPage = resolve;
+        }),
+    );
+
+    vi.advanceTimersByTime(10 * 60_000);
+    await expect(database.quotas.runChromium(async () => undefined)).rejects.toThrow(
+      "already analyzing other web pages",
+    );
+
+    finishLongPage?.();
+    await longPage;
+    await expect(database.quotas.runChromium(async () => "available")).resolves.toBe("available");
   });
 
   it("rejects oversized OPML and too many imported feeds before storing anything", () => {

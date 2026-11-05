@@ -53,7 +53,7 @@ export interface AiServiceOptions {
   credentialCipher: CredentialCipherLike | null;
   currentDate?: () => Date;
   providers?: ReadonlyMap<AiProvider, AiProviderAdapter>;
-  requestTimeoutMs?: number;
+  requestTimeoutMs?: number | undefined;
 }
 
 interface FeatureGenerationRequest {

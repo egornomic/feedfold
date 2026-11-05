@@ -12,6 +12,22 @@ export function staggeredPollAt(sourceId: number, intervalMinutes: number, after
   return (Math.floor((after - offset) / interval) + 1) * interval + offset;
 }
 
+// A failing source is never checked less often than the slowest healthy source.
+const MAX_FAILURE_RETRY_MS = 720 * MINUTE_MS;
+
+export function failureRetryAt(
+  intervalMinutes: number,
+  outageStartedAt: number,
+  failedAt: number,
+  random = Math.random,
+): number {
+  const interval = intervalMinutes * MINUTE_MS;
+  // Waiting about as long as the outage has lasted doubles the gap after every failure.
+  const backoff = Math.min(Math.max(interval, failedAt - outageStartedAt), MAX_FAILURE_RETRY_MS);
+  // Jitter keeps sources that failed together, such as one host going down, from retrying together.
+  return failedAt + Math.max(interval, backoff * (0.5 + random() / 2));
+}
+
 function intervalForPostingGap(gapMinutes: number): FeedPollIntervalMinutes {
   if (gapMinutes < 30) return 5;
   if (gapMinutes < 120) return 10;

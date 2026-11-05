@@ -290,7 +290,6 @@ describe("web feed persistence", () => {
         httpStatus: 200,
         error: "Stale selection failed",
         errorKind: "selection_broken",
-        retryMinutes: 20,
         expectedSelectionRevision: 1,
       });
       completeFeedRefresh(database.feeds, feed.id, {
@@ -321,7 +320,6 @@ describe("web feed persistence", () => {
         httpStatus: null,
         error: "The page could not be reached",
         errorKind: "network",
-        retryMinutes: 20,
       });
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
         lastErrorKind: "network",
@@ -337,7 +335,6 @@ describe("web feed persistence", () => {
         httpStatus: 200,
         error: "The saved page selection no longer matches meaningful items",
         errorKind: "selection_broken",
-        retryMinutes: 20,
       });
       expect(database.feeds.getFeed(TEST_USER_ID, feed.id)).toMatchObject({
         lastErrorKind: "selection_broken",

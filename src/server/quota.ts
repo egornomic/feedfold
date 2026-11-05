@@ -11,6 +11,11 @@ type DailyResource =
   | "web_analysis";
 type ConcurrentResource = "article_extraction" | "chromium" | "outbound_request";
 
+// Leases only expire to recover slots from crashed processes; running holders keep renewing theirs.
+const LEASE_MS = 120_000;
+const FIRST_WAIT_STEP_MS = 25;
+const MAX_WAIT_STEP_MS = 500;
+
 const ARTICLE_BYTE_COLUMNS = `
   length(articles.external_id) + length(articles.title) +
   length(COALESCE(articles.url, '')) + length(COALESCE(articles.author, '')) +
@@ -123,37 +128,46 @@ export class QuotaService {
     })();
   }
 
-  private acquire(resource: ConcurrentResource, leaseMs: number): (() => void) | null {
+  private acquire(resource: ConcurrentResource): (() => void) | null {
     const limit = this.concurrentLimit(resource);
     if (limit === null) return () => {};
     const id = randomUUID();
-    const at = this.now();
-    const expiresAt = new Date(at.getTime() + leaseMs).toISOString();
-    return this.sqlite.transaction(() => {
-      this.sqlite.prepare("DELETE FROM quota_leases WHERE expires_at <= ?").run(at.toISOString());
+    const leaseUntil = () => new Date(this.now().getTime() + LEASE_MS).toISOString();
+    const acquired = this.sqlite.transaction(() => {
+      this.sqlite
+        .prepare("DELETE FROM quota_leases WHERE expires_at <= ?")
+        .run(this.now().toISOString());
       const active = Number(
         this.sqlite
           .prepare("SELECT COUNT(*) FROM quota_leases WHERE resource = ?")
           .pluck()
           .get(resource),
       );
-      if (active >= limit) return null;
+      if (active >= limit) return false;
       this.sqlite
         .prepare("INSERT INTO quota_leases (id, resource, expires_at) VALUES (?, ?, ?)")
-        .run(id, resource, expiresAt);
-      return () => {
-        this.sqlite.prepare("DELETE FROM quota_leases WHERE id = ?").run(id);
-      };
+        .run(id, resource, leaseUntil());
+      return true;
     })();
+    if (!acquired) return null;
+    const renewal = setInterval(() => {
+      this.sqlite
+        .prepare("UPDATE quota_leases SET expires_at = ? WHERE id = ?")
+        .run(leaseUntil(), id);
+    }, LEASE_MS / 2);
+    renewal.unref();
+    return () => {
+      clearInterval(renewal);
+      this.sqlite.prepare("DELETE FROM quota_leases WHERE id = ?").run(id);
+    };
   }
 
   private async concurrent<T>(
     resource: ConcurrentResource,
-    leaseMs: number,
     message: string,
     task: () => Promise<T>,
   ): Promise<T> {
-    const release = this.acquire(resource, leaseMs);
+    const release = this.acquire(resource);
     if (!release) throw new QuotaExceededError(message);
     try {
       return await task();
@@ -165,7 +179,6 @@ export class QuotaService {
   runChromium<T>(task: () => Promise<T>): Promise<T> {
     return this.concurrent(
       "chromium",
-      120_000,
       "The server is already analyzing other web pages. Try again shortly.",
       task,
     );
@@ -174,7 +187,6 @@ export class QuotaService {
   runArticleExtraction<T>(task: () => Promise<T>): Promise<T> {
     return this.concurrent(
       "article_extraction",
-      120_000,
       "The server is already extracting other articles. Try again shortly.",
       task,
     );
@@ -193,12 +205,14 @@ export class QuotaService {
     const timeout = AbortSignal.timeout(120_000);
     const waiting = signal ? AbortSignal.any([signal, timeout]) : timeout;
     waiting.throwIfAborted();
-    let release = this.acquire("outbound_request", 120_000);
-    while (!release) {
-      // Leases are shared through SQLite, including with other server processes.
-      await delay(50, undefined, { signal: waiting });
+    let release = this.acquire("outbound_request");
+    for (let attempt = 0; !release; attempt += 1) {
+      // Leases are shared through SQLite, including with other server processes. Waiters back off
+      // with jitter so a full pool is not re-checked by every waiter in lockstep.
+      const step = Math.min(MAX_WAIT_STEP_MS, FIRST_WAIT_STEP_MS * 2 ** attempt);
+      await delay(Math.random() * step, undefined, { signal: waiting });
       waiting.throwIfAborted();
-      release = this.acquire("outbound_request", 120_000);
+      release = this.acquire("outbound_request");
     }
     try {
       this.consumeDaily("outbound_request", "global");

@@ -139,7 +139,7 @@ Compose reads these values from the shell or a project-level `.env` file:
 | `FEED_FETCH_TIMEOUT_MS` | `15000` | Feed request timeout, in milliseconds. |
 | `WEB_FEED_LOAD_TIMEOUT_MS` | `30000` | Maximum normal load time for a JavaScript-rendered web feed, in milliseconds. |
 | `ARTICLE_FETCH_TIMEOUT_MS` | `20000` | Full-article request timeout, in milliseconds. |
-| `AI_REQUEST_TIMEOUT_MS` | `60000` | AI provider request timeout, in milliseconds. |
+| `AI_REQUEST_TIMEOUT_MS` | `60000` for articles, `240000` for YouTube videos | AI provider request timeout, in milliseconds. Setting it applies one limit to every request. |
 
 All server settings are independent. Limits and resource quotas accept a positive integer or `unlimited` to disable that individual limit. `FEEDFOLD_MAX_ACCOUNTS` instead accepts a nonnegative integer; `0` disables registration. Both the registration account cap and registered-account resource quota apply.
 
