@@ -29,11 +29,10 @@ export function runtimeConfiguration(environment: NodeJS.ProcessEnv) {
       20_000,
       "ARTICLE_FETCH_TIMEOUT_MS",
     ),
-    // Unset keeps the AI service's own limits, which give video summaries longer than articles.
-    aiRequestTimeoutMs:
-      environment.AI_REQUEST_TIMEOUT_MS === undefined
-        ? undefined
-        : positiveInteger(environment.AI_REQUEST_TIMEOUT_MS, 0, "AI_REQUEST_TIMEOUT_MS"),
+    // Unset or empty keeps the AI service's own limits, which give videos longer than articles.
+    aiRequestTimeoutMs: environment.AI_REQUEST_TIMEOUT_MS
+      ? positiveInteger(environment.AI_REQUEST_TIMEOUT_MS, 0, "AI_REQUEST_TIMEOUT_MS")
+      : undefined,
   };
 }
 
