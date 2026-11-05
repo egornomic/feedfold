@@ -87,12 +87,18 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  /* The header leads; the points follow as one wave whose gaps shorten as it settles. */
+  .homepage-points li {
+    animation-name: homepage-follow;
+    animation-delay: 60ms;
+  }
+
   .homepage-points li:nth-child(2) {
-    animation-delay: 50ms;
+    animation-delay: 100ms;
   }
 
   .homepage-points li:nth-child(3) {
-    animation-delay: 100ms;
+    animation-delay: 130ms;
   }
 }
 
@@ -100,6 +106,13 @@
   from {
     opacity: 0;
     transform: translateY(8px);
+  }
+}
+
+@keyframes homepage-follow {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
   }
 }
 

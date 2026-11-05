@@ -10,7 +10,7 @@ import type {
 } from "../../../shared/types";
 import { errorMessage, type RuleInput } from "../../api/api";
 import { DropdownSelect } from "../../ui/dropdown";
-import { type MotionState, motionExitDuration } from "../../ui/motion";
+import { collapseWhileExiting, type MotionState, motionExitDuration } from "../../ui/motion";
 import type { ReaderDataMutations } from "../reader/reader-data";
 import type { RuleFormPreset } from "./rule-form-types";
 import { RULE_ACTION_COPY, RULE_FIELD_LABELS, RuleActionIcon } from "./rule-presentation";
@@ -116,6 +116,8 @@ export function RuleForm({
     if (duration === 0) finishRemoval();
     else {
       setRemovingConditionIds((current) => new Set(current).add(id));
+      const row = conditionInputRefs.current.get(id)?.closest("li");
+      if (row) collapseWhileExiting(row, duration);
       conditionRemovalTimers.current.set(id, window.setTimeout(finishRemoval, duration));
     }
     window.requestAnimationFrame(() => {
