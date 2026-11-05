@@ -49,7 +49,6 @@ it("recovers from a failed page reload and a failed save while repairing a web f
     httpStatus: 200,
     error: "The saved selection no longer matches",
     errorKind: "selection_broken",
-    retryMinutes: 20,
   });
   const analysis: WebFeedAnalysis = {
     pageUrl,

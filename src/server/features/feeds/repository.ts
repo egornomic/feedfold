@@ -23,7 +23,7 @@ import {
   WEB_FEED_POLL_INTERVAL_MINUTES,
 } from "../shared.js";
 import { FeedPollingPolicy } from "./polling-policy.js";
-import { sourcePollInterval, staggeredPollAt } from "./schedule.js";
+import { failureRetryAt, sourcePollInterval, staggeredPollAt } from "./schedule.js";
 
 export interface SourceSubscription {
   feedId: number;
@@ -562,7 +562,6 @@ export class FeedRepository {
       httpStatus: number | null;
       error: string;
       errorKind: FeedErrorKind;
-      retryMinutes: number;
       expectedSelectionRevision?: number;
     },
   ): void {
@@ -573,10 +572,20 @@ export class FeedRepository {
       )
         return;
       const completed = Date.now();
+      const source = this.sqlite
+        .prepare(
+          `SELECT poll_interval_minutes AS interval,
+             COALESCE(last_success_at, created_at) AS outageStartedAt
+           FROM feed_sources WHERE id = ?`,
+        )
+        .get(sourceId) as { interval: FeedPollIntervalMinutes; outageStartedAt: string };
       const polling = new FeedPollingPolicy(this.sqlite);
       polling.finishAttempt(sourceId, completed);
       const nextPollAt = new Date(
-        polling.nextPollAt(sourceId, completed + input.retryMinutes * 60_000),
+        polling.nextPollAt(
+          sourceId,
+          failureRetryAt(source.interval, Date.parse(source.outageStartedAt), completed),
+        ),
       ).toISOString();
       this.sqlite
         .prepare(

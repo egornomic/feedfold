@@ -130,7 +130,6 @@ export class FeedRefreshService {
       this.feeds.failSourceRefresh(feed.id, {
         ...failure,
         error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
-        retryMinutes: feed.pollIntervalMinutes,
         ...(expectedSelectionRevision === undefined ? {} : { expectedSelectionRevision }),
       });
     }
@@ -151,7 +150,6 @@ export class FeedRefreshService {
         httpStatus: null,
         error: "The refresh stopped because the server shut down. Refresh the feed again.",
         errorKind: "network",
-        retryMinutes: feed.pollIntervalMinutes,
       });
     }
     await this.waitForIdle();

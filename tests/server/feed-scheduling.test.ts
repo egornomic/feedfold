@@ -155,12 +155,48 @@ describe("adaptive feed scheduling", () => {
         httpStatus: 503,
         error: "Unavailable",
         errorKind: "http",
-        retryMinutes: 10,
       });
       expect(database.feeds.getFeed(1, feed.id)).toMatchObject({
         pollIntervalMinutes: 10,
         lastErrorKind: "http",
       });
+    } finally {
+      database.close();
+    }
+  });
+
+  it("backs off a failing feed until it is checked twice a day, then resumes its schedule", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(completed);
+    const database = new AppDatabase(":memory:");
+    try {
+      const feed = database.feeds.createFeed(1, { feedUrl: "https://example.test/down.xml" });
+      refresh(database, feed.id, [article("one", earlier(60)), article("two", completedAt)]);
+      const intervalMinutes = database.feeds.getFeed(1, feed.id)?.pollIntervalMinutes as number;
+      const minutesUntilRetry: number[] = [];
+      for (let failure = 0; failure < 10; failure += 1) {
+        const nextPollAt = Date.parse(database.feeds.getFeed(1, feed.id)?.nextPollAt as string);
+        vi.setSystemTime(nextPollAt);
+        failFeedRefresh(database.feeds, feed.id, {
+          httpStatus: 503,
+          error: "Unavailable",
+          errorKind: "http",
+        });
+        const retryAt = Date.parse(database.feeds.getFeed(1, feed.id)?.nextPollAt as string);
+        minutesUntilRetry.push((retryAt - nextPollAt) / 60_000);
+      }
+
+      expect(Math.min(...minutesUntilRetry)).toBeGreaterThanOrEqual(intervalMinutes);
+      expect(Math.max(...minutesUntilRetry)).toBeLessThanOrEqual(720);
+      expect(minutesUntilRetry.slice(-3).every((minutes) => minutes >= 360)).toBe(true);
+
+      refresh(database, feed.id, [article("three", new Date(Date.now()).toISOString())]);
+      const recovered = Date.parse(database.feeds.getFeed(1, feed.id)?.nextPollAt as string);
+      // A changed interval realigns the source to its stagger slot within two intervals.
+      expect(recovered - Date.now()).toBeLessThanOrEqual(
+        2 * (database.feeds.getFeed(1, feed.id)?.pollIntervalMinutes as number) * 60_000,
+      );
+      expect(database.feeds.getFeed(1, feed.id)?.lastErrorKind).toBeNull();
     } finally {
       database.close();
     }
