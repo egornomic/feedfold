@@ -490,3 +490,75 @@ it("interrupts a summary entrance with keyboard toggles without stale text or sh
     await touchContext.close();
   }
 });
+
+it("closes the phone navigation drawer when it is dragged back toward its edge", async () => {
+  const { page, touchContext, touch } = await openTouchReader();
+  const drawerX = () =>
+    page
+      .locator(".sidebar")
+      .evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41);
+  const drag = async (from: number, to: number, steps: number, y = 300) => {
+    await touch("touchStart", from, y);
+    for (let step = 1; step <= steps; step++) {
+      await touch("touchMove", from + ((to - from) * step) / steps, y);
+      await page.waitForTimeout(16);
+    }
+  };
+  try {
+    await page.getByRole("button", { name: "Back to articles", exact: true }).click();
+    await page.locator(".reader-toolbar").getByRole("button", { name: "Open navigation" }).click();
+    await expect.poll(drawerX).toBe(0);
+
+    // The drawer and scrim follow the finger, and a short slow drag springs back open.
+    await drag(220, 140, 8);
+    expect(await drawerX()).toBeCloseTo(-80, 0);
+    expect(
+      Number(await page.locator(".nav-scrim").evaluate((e) => getComputedStyle(e).opacity)),
+    ).toBeLessThan(1);
+    await page.waitForTimeout(300);
+    await touch("touchEnd");
+    await expect.poll(drawerX).toBe(0);
+    expect(await page.locator(".nav-scrim.is-open").count()).toBe(1);
+
+    // A vertical drag is left to scrolling, and holding a feed picks it up instead of moving the drawer.
+    await touch("touchStart", 220, 500);
+    for (let step = 1; step <= 8; step++) {
+      await touch("touchMove", 220 - step * 2, 500 - step * 25);
+      await page.waitForTimeout(16);
+    }
+    await touch("touchEnd");
+    expect(await drawerX()).toBe(0);
+    await touch("touchStart", 220, 300);
+    await page.waitForTimeout(400);
+    for (let step = 1; step <= 8; step++) {
+      await touch("touchMove", 220 - step * 15, 300);
+      await page.waitForTimeout(16);
+    }
+    expect(await page.locator(".sidebar.is-dragging-feed").count()).toBe(1);
+    expect(await drawerX()).toBe(0);
+    await touch("touchEnd");
+    await expect.poll(drawerX).toBe(0);
+    expect(await page.locator(".nav-scrim.is-open").count()).toBe(1);
+
+    // A long drag closes it.
+    await drag(240, 60, 8);
+    await touch("touchEnd");
+    await expect.poll(() => page.locator(".nav-scrim.is-open").count()).toBe(0);
+    await expect.poll(drawerX).toBeLessThan(-290);
+
+    // A quick short flick also closes it.
+    await page.locator(".reader-toolbar").getByRole("button", { name: "Open navigation" }).click();
+    await expect.poll(drawerX).toBe(0);
+    await drag(220, 170, 2);
+    await touch("touchEnd");
+    await expect.poll(() => page.locator(".nav-scrim.is-open").count()).toBe(0);
+
+    // Tapping beside the drawer still closes it.
+    await page.locator(".reader-toolbar").getByRole("button", { name: "Open navigation" }).click();
+    await expect.poll(drawerX).toBe(0);
+    await page.touchscreen.tap(370, 600);
+    await expect.poll(() => page.locator(".nav-scrim.is-open").count()).toBe(0);
+  } finally {
+    await touchContext.close();
+  }
+});
