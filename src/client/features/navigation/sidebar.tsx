@@ -16,6 +16,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import type { AddFeedSourceType, AppView } from "../../../shared/app-routes";
 import type {
@@ -45,6 +46,7 @@ import {
   type FolderManagementAction,
 } from "../feeds/feed-management";
 import { ADD_FEED_SOURCE_OPTIONS } from "../feeds/feed-source-options";
+import { useDrawerSwipe } from "./drawer-swipe";
 
 function selectedFolderPath(
   folders: FolderType[],
@@ -191,6 +193,8 @@ function SidebarContent({
     [],
   );
 
+  const drawerSwipe = useDrawerSwipe(compact && open && !draggedFeed, onClose);
+
   const {
     ref: topLevelRef,
     available: topLevelDropAvailable,
@@ -198,257 +202,270 @@ function SidebarContent({
   } = useFeedDropTarget(null, "Top level");
 
   return (
-    <aside
-      className={`sidebar${open ? " is-open" : ""}${collapsed ? " is-collapsed" : ""}${draggedFeed ? " is-dragging-feed" : ""}`}
-      aria-label="Primary navigation"
-      inert={compact && !open}
-    >
-      <div className="brand-row">
-        <button className="brand" type="button" onClick={() => onSelectScope(null, null)}>
-          <BrandIdentity />
-        </button>
-        <IconButton
-          label={collapsed ? "Show sidebar" : "Hide sidebar"}
-          onClick={onToggleCollapse}
-          className="sidebar-collapse-button"
-        >
-          {collapsed ? (
-            <PanelLeftOpen aria-hidden="true" size={18} />
-          ) : (
-            <PanelLeftClose aria-hidden="true" size={18} />
-          )}
-        </IconButton>
-        <IconButton label="Close navigation" onClick={onClose} className="close-nav">
-          <X aria-hidden="true" size={18} />
-        </IconButton>
-      </div>
-
-      <nav className="sidebar-navigation">
-        <ul className="nav-list quick-links">
-          <li>
-            <button
-              className="nav-item"
-              aria-current={
-                currentView === "reader" &&
-                currentState !== "saved" &&
-                selectedFeedId === null &&
-                selectedFolderId === null
-                  ? "page"
-                  : undefined
-              }
-              type="button"
-              onClick={() => onSelectState("unread")}
-            >
-              <span>Feed</span>
-              <ArticleCount count={bootstrap.counts.unread} />
-              <Kbd>g u</Kbd>
-            </button>
-          </li>
-          <li>
-            <button
-              className="nav-item"
-              aria-current={
-                currentView === "reader" &&
-                currentState === "saved" &&
-                selectedFeedId === null &&
-                selectedFolderId === null
-                  ? "page"
-                  : undefined
-              }
-              type="button"
-              onClick={() => onSelectState("saved")}
-            >
-              <span>Saved</span>
-              <ArticleCount count={bootstrap.counts.saved} />
-              <Kbd>g s</Kbd>
-            </button>
-          </li>
-        </ul>
-
-        <div className="sidebar-scroll">
-          <fieldset
-            className={`sidebar-section-heading sidebar-top-level-drop${topLevelDropAvailable ? " is-feed-drop-available" : ""}${topLevelDropActive ? " is-feed-drop-target" : ""}`}
-            aria-label={topLevelDropAvailable ? "Move feed to top level" : "Subscription actions"}
-            ref={topLevelRef}
+    <>
+      <motion.aside
+        ref={drawerSwipe.drawerRef}
+        onPanStart={drawerSwipe.onPanStart}
+        onPan={drawerSwipe.onPan}
+        onPanEnd={drawerSwipe.onPanEnd}
+        className={`sidebar${open ? " is-open" : ""}${collapsed ? " is-collapsed" : ""}${draggedFeed ? " is-dragging-feed" : ""}`}
+        aria-label="Primary navigation"
+        inert={compact && !open}
+      >
+        <div className="brand-row">
+          <button className="brand" type="button" onClick={() => onSelectScope(null, null)}>
+            <BrandIdentity />
+          </button>
+          <IconButton
+            label={collapsed ? "Show sidebar" : "Hide sidebar"}
+            onClick={onToggleCollapse}
+            className="sidebar-collapse-button"
           >
-            <span>
-              {topLevelDropActive
-                ? "Drop at top level"
-                : topLevelDropAvailable
-                  ? "Top level"
-                  : "Subscriptions"}
-            </span>
-            <span className="sidebar-section-actions">
-              {bootstrap.capabilities.manualRefresh ? (
+            {collapsed ? (
+              <PanelLeftOpen aria-hidden="true" size={18} />
+            ) : (
+              <PanelLeftClose aria-hidden="true" size={18} />
+            )}
+          </IconButton>
+          <IconButton label="Close navigation" onClick={onClose} className="close-nav">
+            <X aria-hidden="true" size={18} />
+          </IconButton>
+        </div>
+
+        <nav className="sidebar-navigation">
+          <ul className="nav-list quick-links">
+            <li>
+              <button
+                className="nav-item"
+                aria-current={
+                  currentView === "reader" &&
+                  currentState !== "saved" &&
+                  selectedFeedId === null &&
+                  selectedFolderId === null
+                    ? "page"
+                    : undefined
+                }
+                type="button"
+                onClick={() => onSelectState("unread")}
+              >
+                <span>Feed</span>
+                <ArticleCount count={bootstrap.counts.unread} />
+                <Kbd>g u</Kbd>
+              </button>
+            </li>
+            <li>
+              <button
+                className="nav-item"
+                aria-current={
+                  currentView === "reader" &&
+                  currentState === "saved" &&
+                  selectedFeedId === null &&
+                  selectedFolderId === null
+                    ? "page"
+                    : undefined
+                }
+                type="button"
+                onClick={() => onSelectState("saved")}
+              >
+                <span>Saved</span>
+                <ArticleCount count={bootstrap.counts.saved} />
+                <Kbd>g s</Kbd>
+              </button>
+            </li>
+          </ul>
+
+          <div className="sidebar-scroll">
+            <fieldset
+              className={`sidebar-section-heading sidebar-top-level-drop${topLevelDropAvailable ? " is-feed-drop-available" : ""}${topLevelDropActive ? " is-feed-drop-target" : ""}`}
+              aria-label={topLevelDropAvailable ? "Move feed to top level" : "Subscription actions"}
+              ref={topLevelRef}
+            >
+              <span>
+                {topLevelDropActive
+                  ? "Drop at top level"
+                  : topLevelDropAvailable
+                    ? "Top level"
+                    : "Subscriptions"}
+              </span>
+              <span className="sidebar-section-actions">
+                {bootstrap.capabilities.manualRefresh ? (
+                  <button
+                    type="button"
+                    onClick={onRefresh}
+                    disabled={refreshing}
+                    aria-label="Refresh feeds"
+                    title="Refresh feeds (R)"
+                  >
+                    <RefreshCw className={refreshing ? "spin" : ""} aria-hidden="true" size={14} />
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={onRefresh}
-                  disabled={refreshing}
-                  aria-label="Refresh feeds"
-                  title="Refresh feeds (R)"
+                  aria-label="Add subscription or folder"
+                  title="Add subscription or folder"
+                  aria-haspopup="menu"
+                  aria-expanded={contextMenu?.kind === "add"}
+                  aria-controls={contextMenu?.kind === "add" ? "sidebar-add-menu" : undefined}
+                  onClick={(event) => {
+                    const trigger = event.currentTarget;
+                    const bounds = trigger.getBoundingClientRect();
+                    if (contextMenu?.kind === "add") closeContextMenu();
+                    else
+                      setContextMenu({
+                        kind: "add",
+                        trigger,
+                        left: bounds.left,
+                        top: bounds.bottom + 4,
+                      });
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                    event.preventDefault();
+                    event.currentTarget.click();
+                  }}
                 >
-                  <RefreshCw className={refreshing ? "spin" : ""} aria-hidden="true" size={14} />
+                  <Plus aria-hidden="true" size={15} />
                 </button>
-              ) : null}
-              <button
-                type="button"
-                aria-label="Add subscription or folder"
-                title="Add subscription or folder"
-                aria-haspopup="menu"
-                aria-expanded={contextMenu?.kind === "add"}
-                aria-controls={contextMenu?.kind === "add" ? "sidebar-add-menu" : undefined}
-                onClick={(event) => {
-                  const trigger = event.currentTarget;
-                  const bounds = trigger.getBoundingClientRect();
-                  if (contextMenu?.kind === "add") closeContextMenu();
-                  else
-                    setContextMenu({
-                      kind: "add",
-                      trigger,
-                      left: bounds.left,
-                      top: bounds.bottom + 4,
-                    });
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-                  event.preventDefault();
-                  event.currentTarget.click();
-                }}
-              >
+              </span>
+            </fieldset>
+
+            {bootstrap.feeds.length === 0 ? (
+              <button className="sidebar-empty" type="button" onClick={onAddFeed}>
                 <Plus aria-hidden="true" size={15} />
+                Add your first feed
               </button>
-            </span>
-          </fieldset>
-
-          {bootstrap.feeds.length === 0 ? (
-            <button className="sidebar-empty" type="button" onClick={onAddFeed}>
-              <Plus aria-hidden="true" size={15} />
-              Add your first feed
-            </button>
-          ) : (
-            <ul className="folder-tree">
-              {rootFolders.map((folder) => (
-                <SidebarFolder
-                  key={folder.id}
-                  folder={folder}
-                  folders={bootstrap.folders}
-                  feeds={bootstrap.feeds}
-                  selectedFeedId={selectedFeedId}
-                  selectedFolderId={selectedFolderId}
-                  selectedFolderPathIds={selectedFolderPathIds}
-                  currentView={currentView}
-                  feedDrag={feedDrag}
-                  onSelectScope={onSelectScope}
-                  onOpenFeedMenu={openFeedMenu}
-                  onOpenFolderMenu={openFolderMenu}
-                />
-              ))}
-              {uncategorized.map((feed) => (
-                <SidebarFeed
-                  key={feed.id}
-                  feed={feed}
-                  selected={currentView === "reader" && selectedFeedId === feed.id}
-                  feedDrag={feedDrag}
-                  onSelect={() => onSelectScope(feed.id, null)}
-                  onOpenMenu={openFeedMenu}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-      </nav>
-
-      <div className="sidebar-footer">
-        <button
-          data-management-focus-fallback
-          className="nav-item"
-          aria-current={currentView === "feeds" ? "page" : undefined}
-          type="button"
-          onClick={() => onNavigate("feeds")}
-        >
-          {hasFeedErrors ? (
-            <AlertTriangle className="status-warning" aria-hidden="true" size={16} />
-          ) : (
-            <Rss aria-hidden="true" size={16} />
-          )}
-          <span>Manage feeds</span>
-          <Kbd>g f</Kbd>
-        </button>
-        <button
-          className="nav-item"
-          aria-current={currentView === "rules" ? "page" : undefined}
-          type="button"
-          onClick={() => onNavigate("rules")}
-        >
-          <ListFilter aria-hidden="true" size={16} />
-          <span>Rules</span>
-          <Kbd>g r</Kbd>
-        </button>
-        <button
-          className="nav-item"
-          aria-current={currentView === "settings" ? "page" : undefined}
-          type="button"
-          onClick={() => onNavigate("settings")}
-        >
-          <Settings aria-hidden="true" size={16} />
-          <span>Settings</span>
-          <Kbd>g ,</Kbd>
-        </button>
-        {!localApp ? (
-          <div className="sidebar-account">
-            <span className="account-name" title={user.username}>
-              <UserRound aria-hidden="true" size={16} />
-              <span className="truncate">{user.username}</span>
-            </span>
-            <span className="sidebar-account-actions">
-              {sourceUrl ? (
-                <a
-                  className="icon-button"
-                  href={sourceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="View feedfold on GitHub"
-                  title="View on GitHub"
-                >
-                  <ExternalLink aria-hidden="true" size={16} />
-                </a>
-              ) : null}
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={`Log out ${user.username}`}
-                title="Log out"
-                onClick={() => void onLogout()}
-              >
-                <LogOut aria-hidden="true" size={16} />
-              </button>
-            </span>
+            ) : (
+              <ul className="folder-tree">
+                {rootFolders.map((folder) => (
+                  <SidebarFolder
+                    key={folder.id}
+                    folder={folder}
+                    folders={bootstrap.folders}
+                    feeds={bootstrap.feeds}
+                    selectedFeedId={selectedFeedId}
+                    selectedFolderId={selectedFolderId}
+                    selectedFolderPathIds={selectedFolderPathIds}
+                    currentView={currentView}
+                    feedDrag={feedDrag}
+                    onSelectScope={onSelectScope}
+                    onOpenFeedMenu={openFeedMenu}
+                    onOpenFolderMenu={openFolderMenu}
+                  />
+                ))}
+                {uncategorized.map((feed) => (
+                  <SidebarFeed
+                    key={feed.id}
+                    feed={feed}
+                    selected={currentView === "reader" && selectedFeedId === feed.id}
+                    feedDrag={feedDrag}
+                    onSelect={() => onSelectScope(feed.id, null)}
+                    onOpenMenu={openFeedMenu}
+                  />
+                ))}
+              </ul>
+            )}
           </div>
+        </nav>
+
+        <div className="sidebar-footer">
+          <button
+            data-management-focus-fallback
+            className="nav-item"
+            aria-current={currentView === "feeds" ? "page" : undefined}
+            type="button"
+            onClick={() => onNavigate("feeds")}
+          >
+            {hasFeedErrors ? (
+              <AlertTriangle className="status-warning" aria-hidden="true" size={16} />
+            ) : (
+              <Rss aria-hidden="true" size={16} />
+            )}
+            <span>Manage feeds</span>
+            <Kbd>g f</Kbd>
+          </button>
+          <button
+            className="nav-item"
+            aria-current={currentView === "rules" ? "page" : undefined}
+            type="button"
+            onClick={() => onNavigate("rules")}
+          >
+            <ListFilter aria-hidden="true" size={16} />
+            <span>Rules</span>
+            <Kbd>g r</Kbd>
+          </button>
+          <button
+            className="nav-item"
+            aria-current={currentView === "settings" ? "page" : undefined}
+            type="button"
+            onClick={() => onNavigate("settings")}
+          >
+            <Settings aria-hidden="true" size={16} />
+            <span>Settings</span>
+            <Kbd>g ,</Kbd>
+          </button>
+          {!localApp ? (
+            <div className="sidebar-account">
+              <span className="account-name" title={user.username}>
+                <UserRound aria-hidden="true" size={16} />
+                <span className="truncate">{user.username}</span>
+              </span>
+              <span className="sidebar-account-actions">
+                {sourceUrl ? (
+                  <a
+                    className="icon-button"
+                    href={sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="View feedfold on GitHub"
+                    title="View on GitHub"
+                  >
+                    <ExternalLink aria-hidden="true" size={16} />
+                  </a>
+                ) : null}
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={`Log out ${user.username}`}
+                  title="Log out"
+                  onClick={() => void onLogout()}
+                >
+                  <LogOut aria-hidden="true" size={16} />
+                </button>
+              </span>
+            </div>
+          ) : null}
+        </div>
+        {contextMenu ? (
+          <SidebarContextMenu
+            state={contextMenu}
+            onClose={closeContextMenu}
+            onAddSubscription={(sourceType) => {
+              closeContextMenu();
+              onAddSubscription(sourceType);
+            }}
+            onAddFolder={() => {
+              closeContextMenu();
+              onAddFolder();
+            }}
+            onFeedAction={(feed, action) => {
+              closeContextMenu();
+              onFeedAction(feed, action);
+            }}
+            onFolderAction={(folder, action) => {
+              closeContextMenu();
+              onFolderAction(folder, action);
+            }}
+          />
         ) : null}
-      </div>
-      {contextMenu ? (
-        <SidebarContextMenu
-          state={contextMenu}
-          onClose={closeContextMenu}
-          onAddSubscription={(sourceType) => {
-            closeContextMenu();
-            onAddSubscription(sourceType);
-          }}
-          onAddFolder={() => {
-            closeContextMenu();
-            onAddFolder();
-          }}
-          onFeedAction={(feed, action) => {
-            closeContextMenu();
-            onFeedAction(feed, action);
-          }}
-          onFolderAction={(folder, action) => {
-            closeContextMenu();
-            onFolderAction(folder, action);
-          }}
-        />
-      ) : null}
-    </aside>
+      </motion.aside>
+      <button
+        ref={drawerSwipe.scrimRef}
+        className={`nav-scrim${open ? " is-open" : ""}`}
+        type="button"
+        aria-label="Close navigation"
+        onClick={onClose}
+      />
+    </>
   );
 }
 

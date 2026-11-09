@@ -281,6 +281,11 @@
     transform: translateX(-102%);
     transition: transform 170ms var(--ease-out);
   }
+  /* Horizontal drags close the drawer; vertical ones scroll the feed list. */
+  .sidebar,
+  .sidebar-scroll {
+    touch-action: pan-y;
+  }
   .sidebar.is-open {
     transform: translateX(0);
     transition-duration: 220ms;

@@ -74,7 +74,6 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
   const desktopSidebarCollapsed = useReaderPreferences((state) => state.desktopSidebarCollapsed);
   const managementRequest = useInterfaceState((state) => state.managementRequest);
   const shortcutHelpOpen = useInterfaceState((state) => state.shortcutHelpOpen);
-  const navOpen = useInterfaceState((state) => state.navOpen);
   const setNavOpen = useInterfaceState((state) => state.setNavOpen);
   const setShortcutHelpOpen = useInterfaceState((state) => state.setShortcutHelpOpen);
   const setManagementRequest = useInterfaceState((state) => state.setManagementRequest);
@@ -480,12 +479,6 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
           />
         </Suspense>
       ) : null}
-      <button
-        className={`nav-scrim${navOpen ? " is-open" : ""}`}
-        type="button"
-        aria-label="Close navigation"
-        onClick={() => setNavOpen(false)}
-      />
     </div>
   );
 }
