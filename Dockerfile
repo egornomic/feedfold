@@ -1,4 +1,6 @@
-FROM node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS toolchain
+FROM \
+node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d \
+    AS toolchain
 WORKDIR /app
 # Bootstrap only the pinned package manager, with all of its lifecycle hooks disabled.
 RUN npm install --global npm@12.1.0 --ignore-scripts && test "$(npm --version)" = 12.1.0
@@ -45,7 +47,8 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
     DATABASE_PATH=/data/feedfold.db
-COPY --from=production-dependencies --chown=node:node /app/package.json /app/package-lock.json /app/.npmrc ./
+COPY --from=production-dependencies --chown=node:node \
+    /app/package.json /app/package-lock.json /app/.npmrc ./
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=production-dependencies --chown=node:node /app/scripts ./scripts
 RUN mkdir -p /data && chown node:node /data
@@ -55,5 +58,10 @@ COPY --from=server --chown=node:node /app/dist/server ./dist/server
 USER node
 VOLUME ["/data"]
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:3000/health').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["node", "-e", "fetch('http://127.0.0.1:3000/health').then((response) => { \
+        if (!response.ok) { \
+            process.exit(1); \
+        } \
+    }).catch(() => process.exit(1));"]
 CMD ["node", "dist/server/index.js"]

@@ -17,104 +17,120 @@ import "./styles/responsive.css";
 import "./ui/overlays.css";
 
 if (import.meta.env.PROD && !isDesktopApp() && "serviceWorker" in navigator) {
-  // Registration must not depend on the reader mounting successfully.
-  void navigator.serviceWorker
-    .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: "none" })
-    .catch((error) => console.error("Could not register feedfold updates.", error));
+    // Registration must not depend on the reader mounting successfully.
+    void navigator.serviceWorker
+        .register(`${import.meta.env.BASE_URL}sw.js`, {
+            updateViaCache: "none",
+        })
+        .catch((error) =>
+            console.error("Could not register feedfold updates.", error),
+        );
 }
 
 // Each script and style downloads on first use; fetch the ones articles commonly need up front,
 // so their text never appears in a fallback font and then re-wraps.
-for (const style of ["normal", "italic"])
-  void document.fonts.load(`${style} 1em "IBM Plex Sans Variable"`, "aąЖ");
+for (const style of ["normal", "italic"]) {
+    void document.fonts.load(`${style} 1em "IBM Plex Sans Variable"`, "aąЖ");
+}
 
 const root = document.getElementById("root");
 assert(root, "The feedfold root element is missing.");
 const Application = import.meta.env.DEV
-  ? lazy(() => import("../demo/stress-app").then(({ StressApp }) => ({ default: StressApp })))
-  : App;
+    ? lazy(() =>
+          import("../demo/stress-app").then(({ StressApp }) => ({
+              default: StressApp,
+          })),
+      )
+    : App;
 
 const POINTER_MOVE_THRESHOLD = 4;
 const TOASTER_OFFSET = {
-  top: "max(18px, env(safe-area-inset-top, 0px))",
-  right: "max(18px, env(safe-area-inset-right, 0px))",
-  bottom: "max(18px, env(safe-area-inset-bottom, 0px))",
-  left: "max(18px, env(safe-area-inset-left, 0px))",
+    top: "max(18px, env(safe-area-inset-top, 0px))",
+    right: "max(18px, env(safe-area-inset-right, 0px))",
+    bottom: "max(18px, env(safe-area-inset-bottom, 0px))",
+    left: "max(18px, env(safe-area-inset-left, 0px))",
 };
 const TOASTER_STYLE = {
-  "--width": "min(430px, calc(100vw - 36px))",
-  "--border-radius": "var(--radius-md)",
-  zIndex: "var(--z-toast)",
-  fontFamily: "var(--font-ui)",
+    "--width": "min(430px, calc(100vw - 36px))",
+    "--border-radius": "var(--radius-md)",
+    zIndex: "var(--z-toast)",
+    fontFamily: "var(--font-ui)",
 } as CSSProperties;
 const TOAST_STYLE: CSSProperties = {
-  minHeight: 0,
-  gap: 8,
-  padding: "10px 13px",
-  border: "1px solid var(--border-strong)",
-  borderRadius: "var(--radius-md)",
-  background: "var(--surface-raised)",
-  color: "var(--text)",
-  boxShadow: "0 4px 8px oklch(0 0 0 / 0.28)",
-  fontFamily: "var(--font-ui)",
-  fontSize: "var(--type-body)",
-  fontWeight: "var(--weight-semibold)",
-  transition:
-    "transform var(--duration-surface) var(--ease-out), opacity var(--duration-surface) var(--ease-out)",
+    minHeight: 0,
+    gap: 8,
+    padding: "10px 13px",
+    border: "1px solid var(--border-strong)",
+    borderRadius: "var(--radius-md)",
+    background: "var(--surface-raised)",
+    color: "var(--text)",
+    boxShadow: "0 4px 8px oklch(0 0 0 / 0.28)",
+    fontFamily: "var(--font-ui)",
+    fontSize: "var(--type-body)",
+    fontWeight: "var(--weight-semibold)",
+    transition:
+        "transform var(--duration-surface) var(--ease-out), opacity " +
+        "var(--duration-surface) var(--ease-out)",
 };
 let lastMousePosition: { x: number; y: number } | null = null;
 
 window.addEventListener(
-  "keydown",
-  () => {
-    document.documentElement.dataset.inputModality = "keyboard";
-  },
-  { capture: true },
+    "keydown",
+    () => {
+        document.documentElement.dataset.inputModality = "keyboard";
+    },
+    { capture: true },
 );
 window.addEventListener(
-  "pointerdown",
-  () => {
-    document.documentElement.dataset.inputModality = "pointer";
-  },
-  { capture: true },
+    "pointerdown",
+    () => {
+        document.documentElement.dataset.inputModality = "pointer";
+    },
+    { capture: true },
 );
 window.addEventListener(
-  "pointermove",
-  (event) => {
-    if (event.pointerType !== "mouse") return;
-    const previousPosition = lastMousePosition;
-    const deltaX = previousPosition ? event.clientX - previousPosition.x : event.movementX;
-    const deltaY = previousPosition ? event.clientY - previousPosition.y : event.movementY;
-    lastMousePosition = { x: event.clientX, y: event.clientY };
-    if (
-      document.documentElement.dataset.inputModality === "keyboard" &&
-      Math.hypot(deltaX, deltaY) >= POINTER_MOVE_THRESHOLD
-    ) {
-      document.documentElement.dataset.inputModality = "pointer";
-    }
-  },
-  { capture: true, passive: true },
+    "pointermove",
+    (event) => {
+        if (event.pointerType !== "mouse") {
+            return;
+        }
+        const previousPosition = lastMousePosition;
+        const deltaX = previousPosition
+            ? event.clientX - previousPosition.x
+            : event.movementX;
+        const deltaY = previousPosition
+            ? event.clientY - previousPosition.y
+            : event.movementY;
+        lastMousePosition = { x: event.clientX, y: event.clientY };
+        if (
+            document.documentElement.dataset.inputModality === "keyboard" &&
+            Math.hypot(deltaX, deltaY) >= POINTER_MOVE_THRESHOLD
+        ) {
+            document.documentElement.dataset.inputModality = "pointer";
+        }
+    },
+    { capture: true, passive: true },
 );
 
 createRoot(root).render(
-  <StrictMode>
-    <ApplicationBoundary>
-      <Suspense fallback={null}>
-        <Application />
-      </Suspense>
-    </ApplicationBoundary>
-    <Toaster
-      theme="system"
-      position="bottom-right"
-      offset={TOASTER_OFFSET}
-      mobileOffset={TOASTER_OFFSET}
-      duration={2800}
-      gap={8}
-      style={TOASTER_STYLE}
-      toastOptions={{
-        classNames: { title: "sonner-toast-title" },
-        style: TOAST_STYLE,
-      }}
-    />
-  </StrictMode>,
+    <StrictMode>
+        <ApplicationBoundary>
+            <Suspense fallback={null}>
+                <Application />
+            </Suspense>
+        </ApplicationBoundary>
+        <Toaster
+            theme="system"
+            position="bottom-right"
+            offset={TOASTER_OFFSET}
+            mobileOffset={TOASTER_OFFSET}
+            duration={2800}
+            gap={8}
+            style={TOASTER_STYLE}
+            toastOptions={{
+                classNames: { title: "sonner-toast-title" },
+                style: TOAST_STYLE,
+            }}
+        />
+    </StrictMode>,
 );

@@ -1,122 +1,181 @@
-import type { ApiInput, ApiOperation, ApiOutput } from "../../shared/api/operations.js";
+import type {
+    ApiInput,
+    ApiOperation,
+    ApiOutput,
+} from "../../shared/api/operations.js";
 import { invokeDesktop, isDesktopApp } from "../platform/desktop.js";
 import {
-  type ApiRequestOptions,
-  createApiClient,
-  type ReaderDataInvalidation,
+    type ApiRequestOptions,
+    createApiClient,
+    type ReaderDataInvalidation,
 } from "./api-client.js";
 import { ApiError, appUrl } from "./api-contract.js";
 import { createBrowserRequest, readerTabId } from "./browser-api.js";
 import { httpRequest } from "./http-request.js";
 
 export type {
-  FeedInput,
-  FeedUpdateInput,
-  FolderInput,
-  RuleInput,
+    FeedInput,
+    FeedUpdateInput,
+    FolderInput,
+    RuleInput,
 } from "./api-contract.js";
-export { ApiError, AUTH_REQUIRED_EVENT, appUrl, errorMessage } from "./api-contract.js";
+export {
+    ApiError,
+    AUTH_REQUIRED_EVENT,
+    appUrl,
+    errorMessage,
+} from "./api-contract.js";
 
 const browserRequest = createBrowserRequest(httpRequest);
 
 const STREAM_RECONNECT_DELAY_MS = 5_000;
 
 export const api = createApiClient({
-  async request<K extends ApiOperation>(
-    operation: K,
-    payload: ApiInput<NoInfer<K>>,
-    options?: ApiRequestOptions,
-  ): Promise<ApiOutput<K>> {
-    if (!isDesktopApp()) return browserRequest<K>(operation, payload, options);
-    try {
-      const promise = invokeDesktop<K>(operation, payload);
-      const signal = options?.signal;
-      if (!signal) return await promise;
-      if (signal.aborted) throw new DOMException("The request was aborted.", "AbortError");
-      return await new Promise<ApiOutput<K>>((resolve, reject) => {
-        const abort = () => reject(new DOMException("The request was aborted.", "AbortError"));
-        signal.addEventListener("abort", abort, { once: true });
-        void promise
-          .then(resolve, reject)
-          .finally(() => signal.removeEventListener("abort", abort));
-      });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") throw error;
-      const desktopError = error as Error & { status?: number; code?: string | null };
-      throw new ApiError(
-        desktopError.message,
-        desktopError.status ?? 500,
-        desktopError.code ?? null,
-      );
-    }
-  },
-  subscribeReaderDataInvalidations(listener: (reason: ReaderDataInvalidation) => void): () => void {
-    let active = true;
-    const invalidate = () => {
-      if (active) listener("change");
-    };
-    const bridge = window.feedfoldDesktop;
-    const unsubscribe = bridge
-      ? (() => {
-          const unsubscribe = bridge.onDataChanged(invalidate);
-          queueMicrotask(invalidate);
-          return unsubscribe;
-        })()
-      : (() => {
-          let connectedBefore = false;
-          let stream:
-            | { phase: "open"; events: EventSource }
-            | { phase: "waiting"; reconnect: ReturnType<typeof setTimeout> };
-          const connect = () => {
-            const events = new EventSource(appUrl(`/api/refresh/events?reader=${readerTabId}`), {
-              withCredentials: true,
+    async request<K extends ApiOperation>(
+        operation: K,
+        payload: ApiInput<NoInfer<K>>,
+        options?: ApiRequestOptions,
+    ): Promise<ApiOutput<K>> {
+        if (!isDesktopApp()) {
+            return browserRequest<K>(operation, payload, options);
+        }
+        try {
+            const promise = invokeDesktop<K>(operation, payload);
+            const signal = options?.signal;
+            if (!signal) {
+                return await promise;
+            }
+            if (signal.aborted) {
+                throw new DOMException(
+                    "The request was aborted.",
+                    "AbortError",
+                );
+            }
+            return await new Promise<ApiOutput<K>>((resolve, reject) => {
+                const abort = () =>
+                    reject(
+                        new DOMException(
+                            "The request was aborted.",
+                            "AbortError",
+                        ),
+                    );
+                signal.addEventListener("abort", abort, { once: true });
+                void promise
+                    .then(resolve, reject)
+                    .finally(() => signal.removeEventListener("abort", abort));
             });
-            stream = { phase: "open", events };
-            events.addEventListener("connected", () => {
-              if (active) listener(connectedBefore ? "change" : "connected");
-              connectedBefore = true;
-            });
-            events.addEventListener("message", invalidate);
-            events.addEventListener("error", () => {
-              invalidate();
-              // Browsers stop retrying after an error response, such as a proxy's during a restart.
-              if (events.readyState === EventSource.CLOSED)
-                stream = {
-                  phase: "waiting",
-                  reconnect: setTimeout(connect, STREAM_RECONNECT_DELAY_MS),
-                };
-            });
-          };
-          connect();
-          return () => {
-            if (stream.phase === "waiting") clearTimeout(stream.reconnect);
-            else stream.events.close();
-          };
-        })();
+        } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") {
+                throw error;
+            }
+            const desktopError = error as Error & {
+                status?: number;
+                code?: string | null;
+            };
+            throw new ApiError(
+                desktopError.message,
+                desktopError.status ?? 500,
+                desktopError.code ?? null,
+            );
+        }
+    },
+    subscribeReaderDataInvalidations(
+        listener: (reason: ReaderDataInvalidation) => void,
+    ): () => void {
+        let active = true;
+        const invalidate = () => {
+            if (active) {
+                listener("change");
+            }
+        };
+        const bridge = window.feedfoldDesktop;
+        const unsubscribe = bridge
+            ? (() => {
+                  const unsubscribe = bridge.onDataChanged(invalidate);
+                  queueMicrotask(invalidate);
+                  return unsubscribe;
+              })()
+            : (() => {
+                  let connectedBefore = false;
+                  let stream:
+                      | { phase: "open"; events: EventSource }
+                      | {
+                            phase: "waiting";
+                            reconnect: ReturnType<typeof setTimeout>;
+                        };
+                  const connect = () => {
+                      const events = new EventSource(
+                          appUrl(`/api/refresh/events?reader=${readerTabId}`),
+                          {
+                              withCredentials: true,
+                          },
+                      );
+                      stream = { phase: "open", events };
+                      events.addEventListener("connected", () => {
+                          if (active) {
+                              listener(
+                                  connectedBefore ? "change" : "connected",
+                              );
+                          }
+                          connectedBefore = true;
+                      });
+                      events.addEventListener("message", invalidate);
+                      events.addEventListener("error", () => {
+                          invalidate();
+                          // Browsers stop retrying after an error response,
+                          // such as a proxy's during a restart.
+                          if (events.readyState === EventSource.CLOSED) {
+                              stream = {
+                                  phase: "waiting",
+                                  reconnect: setTimeout(
+                                      connect,
+                                      STREAM_RECONNECT_DELAY_MS,
+                                  ),
+                              };
+                          }
+                      });
+                  };
+                  connect();
+                  return () => {
+                      if (stream.phase === "waiting") {
+                          clearTimeout(stream.reconnect);
+                      } else {
+                          stream.events.close();
+                      }
+                  };
+              })();
 
-    const reconcileVisible = () => {
-      if (document.visibilityState === "visible") invalidate();
-    };
-    window.addEventListener("online", invalidate);
-    document.addEventListener("visibilitychange", reconcileVisible);
+        const reconcileVisible = () => {
+            if (document.visibilityState === "visible") {
+                invalidate();
+            }
+        };
+        window.addEventListener("online", invalidate);
+        document.addEventListener("visibilitychange", reconcileVisible);
 
-    return () => {
-      if (!active) return;
-      active = false;
-      unsubscribe();
-      window.removeEventListener("online", invalidate);
-      document.removeEventListener("visibilitychange", reconcileVisible);
-    };
-  },
-  async exportOpml(): Promise<void> {
-    const bridge = window.feedfoldDesktop;
-    if (!bridge) {
-      window.location.assign(appUrl("/api/opml/export"));
-      return;
-    }
-    const response = await bridge.exportOpml();
-    if (!response.ok) {
-      throw new ApiError(response.error.message, response.error.status, response.error.code);
-    }
-  },
+        return () => {
+            if (!active) {
+                return;
+            }
+            active = false;
+            unsubscribe();
+            window.removeEventListener("online", invalidate);
+            document.removeEventListener("visibilitychange", reconcileVisible);
+        };
+    },
+    async exportOpml(): Promise<void> {
+        const bridge = window.feedfoldDesktop;
+        if (!bridge) {
+            window.location.assign(appUrl("/api/opml/export"));
+            return;
+        }
+        const response = await bridge.exportOpml();
+        if (!response.ok) {
+            throw new ApiError(
+                response.error.message,
+                response.error.status,
+                response.error.code,
+            );
+        }
+    },
 });

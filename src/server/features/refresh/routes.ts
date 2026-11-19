@@ -7,81 +7,95 @@ import type { UserId } from "../routes.js";
 import type { FeedRefreshService } from "./service.js";
 
 export async function refreshRoutes(
-  app: FastifyInstance,
-  {
-    application,
-    refreshService,
-    authService,
-    userId,
-  }: {
-    application: ApplicationService;
-    refreshService: FeedRefreshService;
-    authService: AuthService;
-    userId: UserId;
-  },
+    app: FastifyInstance,
+    {
+        application,
+        refreshService,
+        authService,
+        userId,
+    }: {
+        application: ApplicationService;
+        refreshService: FeedRefreshService;
+        authService: AuthService;
+        userId: UserId;
+    },
 ): Promise<void> {
-  const closeEventStreams = new Set<() => void>();
+    const closeEventStreams = new Set<() => void>();
 
-  app.addHook("preClose", async () => {
-    for (const close of [...closeEventStreams]) close();
-  });
-
-  app.get("/api/refresh/events", (request, reply) => {
-    const accountId = userId(request);
-    const token = sessionToken(request.headers.cookie);
-    const { reader } = request.query as { reader?: string };
-    const stream = reply.raw;
-    reply.hijack();
-    stream.writeHead(200, {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
+    app.addHook("preClose", async () => {
+        for (const close of [...closeEventStreams]) {
+            close();
+        }
     });
-    let closed = false;
-    const sessionActive = () => authService.userForToken(token)?.id === accountId;
-    const unsubscribe = refreshService.subscribe(accountId, (sourceReaderId?: string) => {
-      // The reader that made a change has already applied it.
-      if (sourceReaderId !== undefined && sourceReaderId === reader) return;
-      if (!sessionActive()) {
-        close();
-        return;
-      }
-      writeEvent(stream, "data: changed\n\n");
-    });
-    const heartbeat = setInterval(() => {
-      if (!sessionActive()) {
-        close();
-        return;
-      }
-      writeEvent(stream, ": keep-alive\n\n");
-    }, 15_000);
-    heartbeat.unref();
-    const cleanup = () => {
-      if (closed) return;
-      closed = true;
-      clearInterval(heartbeat);
-      unsubscribe();
-      closeEventStreams.delete(close);
-    };
-    const close = () => {
-      cleanup();
-      if (!stream.destroyed && !stream.writableEnded) stream.end();
-    };
-    closeEventStreams.add(close);
-    stream.once("close", cleanup);
-    stream.once("finish", cleanup);
-    stream.once("error", cleanup);
-    writeEvent(stream, "event: connected\ndata: ready\n\n");
-  });
 
-  app.post("/api/refresh", async (request) => {
-    const body = inputs.refresh.parse(request.body ?? {});
-    return application.refresh(userId(request), body.feedIds);
-  });
+    app.get("/api/refresh/events", (request, reply) => {
+        const accountId = userId(request);
+        const token = sessionToken(request.headers.cookie);
+        const { reader } = request.query as { reader?: string };
+        const stream = reply.raw;
+        reply.hijack();
+        stream.writeHead(200, {
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+            "X-Accel-Buffering": "no",
+        });
+        let closed = false;
+        const sessionActive = () =>
+            authService.userForToken(token)?.id === accountId;
+        const unsubscribe = refreshService.subscribe(
+            accountId,
+            (sourceReaderId?: string) => {
+                // The reader that made a change has already applied it.
+                if (sourceReaderId !== undefined && sourceReaderId === reader) {
+                    return;
+                }
+                if (!sessionActive()) {
+                    close();
+                    return;
+                }
+                writeEvent(stream, "data: changed\n\n");
+            },
+        );
+        const heartbeat = setInterval(() => {
+            if (!sessionActive()) {
+                close();
+                return;
+            }
+            writeEvent(stream, ": keep-alive\n\n");
+        }, 15_000);
+        heartbeat.unref();
+        const cleanup = () => {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            clearInterval(heartbeat);
+            unsubscribe();
+            closeEventStreams.delete(close);
+        };
+        const close = () => {
+            cleanup();
+            if (!stream.destroyed && !stream.writableEnded) {
+                stream.end();
+            }
+        };
+        closeEventStreams.add(close);
+        stream.once("close", cleanup);
+        stream.once("finish", cleanup);
+        stream.once("error", cleanup);
+        writeEvent(stream, "event: connected\ndata: ready\n\n");
+    });
+
+    app.post("/api/refresh", async (request) => {
+        const body = inputs.refresh.parse(request.body ?? {});
+        return application.refresh(userId(request), body.feedIds);
+    });
 }
 
 function writeEvent(stream: ServerResponse, event: string): void {
-  if (stream.destroyed || stream.writableEnded) return;
-  stream.write(event);
+    if (stream.destroyed || stream.writableEnded) {
+        return;
+    }
+    stream.write(event);
 }

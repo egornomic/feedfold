@@ -1,260 +1,260 @@
 .management-dialog {
-  width: min(680px, calc(100vw - 28px));
-  max-height: min(820px, calc(100dvh - 28px));
-  padding: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--paper-raised);
-  background-blend-mode: var(--paper-blend);
-  color: var(--text);
-  box-shadow: 0 8px 8px oklch(0 0 0 / 0.34);
+    width: min(680px, calc(100vw - 28px));
+    max-height: min(820px, calc(100dvh - 28px));
+    padding: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--paper-raised);
+    background-blend-mode: var(--paper-blend);
+    color: var(--text);
+    box-shadow: 0 8px 8px oklch(0 0 0 / 0.34);
 }
 
 .management-dialog.is-wide {
-  width: min(980px, calc(100vw - 28px));
+    width: min(980px, calc(100vw - 28px));
 }
 
 .management-dialog-heading {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 15px 17px;
-  border-bottom: 1px solid var(--border);
-  background: var(--paper-raised);
-  background-blend-mode: var(--paper-blend);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 15px 17px;
+    border-bottom: 1px solid var(--border);
+    background: var(--paper-raised);
+    background-blend-mode: var(--paper-blend);
 }
 
 .management-dialog-heading h2 {
-  margin: 0;
-  overflow: hidden;
-  font-size: var(--type-dialog-title);
-  line-height: var(--leading-heading);
-  letter-spacing: var(--tracking-heading);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    margin: 0;
+    overflow: hidden;
+    font-size: var(--type-dialog-title);
+    line-height: var(--leading-heading);
+    letter-spacing: var(--tracking-heading);
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .management-dialog-heading p {
-  margin: 1px 0 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: var(--type-label);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    margin: 1px 0 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: var(--type-label);
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .management-dialog-body {
-  padding: 18px;
+    padding: 18px;
 }
 
 .management-dialog-body > .compact-form {
-  grid-template-columns: 1fr;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
+    grid-template-columns: 1fr;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 
 .management-dialog-body > .compact-form .form-actions {
-  margin-top: 6px;
+    margin-top: 6px;
 }
 
 .management-dialog-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 13px 17px;
-  border-top: 1px solid var(--border);
-  background: var(--paper-raised);
-  background-blend-mode: var(--paper-blend);
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px 17px;
+    border-top: 1px solid var(--border);
+    background: var(--paper-raised);
+    background-blend-mode: var(--paper-blend);
 }
 
 .management-dialog-footer > div {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
 }
 
 .management-dialog-error {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 14px 0 0;
-  padding: 10px;
-  border: 1px solid color-mix(in oklch, var(--danger) 38%, var(--border));
-  border-radius: var(--radius-sm);
-  background: var(--danger-surface);
-  color: var(--danger);
-  font-size: var(--type-supporting);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 14px 0 0;
+    padding: 10px;
+    border: 1px solid color-mix(in oklch, var(--danger) 38%, var(--border));
+    border-radius: var(--radius-sm);
+    background: var(--danger-surface);
+    color: var(--danger);
+    font-size: var(--type-supporting);
 }
 
 .management-dialog-error svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
+    flex: 0 0 auto;
+    margin-top: 1px;
 }
 
 .ai-prompt-dialog-body > .management-dialog-error {
-  grid-column: 1 / -1;
-  margin-top: 0;
+    grid-column: 1 / -1;
+    margin-top: 0;
 }
 
 .management-dialog-empty {
-  display: flex;
-  min-height: 100px;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  color: var(--text-secondary);
+    display: flex;
+    min-height: 100px;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    color: var(--text-secondary);
 }
 
 .management-dialog-empty svg {
-  color: var(--accent);
+    color: var(--accent);
 }
 
 .management-dialog-empty p,
 .unsubscribe-copy p {
-  margin: 0;
+    margin: 0;
 }
 
 .feed-settings-body {
-  padding-top: 14px;
+    padding-top: 14px;
 }
 
 .feed-settings-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  margin-bottom: 14px;
-  color: var(--text-secondary);
-  font-size: var(--type-supporting);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin-bottom: 14px;
+    color: var(--text-secondary);
+    font-size: var(--type-supporting);
 }
 
 .feed-settings-summary strong {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
 }
 
 .feed-settings-status {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-surface);
-  color: var(--accent);
-  font-weight: var(--weight-semibold);
+    display: inline-flex;
+    min-height: 28px;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-surface);
+    color: var(--accent);
+    font-weight: var(--weight-semibold);
 }
 
 .feed-settings-status.has-error {
-  background: var(--warning-surface);
-  color: var(--warning);
+    background: var(--warning-surface);
+    color: var(--warning);
 }
 
 .feed-settings-list {
-  margin: 0;
-  border-top: 1px solid var(--border);
+    margin: 0;
+    border-top: 1px solid var(--border);
 }
 
 .feed-settings-list > div {
-  display: grid;
-  min-height: 58px;
-  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1.5fr);
-  align-items: center;
-  gap: 16px;
-  padding: 10px 2px;
-  border-bottom: 1px solid var(--border);
+    display: grid;
+    min-height: 58px;
+    grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1.5fr);
+    align-items: center;
+    gap: 16px;
+    padding: 10px 2px;
+    border-bottom: 1px solid var(--border);
 }
 
 .feed-settings-list dt {
-  color: var(--text-secondary);
-  font-size: var(--type-label);
-  font-weight: var(--weight-semibold);
+    color: var(--text-secondary);
+    font-size: var(--type-label);
+    font-weight: var(--weight-semibold);
 }
 
 .feed-settings-list dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--text);
-  font-size: var(--type-supporting);
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: var(--type-supporting);
 }
 
 .feed-settings-list a {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  text-decoration: none;
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    text-decoration: none;
 }
 
 .feed-settings-list a svg {
-  flex: 0 0 auto;
-  color: var(--muted);
+    flex: 0 0 auto;
+    color: var(--muted);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .feed-settings-list a:hover {
-    color: var(--accent);
-  }
+    .feed-settings-list a:hover {
+        color: var(--accent);
+    }
 }
 
 .management-dialog > .rule-form {
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  transform: none;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    transform: none;
 }
 
 .management-dialog > .rule-form > .inline-editor-heading {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  margin: 0;
-  padding: 15px 17px;
-  border-bottom: 1px solid var(--border);
-  background: var(--paper-raised);
-  background-blend-mode: var(--paper-blend);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0;
+    padding: 15px 17px;
+    border-bottom: 1px solid var(--border);
+    background: var(--paper-raised);
+    background-blend-mode: var(--paper-blend);
 }
 
 .management-dialog > .rule-form > .rule-form-sections {
-  padding: 18px;
+    padding: 18px;
 }
 
 .management-dialog > .rule-form > .form-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  margin: 0;
-  padding: 13px 17px;
-  border-top: 1px solid var(--border);
-  background: var(--paper-raised);
-  background-blend-mode: var(--paper-blend);
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 0;
+    padding: 13px 17px;
+    border-top: 1px solid var(--border);
+    background: var(--paper-raised);
+    background-blend-mode: var(--paper-blend);
 }
 
 .dialog-icon {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  background: var(--accent-surface);
-  color: var(--accent);
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--accent-surface);
+    color: var(--accent);
 }

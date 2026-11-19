@@ -6,26 +6,29 @@ import type { FolderService } from "../folders/service.js";
 import type { SettingsService } from "../settings/service.js";
 
 export class BootstrapService {
-  constructor(
-    private readonly articles: ArticleRepository,
-    private readonly feeds: FeedService,
-    private readonly folders: FolderService,
-    private readonly settings: SettingsService,
-    private readonly servicePolicy: ServicePolicy,
-  ) {}
+    constructor(
+        private readonly articles: ArticleRepository,
+        private readonly feeds: FeedService,
+        private readonly folders: FolderService,
+        private readonly settings: SettingsService,
+        private readonly servicePolicy: ServicePolicy,
+    ) {}
 
-  getBootstrap(userId: number): Omit<BootstrapData, "aiSettings"> {
-    const feeds = this.feeds.listFeeds(userId);
-    return {
-      folders: this.folders.listFolders(userId, feeds),
-      feeds,
-      settings: this.settings.getSettings(userId),
-      counts: {
-        unread: feeds.reduce((count, feed) => count + feed.unreadCount, 0),
-        all: feeds.reduce((count, feed) => count + feed.totalCount, 0),
-        saved: this.articles.getSavedCount(userId),
-      },
-      capabilities: { manualRefresh: this.servicePolicy.manualRefresh },
-    };
-  }
+    getBootstrap(userId: number): Omit<BootstrapData, "aiSettings"> {
+        const feeds = this.feeds.listFeeds(userId);
+        return {
+            folders: this.folders.listFolders(userId, feeds),
+            feeds,
+            settings: this.settings.getSettings(userId),
+            counts: {
+                unread: feeds.reduce(
+                    (count, feed) => count + feed.unreadCount,
+                    0,
+                ),
+                all: feeds.reduce((count, feed) => count + feed.totalCount, 0),
+                saved: this.articles.getSavedCount(userId),
+            },
+            capabilities: { manualRefresh: this.servicePolicy.manualRefresh },
+        };
+    }
 }

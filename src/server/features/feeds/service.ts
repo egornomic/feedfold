@@ -8,246 +8,303 @@ import type { ArticleRepository } from "../articles/repository.js";
 import type { FolderRepository } from "../folders/repository.js";
 import type { RuleRepository } from "../rules/repository.js";
 import type { FeedRecord, ParsedFeed } from "../shared.js";
-import { FeedIngestionService, type SuccessfulFeedRefresh } from "./ingestion-service.js";
+import {
+    FeedIngestionService,
+    type SuccessfulFeedRefresh,
+} from "./ingestion-service.js";
 import { FeedPollingPolicy } from "./polling-policy.js";
 import type { FeedRepository, SourceSubscription } from "./repository.js";
 
 export class FeedService {
-  private readonly ingestion: FeedIngestionService;
-  readonly polling: FeedPollingPolicy;
+    private readonly ingestion: FeedIngestionService;
+    readonly polling: FeedPollingPolicy;
 
-  constructor(
-    private readonly sqlite: Sqlite.Database,
-    private readonly repository: FeedRepository,
-    private readonly folders: FolderRepository,
-    private readonly articles: ArticleRepository,
-    private readonly rules: RuleRepository,
-    private readonly servicePolicy: ServicePolicy,
-    private readonly quotas: QuotaService,
-  ) {
-    this.polling = new FeedPollingPolicy(sqlite);
-    this.ingestion = new FeedIngestionService(sqlite, repository, articles, rules, this.quotas);
-  }
-
-  listFeeds(userId: number): Feed[] {
-    return this.repository.listFeeds(userId);
-  }
-
-  getFeed(userId: number, id: number): Feed | null {
-    return this.repository.getFeed(userId, id);
-  }
-
-  assertCanCreateFeed(userId: number, sourceKind: Feed["sourceKind"] = "published"): void {
-    const limit = this.servicePolicy.maxFeedsPerAccount;
-    if (limit !== null && this.repository.countFeeds(userId) >= limit) {
-      throw new InvalidRequestError(`This account can subscribe to up to ${limit} feeds.`);
-    }
-    const webLimit = this.servicePolicy.maxWebFeedsPerAccount;
-    if (
-      sourceKind === "web" &&
-      webLimit !== null &&
-      this.repository.countFeeds(userId, "web") >= webLimit
+    constructor(
+        private readonly sqlite: Sqlite.Database,
+        private readonly repository: FeedRepository,
+        private readonly folders: FolderRepository,
+        private readonly articles: ArticleRepository,
+        private readonly rules: RuleRepository,
+        private readonly servicePolicy: ServicePolicy,
+        private readonly quotas: QuotaService,
     ) {
-      throw new InvalidRequestError(`This account can subscribe to up to ${webLimit} web feeds.`);
-    }
-  }
-
-  refreshQueueLimit(): number | null {
-    return this.servicePolicy.maxPendingRefreshes;
-  }
-
-  getManualRefreshFeedIds(userId: number, requestedIds?: number[]): number[] {
-    if (!this.servicePolicy.manualRefresh) {
-      throw new OperationForbiddenError("Manual refresh is unavailable.");
-    }
-    if (requestedIds) {
-      const paused = requestedIds.some((id) => this.repository.getFeed(userId, id)?.paused);
-      if (paused) {
-        throw new InvalidRequestError("Resume paused feeds before refreshing them.");
-      }
-    }
-    return this.repository.getUserRefreshFeedIds(userId, requestedIds);
-  }
-
-  runOutbound<T>(task: () => Promise<T>): Promise<T> {
-    return this.quotas.runOutbound(task);
-  }
-
-  createFeed(
-    userId: number,
-    input: {
-      feedUrl: string;
-      title?: string;
-      siteUrl?: string | null;
-      folderId?: number | null;
-      paused?: boolean;
-    },
-  ): Feed {
-    return this.sqlite.transaction(() => {
-      this.assertCanCreateFeed(userId);
-      const { id, sourceId } = this.repository.createFeed(userId, input);
-      if (!input.paused) this.ingestion.initializeSubscription(userId, id, sourceId);
-      const feed = this.repository.getFeed(userId, id);
-      assert(feed, "The new feed is missing");
-      return feed;
-    })();
-  }
-
-  createWebFeed(
-    userId: number,
-    input: {
-      title: string;
-      pageUrl: string;
-      folderId: number | null;
-      config: WebFeedConfig;
-      parsed: ParsedFeed;
-    },
-  ): Feed {
-    this.folders.assertFolderExists(userId, input.folderId);
-    if (input.parsed.articles.length === 0) {
-      throw new Error("This selection does not match any entries. Choose another entry group.");
-    }
-    const pageUrl = new URL(input.pageUrl).toString();
-    const config = { ...input.config, pageUrl: new URL(input.config.pageUrl).toString() };
-    if (config.pageUrl !== pageUrl) {
-      throw new Error("This selection belongs to another page. Reload the page and choose again.");
-    }
-
-    return this.sqlite.transaction(() => {
-      this.assertCanCreateFeed(userId, "web");
-      const feedId = this.repository.createWebFeedRecord(userId, {
-        ...input,
-        pageUrl,
-        config,
-      });
-      this.ingestion.completeRefresh(this.repository.sourceIdForFeed(feedId), {
-        httpStatus: 200,
-        etag: null,
-        lastModified: null,
-        parsed: input.parsed,
-        webMatchCount: input.parsed.articles.length,
-      });
-      const feed = this.repository.getFeed(userId, feedId);
-      assert(feed, "The new web feed is missing");
-      return feed;
-    })();
-  }
-
-  updateWebFeedSelection(
-    userId: number,
-    id: number,
-    configInput: WebFeedConfig,
-    parsed: ParsedFeed,
-  ): Feed | null {
-    const existing = this.repository.getFeed(userId, id);
-    if (!existing) return null;
-    if (existing.sourceKind !== "web") {
-      throw new Error("Choose a web feed before editing a page selection.");
-    }
-    if (parsed.articles.length === 0) {
-      throw new Error("This selection does not match any entries. Choose another entry group.");
-    }
-    const config = { ...configInput, pageUrl: new URL(configInput.pageUrl).toString() };
-
-    return this.sqlite.transaction(() => {
-      const sourceId = this.repository.updateWebFeedSelectionRecord(id, config, parsed);
-      this.ingestion.completeRefresh(sourceId, {
-        httpStatus: 200,
-        etag: null,
-        lastModified: null,
-        parsed,
-        webMatchCount: parsed.articles.length,
-      });
-      return this.repository.getFeed(userId, id);
-    })();
-  }
-
-  updateFeed(
-    userId: number,
-    id: number,
-    input: {
-      title?: string;
-      feedUrl?: string;
-      siteUrl?: string | null;
-      folderId?: number | null;
-      paused?: boolean;
-    },
-  ): Feed | null {
-    return this.sqlite.transaction(() => {
-      const existing = this.repository.getFeed(userId, id);
-      if (!existing) return null;
-      if (
-        input.feedUrl !== undefined &&
-        new URL(input.feedUrl).href !== existing.feedUrl &&
-        this.sqlite
-          .prepare("SELECT 1 FROM youtube_feeds WHERE user_id = ? AND feed_id = ?")
-          .get(userId, id)
-      ) {
-        throw new InvalidRequestError(
-          "A synced YouTube feed must keep its channel URL. Add a separate feed for another source.",
+        this.polling = new FeedPollingPolicy(sqlite);
+        this.ingestion = new FeedIngestionService(
+            sqlite,
+            repository,
+            articles,
+            rules,
+            this.quotas,
         );
-      }
-      const updated = this.repository.updateFeed(userId, existing, input);
-      if (updated.folderId !== existing.folderId) {
-        this.rules.recomputeRulesForFeedArticles(userId, id, this.articles.listFeedArticleIds(id));
-      }
-      return updated;
-    })();
-  }
+    }
 
-  deleteFeed(userId: number, id: number): boolean {
-    return this.repository.deleteFeed(userId, id);
-  }
+    listFeeds(userId: number): Feed[] {
+        return this.repository.listFeeds(userId);
+    }
 
-  deleteOrphanSources(): void {
-    this.repository.deleteOrphanSources();
-  }
+    getFeed(userId: number, id: number): Feed | null {
+        return this.repository.getFeed(userId, id);
+    }
 
-  getWebFeedConfig(userId: number, id: number): WebFeedConfig | null {
-    return this.repository.getWebFeedConfig(userId, id);
-  }
+    assertCanCreateFeed(
+        userId: number,
+        sourceKind: Feed["sourceKind"] = "published",
+    ): void {
+        const limit = this.servicePolicy.maxFeedsPerAccount;
+        if (limit !== null && this.repository.countFeeds(userId) >= limit) {
+            throw new InvalidRequestError(
+                `This account can subscribe to up to ${limit} feeds.`,
+            );
+        }
+        const webLimit = this.servicePolicy.maxWebFeedsPerAccount;
+        if (
+            sourceKind === "web" &&
+            webLimit !== null &&
+            this.repository.countFeeds(userId, "web") >= webLimit
+        ) {
+            throw new InvalidRequestError(
+                `This account can subscribe to up to ${webLimit} web feeds.`,
+            );
+        }
+    }
 
-  getRefreshCandidates(ids?: number[]): FeedRecord[] {
-    return this.repository.getRefreshCandidates(ids);
-  }
+    refreshQueueLimit(): number | null {
+        return this.servicePolicy.maxPendingRefreshes;
+    }
 
-  sourceIdForFeed(feedId: number): number {
-    return this.repository.sourceIdForFeed(feedId);
-  }
+    getManualRefreshFeedIds(userId: number, requestedIds?: number[]): number[] {
+        if (!this.servicePolicy.manualRefresh) {
+            throw new OperationForbiddenError("Manual refresh is unavailable.");
+        }
+        if (requestedIds) {
+            const paused = requestedIds.some(
+                (id) => this.repository.getFeed(userId, id)?.paused,
+            );
+            if (paused) {
+                throw new InvalidRequestError(
+                    "Resume paused feeds before refreshing them.",
+                );
+            }
+        }
+        return this.repository.getUserRefreshFeedIds(userId, requestedIds);
+    }
 
-  subscriptionNeedsRefresh(feedId: number): boolean {
-    return this.repository.subscriptionNeedsRefresh(feedId);
-  }
+    runOutbound<T>(task: () => Promise<T>): Promise<T> {
+        return this.quotas.runOutbound(task);
+    }
 
-  getDueFeedIds(at?: string): number[] {
-    return this.repository.getDueFeedIds(at);
-  }
+    createFeed(
+        userId: number,
+        input: {
+            feedUrl: string;
+            title?: string;
+            siteUrl?: string | null;
+            folderId?: number | null;
+            paused?: boolean;
+        },
+    ): Feed {
+        return this.sqlite.transaction(() => {
+            this.assertCanCreateFeed(userId);
+            const { id, sourceId } = this.repository.createFeed(userId, input);
+            if (!input.paused) {
+                this.ingestion.initializeSubscription(userId, id, sourceId);
+            }
+            const feed = this.repository.getFeed(userId, id);
+            assert(feed, "The new feed is missing");
+            return feed;
+        })();
+    }
 
-  markSourceRefreshing(sourceId: number): void {
-    this.repository.markFeedRefreshing(sourceId);
-  }
+    createWebFeed(
+        userId: number,
+        input: {
+            title: string;
+            pageUrl: string;
+            folderId: number | null;
+            config: WebFeedConfig;
+            parsed: ParsedFeed;
+        },
+    ): Feed {
+        this.folders.assertFolderExists(userId, input.folderId);
+        if (input.parsed.articles.length === 0) {
+            throw new Error(
+                "This selection does not match any entries. Choose another entry group.",
+            );
+        }
+        const pageUrl = new URL(input.pageUrl).toString();
+        const config = {
+            ...input.config,
+            pageUrl: new URL(input.config.pageUrl).toString(),
+        };
+        if (config.pageUrl !== pageUrl) {
+            throw new Error(
+                "This selection belongs to another page. Reload the page and choose again.",
+            );
+        }
 
-  listSourceSubscriptions(sourceId: number): SourceSubscription[] {
-    return this.repository.listSourceSubscriptions(sourceId);
-  }
+        return this.sqlite.transaction(() => {
+            this.assertCanCreateFeed(userId, "web");
+            const feedId = this.repository.createWebFeedRecord(userId, {
+                ...input,
+                pageUrl,
+                config,
+            });
+            this.ingestion.completeRefresh(
+                this.repository.sourceIdForFeed(feedId),
+                {
+                    httpStatus: 200,
+                    etag: null,
+                    lastModified: null,
+                    parsed: input.parsed,
+                    webMatchCount: input.parsed.articles.length,
+                },
+            );
+            const feed = this.repository.getFeed(userId, feedId);
+            assert(feed, "The new web feed is missing");
+            return feed;
+        })();
+    }
 
-  completeSourceRefresh(sourceId: number, input: SuccessfulFeedRefresh): boolean {
-    return this.ingestion.completeRefresh(sourceId, input);
-  }
+    updateWebFeedSelection(
+        userId: number,
+        id: number,
+        configInput: WebFeedConfig,
+        parsed: ParsedFeed,
+    ): Feed | null {
+        const existing = this.repository.getFeed(userId, id);
+        if (!existing) {
+            return null;
+        }
+        if (existing.sourceKind !== "web") {
+            throw new Error(
+                "Choose a web feed before editing a page selection.",
+            );
+        }
+        if (parsed.articles.length === 0) {
+            throw new Error(
+                "This selection does not match any entries. Choose another entry group.",
+            );
+        }
+        const config = {
+            ...configInput,
+            pageUrl: new URL(configInput.pageUrl).toString(),
+        };
 
-  failSourceRefresh(
-    sourceId: number,
-    input: Parameters<FeedRepository["markFeedFailure"]>[1],
-  ): void {
-    this.repository.markFeedFailure(sourceId, input);
-  }
+        return this.sqlite.transaction(() => {
+            const sourceId = this.repository.updateWebFeedSelectionRecord(
+                id,
+                config,
+                parsed,
+            );
+            this.ingestion.completeRefresh(sourceId, {
+                httpStatus: 200,
+                etag: null,
+                lastModified: null,
+                parsed,
+                webMatchCount: parsed.articles.length,
+            });
+            return this.repository.getFeed(userId, id);
+        })();
+    }
 
-  listOpmlFeeds(userId: number): Array<{
-    title: string;
-    feedUrl: string;
-    siteUrl: string | null;
-    folderId: number | null;
-  }> {
-    return this.repository.listOpmlFeeds(userId);
-  }
+    updateFeed(
+        userId: number,
+        id: number,
+        input: {
+            title?: string;
+            feedUrl?: string;
+            siteUrl?: string | null;
+            folderId?: number | null;
+            paused?: boolean;
+        },
+    ): Feed | null {
+        return this.sqlite.transaction(() => {
+            const existing = this.repository.getFeed(userId, id);
+            if (!existing) {
+                return null;
+            }
+            if (
+                input.feedUrl !== undefined &&
+                new URL(input.feedUrl).href !== existing.feedUrl &&
+                this.sqlite
+                    .prepare(
+                        "SELECT 1 FROM youtube_feeds WHERE user_id = ? AND feed_id = ?",
+                    )
+                    .get(userId, id)
+            ) {
+                throw new InvalidRequestError(
+                    "A synced YouTube feed must keep its channel URL. Add " +
+                        "a separate feed for another source.",
+                );
+            }
+            const updated = this.repository.updateFeed(userId, existing, input);
+            if (updated.folderId !== existing.folderId) {
+                this.rules.recomputeRulesForFeedArticles(
+                    userId,
+                    id,
+                    this.articles.listFeedArticleIds(id),
+                );
+            }
+            return updated;
+        })();
+    }
+
+    deleteFeed(userId: number, id: number): boolean {
+        return this.repository.deleteFeed(userId, id);
+    }
+
+    deleteOrphanSources(): void {
+        this.repository.deleteOrphanSources();
+    }
+
+    getWebFeedConfig(userId: number, id: number): WebFeedConfig | null {
+        return this.repository.getWebFeedConfig(userId, id);
+    }
+
+    getRefreshCandidates(ids?: number[]): FeedRecord[] {
+        return this.repository.getRefreshCandidates(ids);
+    }
+
+    sourceIdForFeed(feedId: number): number {
+        return this.repository.sourceIdForFeed(feedId);
+    }
+
+    subscriptionNeedsRefresh(feedId: number): boolean {
+        return this.repository.subscriptionNeedsRefresh(feedId);
+    }
+
+    getDueFeedIds(at?: string): number[] {
+        return this.repository.getDueFeedIds(at);
+    }
+
+    markSourceRefreshing(sourceId: number): void {
+        this.repository.markFeedRefreshing(sourceId);
+    }
+
+    listSourceSubscriptions(sourceId: number): SourceSubscription[] {
+        return this.repository.listSourceSubscriptions(sourceId);
+    }
+
+    completeSourceRefresh(
+        sourceId: number,
+        input: SuccessfulFeedRefresh,
+    ): boolean {
+        return this.ingestion.completeRefresh(sourceId, input);
+    }
+
+    failSourceRefresh(
+        sourceId: number,
+        input: Parameters<FeedRepository["markFeedFailure"]>[1],
+    ): void {
+        this.repository.markFeedFailure(sourceId, input);
+    }
+
+    listOpmlFeeds(userId: number): Array<{
+        title: string;
+        feedUrl: string;
+        siteUrl: string | null;
+        folderId: number | null;
+    }> {
+        return this.repository.listOpmlFeeds(userId);
+    }
 }

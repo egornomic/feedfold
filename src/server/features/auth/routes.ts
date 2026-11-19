@@ -1,365 +1,602 @@
-import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
+import type {
+    AuthenticationResponseJSON,
+    RegistrationResponseJSON,
+} from "@simplewebauthn/server";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { authInputs } from "../../../shared/api/auth-inputs.js";
 import { OperationForbiddenError } from "../../errors.js";
 import { QuotaExceededError } from "../../quota.js";
 import { publicRoute, recentAuthRoute } from "../routes.js";
-import { type AuthService, type LoginSession, sessionToken } from "./service.js";
+import {
+    type AuthService,
+    type LoginSession,
+    sessionToken,
+} from "./service.js";
 
 const {
-  loginCredentials,
-  registrationCredentials,
-  passkeySignup,
-  passwordCredential,
-  passkeyCeremony,
-  passkeySignupCeremony,
-  stepUpPassword,
-  stepUpOptions,
-  passkeyId,
-  passkeyRename,
+    loginCredentials,
+    registrationCredentials,
+    passkeySignup,
+    passwordCredential,
+    passkeyCeremony,
+    passkeySignupCeremony,
+    stepUpPassword,
+    stepUpOptions,
+    passkeyId,
+    passkeyRename,
 } = authInputs;
 
-function publicOrigin(request: FastifyRequest, configuredOrigin: string | undefined): URL {
-  if (configuredOrigin) return new URL(configuredOrigin);
-  return new URL(`${request.protocol}://${request.headers.host ?? request.hostname}`);
+function publicOrigin(
+    request: FastifyRequest,
+    configuredOrigin: string | undefined,
+): URL {
+    if (configuredOrigin) {
+        return new URL(configuredOrigin);
+    }
+    return new URL(
+        `${request.protocol}://${request.headers.host ?? request.hostname}`,
+    );
 }
 
 function passkeysAvailable(origin: URL): boolean {
-  return (
-    origin.protocol === "https:" ||
-    origin.hostname === "localhost" ||
-    origin.hostname.endsWith(".localhost")
-  );
+    return (
+        origin.protocol === "https:" ||
+        origin.hostname === "localhost" ||
+        origin.hostname.endsWith(".localhost")
+    );
 }
 
-function webAuthnContext(request: FastifyRequest, configuredOrigin: string | undefined) {
-  const origin = publicOrigin(request, configuredOrigin);
-  return { origin: origin.origin, rpId: origin.hostname };
+function webAuthnContext(
+    request: FastifyRequest,
+    configuredOrigin: string | undefined,
+) {
+    const origin = publicOrigin(request, configuredOrigin);
+    return { origin: origin.origin, rpId: origin.hostname };
 }
 
 export function secureRequest(
-  request: FastifyRequest,
-  configuredOrigin: string | undefined,
+    request: FastifyRequest,
+    configuredOrigin: string | undefined,
 ): boolean {
-  return publicOrigin(request, configuredOrigin).protocol === "https:";
+    return publicOrigin(request, configuredOrigin).protocol === "https:";
 }
 
 function sendSession(
-  reply: FastifyReply,
-  request: FastifyRequest,
-  authService: AuthService,
-  session: LoginSession,
-  configuredOrigin: string | undefined,
+    reply: FastifyReply,
+    request: FastifyRequest,
+    authService: AuthService,
+    session: LoginSession,
+    configuredOrigin: string | undefined,
 ): FastifyReply {
-  return reply
-    .header(
-      "Set-Cookie",
-      authService.sessionCookie(session.token, secureRequest(request, configuredOrigin)),
-    )
-    .send({ user: authService.publicUser(session.user) });
+    return reply
+        .header(
+            "Set-Cookie",
+            authService.sessionCookie(
+                session.token,
+                secureRequest(request, configuredOrigin),
+            ),
+        )
+        .send({ user: authService.publicUser(session.user) });
 }
 
-function limited(reply: FastifyReply, retryAfter: number | null): FastifyReply | null {
-  if (retryAfter === null) return null;
-  return reply
-    .header("Retry-After", retryAfter)
-    .code(429)
-    .send({ error: "Too many attempts. Try again when the cooldown ends." });
+function limited(
+    reply: FastifyReply,
+    retryAfter: number | null,
+): FastifyReply | null {
+    if (retryAfter === null) {
+        return null;
+    }
+    return reply.header("Retry-After", retryAfter).code(429).send({
+        error: "Too many attempts. Try again when the cooldown ends.",
+    });
 }
 
-function registrationClosed(reply: FastifyReply, authService: AuthService): FastifyReply {
-  return authService.registrationQuotaReached()
-    ? reply.code(429).send({
-        error: "This feedfold server is not accepting more accounts.",
-        code: "quota_exceeded",
-      })
-    : reply.code(403).send({ error: "Account creation is closed on this server." });
+function registrationClosed(
+    reply: FastifyReply,
+    authService: AuthService,
+): FastifyReply {
+    return authService.registrationQuotaReached()
+        ? reply.code(429).send({
+              error: "This feedfold server is not accepting more accounts.",
+              code: "quota_exceeded",
+          })
+        : reply
+              .code(403)
+              .send({ error: "Account creation is closed on this server." });
 }
 
 function authenticatedUser(request: FastifyRequest, authService: AuthService) {
-  return authService.userForToken(sessionToken(request.headers.cookie));
+    return authService.userForToken(sessionToken(request.headers.cookie));
 }
 
 export async function authRoutes(
-  app: FastifyInstance,
-  {
-    authService,
-    configuredOrigin,
-    beforeDeleteAccount,
-  }: {
-    authService: AuthService;
-    configuredOrigin?: string;
-    beforeDeleteAccount?: (userId: number) => Promise<void>;
-  },
+    app: FastifyInstance,
+    {
+        authService,
+        configuredOrigin,
+        beforeDeleteAccount,
+    }: {
+        authService: AuthService;
+        configuredOrigin?: string;
+        beforeDeleteAccount?: (userId: number) => Promise<void>;
+    },
 ): Promise<void> {
-  app.get("/api/auth/config", publicRoute, async (request) => ({
-    registrationAvailable: authService.registrationAvailable(),
-    registrationMode: authService.registrationMode,
-    passkeysAvailable: passkeysAvailable(publicOrigin(request, configuredOrigin)),
-  }));
+    app.get("/api/auth/config", publicRoute, async (request) => ({
+        registrationAvailable: authService.registrationAvailable(),
+        registrationMode: authService.registrationMode,
+        passkeysAvailable: passkeysAvailable(
+            publicOrigin(request, configuredOrigin),
+        ),
+    }));
 
-  app.post("/api/auth/login", publicRoute, async (request, reply) => {
-    const body = loginCredentials.parse(request.body);
-    const rateLimited = limited(reply, authService.consumeLoginAttempt(request.ip, body.username));
-    if (rateLimited) return rateLimited;
-    const session = await authService.login(body.username, body.password);
-    if (!session) return reply.code(401).send({ error: "The username or password is incorrect." });
-    authService.loginSucceeded(request.ip, session.user.username);
-    return sendSession(reply, request, authService, session, configuredOrigin);
-  });
+    app.post("/api/auth/login", publicRoute, async (request, reply) => {
+        const body = loginCredentials.parse(request.body);
+        const rateLimited = limited(
+            reply,
+            authService.consumeLoginAttempt(request.ip, body.username),
+        );
+        if (rateLimited) {
+            return rateLimited;
+        }
+        const session = await authService.login(body.username, body.password);
+        if (!session) {
+            return reply
+                .code(401)
+                .send({ error: "The username or password is incorrect." });
+        }
+        authService.loginSucceeded(request.ip, session.user.username);
+        return sendSession(
+            reply,
+            request,
+            authService,
+            session,
+            configuredOrigin,
+        );
+    });
 
-  app.post("/api/auth/register", publicRoute, async (request, reply) => {
-    const rateLimited = limited(reply, authService.consumeRegistrationAttempt(request.ip));
-    if (rateLimited) return rateLimited;
-    const body = registrationCredentials.parse(request.body);
-    if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
-    const session = await authService.register(body.username, body.password, body.inviteCode);
-    if (!session) {
-      if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
-      return reply
-        .code(409)
-        .send({ error: "The account could not be created. Choose another name or try again." });
-    }
-    return sendSession(reply.code(201), request, authService, session, configuredOrigin);
-  });
+    app.post("/api/auth/register", publicRoute, async (request, reply) => {
+        const rateLimited = limited(
+            reply,
+            authService.consumeRegistrationAttempt(request.ip),
+        );
+        if (rateLimited) {
+            return rateLimited;
+        }
+        const body = registrationCredentials.parse(request.body);
+        if (!authService.registrationAvailable()) {
+            return registrationClosed(reply, authService);
+        }
+        const session = await authService.register(
+            body.username,
+            body.password,
+            body.inviteCode,
+        );
+        if (!session) {
+            if (!authService.registrationAvailable()) {
+                return registrationClosed(reply, authService);
+            }
+            return reply.code(409).send({
+                error: "The account could not be created. Choose another name or try again.",
+            });
+        }
+        return sendSession(
+            reply.code(201),
+            request,
+            authService,
+            session,
+            configuredOrigin,
+        );
+    });
 
-  app.post("/api/auth/register/passkey/options", publicRoute, async (request, reply) => {
-    const rateLimited = limited(reply, authService.consumeRegistrationAttempt(request.ip));
-    if (rateLimited) return rateLimited;
-    const body = passkeySignup.parse(request.body);
-    const context = webAuthnContext(request, configuredOrigin);
-    if (!passkeysAvailable(new URL(context.origin)))
-      return reply.code(400).send({ error: "Passkeys require HTTPS or localhost." });
-    if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
-    const result = await authService.passkeySignupOptions(body.username, context, body.inviteCode);
-    if (!result) {
-      if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
-      return reply
-        .code(409)
-        .send({ error: "The account could not be created. Choose another name or try again." });
-    }
-    return result;
-  });
+    app.post(
+        "/api/auth/register/passkey/options",
+        publicRoute,
+        async (request, reply) => {
+            const rateLimited = limited(
+                reply,
+                authService.consumeRegistrationAttempt(request.ip),
+            );
+            if (rateLimited) {
+                return rateLimited;
+            }
+            const body = passkeySignup.parse(request.body);
+            const context = webAuthnContext(request, configuredOrigin);
+            if (!passkeysAvailable(new URL(context.origin))) {
+                return reply
+                    .code(400)
+                    .send({ error: "Passkeys require HTTPS or localhost." });
+            }
+            if (!authService.registrationAvailable()) {
+                return registrationClosed(reply, authService);
+            }
+            const result = await authService.passkeySignupOptions(
+                body.username,
+                context,
+                body.inviteCode,
+            );
+            if (!result) {
+                if (!authService.registrationAvailable()) {
+                    return registrationClosed(reply, authService);
+                }
+                return reply.code(409).send({
+                    error:
+                        "The account could not be created. Choose another " +
+                        "name or try again.",
+                });
+            }
+            return result;
+        },
+    );
 
-  app.post("/api/auth/register/passkey", publicRoute, async (request, reply) => {
-    const body = passkeySignupCeremony.parse(request.body);
-    try {
-      const session = await authService.completePasskeySignup(
-        body.registrationId,
-        body.response as unknown as RegistrationResponseJSON,
-      );
-      if (!session) {
-        if (!authService.registrationAvailable()) return registrationClosed(reply, authService);
-        throw new Error("Passkey signup failed");
-      }
-      return sendSession(reply.code(201), request, authService, session, configuredOrigin);
-    } catch (error) {
-      if (error instanceof QuotaExceededError || error instanceof OperationForbiddenError)
-        throw error;
-      return reply.code(400).send({ error: "The account could not be created. Try again." });
-    }
-  });
+    app.post(
+        "/api/auth/register/passkey",
+        publicRoute,
+        async (request, reply) => {
+            const body = passkeySignupCeremony.parse(request.body);
+            try {
+                const session = await authService.completePasskeySignup(
+                    body.registrationId,
+                    body.response as unknown as RegistrationResponseJSON,
+                );
+                if (!session) {
+                    if (!authService.registrationAvailable()) {
+                        return registrationClosed(reply, authService);
+                    }
+                    throw new Error("Passkey signup failed");
+                }
+                return sendSession(
+                    reply.code(201),
+                    request,
+                    authService,
+                    session,
+                    configuredOrigin,
+                );
+            } catch (error) {
+                if (
+                    error instanceof QuotaExceededError ||
+                    error instanceof OperationForbiddenError
+                ) {
+                    throw error;
+                }
+                return reply.code(400).send({
+                    error: "The account could not be created. Try again.",
+                });
+            }
+        },
+    );
 
-  app.get("/api/auth/invitations", async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    return authService.invitations(user.id);
-  });
+    app.get("/api/auth/invitations", async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        return authService.invitations(user.id);
+    });
 
-  app.post("/api/auth/invitations", async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    const body = z
-      .object({
-        replaceId: z
-          .string()
-          .regex(/^[a-f0-9]{32}$/)
-          .optional(),
-      })
-      .parse(request.body ?? {});
-    return reply.code(201).send(authService.createInvitation(user.id, body.replaceId));
-  });
+    app.post("/api/auth/invitations", async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const body = z
+            .object({
+                replaceId: z
+                    .string()
+                    .regex(/^[a-f0-9]{32}$/)
+                    .optional(),
+            })
+            .parse(request.body ?? {});
+        return reply
+            .code(201)
+            .send(authService.createInvitation(user.id, body.replaceId));
+    });
 
-  app.delete("/api/auth/invitations/:id", async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    const { id } = z.object({ id: z.string().regex(/^[a-f0-9]{32}$/) }).parse(request.params);
-    authService.revokeInvitation(user.id, id);
-    return reply.code(204).send();
-  });
+    app.delete("/api/auth/invitations/:id", async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const { id } = z
+            .object({ id: z.string().regex(/^[a-f0-9]{32}$/) })
+            .parse(request.params);
+        authService.revokeInvitation(user.id, id);
+        return reply.code(204).send();
+    });
 
-  app.get("/api/auth/session", publicRoute, async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    return { user: authService.publicUser(user) };
-  });
+    app.get("/api/auth/session", publicRoute, async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        return { user: authService.publicUser(user) };
+    });
 
-  app.post("/api/auth/logout", async (request, reply) => {
-    authService.endSession(sessionToken(request.headers.cookie));
-    return reply
-      .header(
-        "Set-Cookie",
-        authService.clearSessionCookie(secureRequest(request, configuredOrigin)),
-      )
-      .code(204)
-      .send();
-  });
+    app.post("/api/auth/logout", async (request, reply) => {
+        authService.endSession(sessionToken(request.headers.cookie));
+        return reply
+            .header(
+                "Set-Cookie",
+                authService.clearSessionCookie(
+                    secureRequest(request, configuredOrigin),
+                ),
+            )
+            .code(204)
+            .send();
+    });
 
-  app.post("/api/auth/step-up/password", async (request, reply) => {
-    const token = sessionToken(request.headers.cookie);
-    if (!token) return reply.code(401).send({ error: "Sign in to continue." });
-    const rateLimited = limited(reply, authService.consumeStepUpAttempt(token));
-    if (rateLimited) return rateLimited;
-    const body = stepUpPassword.parse(request.body);
-    if (!(await authService.stepUpWithPassword(token, body.operationId, body.password)))
-      return reply.code(401).send({ error: "Authentication failed. Try again." });
-    authService.stepUpSucceeded(token);
-    return reply.code(204).send();
-  });
+    app.post("/api/auth/step-up/password", async (request, reply) => {
+        const token = sessionToken(request.headers.cookie);
+        if (!token) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const rateLimited = limited(
+            reply,
+            authService.consumeStepUpAttempt(token),
+        );
+        if (rateLimited) {
+            return rateLimited;
+        }
+        const body = stepUpPassword.parse(request.body);
+        if (
+            !(await authService.stepUpWithPassword(
+                token,
+                body.operationId,
+                body.password,
+            ))
+        ) {
+            return reply
+                .code(401)
+                .send({ error: "Authentication failed. Try again." });
+        }
+        authService.stepUpSucceeded(token);
+        return reply.code(204).send();
+    });
 
-  app.post("/api/auth/step-up/passkey/options", async (request, reply) => {
-    const token = sessionToken(request.headers.cookie);
-    if (!token) return reply.code(401).send({ error: "Sign in to continue." });
-    const rateLimited = limited(reply, authService.consumeStepUpAttempt(token));
-    if (rateLimited) return rateLimited;
-    const body = stepUpOptions.parse(request.body);
-    const context = webAuthnContext(request, configuredOrigin);
-    if (!passkeysAvailable(new URL(context.origin)))
-      return reply.code(400).send({ error: "Passkeys require HTTPS or localhost." });
-    const result = await authService.stepUpPasskeyOptions(token, body.operationId, context);
-    if (!result) return reply.code(401).send({ error: "Authentication failed. Try again." });
-    return result;
-  });
+    app.post("/api/auth/step-up/passkey/options", async (request, reply) => {
+        const token = sessionToken(request.headers.cookie);
+        if (!token) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const rateLimited = limited(
+            reply,
+            authService.consumeStepUpAttempt(token),
+        );
+        if (rateLimited) {
+            return rateLimited;
+        }
+        const body = stepUpOptions.parse(request.body);
+        const context = webAuthnContext(request, configuredOrigin);
+        if (!passkeysAvailable(new URL(context.origin))) {
+            return reply
+                .code(400)
+                .send({ error: "Passkeys require HTTPS or localhost." });
+        }
+        const result = await authService.stepUpPasskeyOptions(
+            token,
+            body.operationId,
+            context,
+        );
+        if (!result) {
+            return reply
+                .code(401)
+                .send({ error: "Authentication failed. Try again." });
+        }
+        return result;
+    });
 
-  app.post("/api/auth/step-up/passkey", async (request, reply) => {
-    const token = sessionToken(request.headers.cookie);
-    if (!token) return reply.code(401).send({ error: "Sign in to continue." });
-    const body = passkeyCeremony.parse(request.body);
-    try {
-      if (
-        !(await authService.verifyStepUpPasskey(
-          token,
-          body.ceremonyId,
-          body.response as unknown as AuthenticationResponseJSON,
-        ))
-      )
-        throw new Error("Step-up failed");
-      authService.stepUpSucceeded(token);
-      return reply.code(204).send();
-    } catch {
-      return reply.code(401).send({ error: "Authentication failed. Try again." });
-    }
-  });
+    app.post("/api/auth/step-up/passkey", async (request, reply) => {
+        const token = sessionToken(request.headers.cookie);
+        if (!token) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const body = passkeyCeremony.parse(request.body);
+        try {
+            if (
+                !(await authService.verifyStepUpPasskey(
+                    token,
+                    body.ceremonyId,
+                    body.response as unknown as AuthenticationResponseJSON,
+                ))
+            ) {
+                throw new Error("Step-up failed");
+            }
+            authService.stepUpSucceeded(token);
+            return reply.code(204).send();
+        } catch {
+            return reply
+                .code(401)
+                .send({ error: "Authentication failed. Try again." });
+        }
+    });
 
-  app.put("/api/auth/password", recentAuthRoute, async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    const token = sessionToken(request.headers.cookie);
-    if (!user || !token) return reply.code(401).send({ error: "Sign in to continue." });
-    const body = passwordCredential.parse(request.body);
-    await authService.setPassword(user.id, token, body.password);
-    return reply.code(204).send();
-  });
+    app.put("/api/auth/password", recentAuthRoute, async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        const token = sessionToken(request.headers.cookie);
+        if (!user || !token) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const body = passwordCredential.parse(request.body);
+        await authService.setPassword(user.id, token, body.password);
+        return reply.code(204).send();
+    });
 
-  app.delete("/api/auth/password", recentAuthRoute, async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    await authService.removePassword(user.id);
-    return reply.code(204).send();
-  });
+    app.delete(
+        "/api/auth/password",
+        recentAuthRoute,
+        async (request, reply) => {
+            const user = authenticatedUser(request, authService);
+            if (!user) {
+                return reply.code(401).send({ error: "Sign in to continue." });
+            }
+            await authService.removePassword(user.id);
+            return reply.code(204).send();
+        },
+    );
 
-  app.delete("/api/auth/account", recentAuthRoute, async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    await beforeDeleteAccount?.(user.id);
-    if (!authService.deleteAccount(user.id))
-      return reply.code(401).send({ error: "Sign in to continue." });
-    return reply
-      .header(
-        "Set-Cookie",
-        authService.clearSessionCookie(secureRequest(request, configuredOrigin)),
-      )
-      .code(204)
-      .send();
-  });
+    app.delete("/api/auth/account", recentAuthRoute, async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        await beforeDeleteAccount?.(user.id);
+        if (!authService.deleteAccount(user.id)) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        return reply
+            .header(
+                "Set-Cookie",
+                authService.clearSessionCookie(
+                    secureRequest(request, configuredOrigin),
+                ),
+            )
+            .code(204)
+            .send();
+    });
 
-  app.get("/api/auth/passkeys", async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    return { passkeys: authService.passkeys(user.id), hasPassword: user.hasPassword };
-  });
+    app.get("/api/auth/passkeys", async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        return {
+            passkeys: authService.passkeys(user.id),
+            hasPassword: user.hasPassword,
+        };
+    });
 
-  app.post("/api/auth/passkeys/options", recentAuthRoute, async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    const context = webAuthnContext(request, configuredOrigin);
-    if (!passkeysAvailable(new URL(context.origin)))
-      return reply.code(400).send({ error: "Passkeys require HTTPS or localhost." });
-    const result = await authService.passkeyRegistrationOptions(user.id, context);
-    if (!result) return reply.code(401).send({ error: "Sign in to continue." });
-    return result;
-  });
+    app.post(
+        "/api/auth/passkeys/options",
+        recentAuthRoute,
+        async (request, reply) => {
+            const user = authenticatedUser(request, authService);
+            if (!user) {
+                return reply.code(401).send({ error: "Sign in to continue." });
+            }
+            const context = webAuthnContext(request, configuredOrigin);
+            if (!passkeysAvailable(new URL(context.origin))) {
+                return reply
+                    .code(400)
+                    .send({ error: "Passkeys require HTTPS or localhost." });
+            }
+            const result = await authService.passkeyRegistrationOptions(
+                user.id,
+                context,
+            );
+            if (!result) {
+                return reply.code(401).send({ error: "Sign in to continue." });
+            }
+            return result;
+        },
+    );
 
-  app.post("/api/auth/passkeys", recentAuthRoute, async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    const body = passkeyCeremony.parse(request.body);
-    try {
-      const passkey = await authService.verifyPasskeyRegistration(
-        user.id,
-        body.ceremonyId,
-        body.response as unknown as RegistrationResponseJSON,
-      );
-      if (!passkey) throw new Error("Passkey verification failed");
-      return reply.code(201).send({ passkey });
-    } catch {
-      return reply.code(400).send({ error: "The passkey could not be verified. Try again." });
-    }
-  });
+    app.post("/api/auth/passkeys", recentAuthRoute, async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const body = passkeyCeremony.parse(request.body);
+        try {
+            const passkey = await authService.verifyPasskeyRegistration(
+                user.id,
+                body.ceremonyId,
+                body.response as unknown as RegistrationResponseJSON,
+            );
+            if (!passkey) {
+                throw new Error("Passkey verification failed");
+            }
+            return reply.code(201).send({ passkey });
+        } catch {
+            return reply.code(400).send({
+                error: "The passkey could not be verified. Try again.",
+            });
+        }
+    });
 
-  app.patch("/api/auth/passkeys/:id", async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    const id = passkeyId.parse((request.params as { id?: unknown }).id);
-    const body = passkeyRename.parse(request.body);
-    const passkey = authService.renamePasskey(user.id, id, body.name);
-    return passkey
-      ? { passkey }
-      : reply.code(404).send({ error: "That passkey no longer exists." });
-  });
+    app.patch("/api/auth/passkeys/:id", async (request, reply) => {
+        const user = authenticatedUser(request, authService);
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const id = passkeyId.parse((request.params as { id?: unknown }).id);
+        const body = passkeyRename.parse(request.body);
+        const passkey = authService.renamePasskey(user.id, id, body.name);
+        return passkey
+            ? { passkey }
+            : reply.code(404).send({ error: "That passkey no longer exists." });
+    });
 
-  app.delete("/api/auth/passkeys/:id", recentAuthRoute, async (request, reply) => {
-    const user = authenticatedUser(request, authService);
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    const id = passkeyId.parse((request.params as { id?: unknown }).id);
-    if (!authService.deletePasskey(user.id, id))
-      return reply.code(404).send({ error: "That passkey no longer exists." });
-    return reply.code(204).send();
-  });
+    app.delete(
+        "/api/auth/passkeys/:id",
+        recentAuthRoute,
+        async (request, reply) => {
+            const user = authenticatedUser(request, authService);
+            if (!user) {
+                return reply.code(401).send({ error: "Sign in to continue." });
+            }
+            const id = passkeyId.parse((request.params as { id?: unknown }).id);
+            if (!authService.deletePasskey(user.id, id)) {
+                return reply
+                    .code(404)
+                    .send({ error: "That passkey no longer exists." });
+            }
+            return reply.code(204).send();
+        },
+    );
 
-  app.post("/api/auth/passkey/options", publicRoute, async (request, reply) => {
-    const rateLimited = limited(reply, authService.consumePasskeyLoginAttempt(request.ip));
-    if (rateLimited) return rateLimited;
-    const context = webAuthnContext(request, configuredOrigin);
-    if (!passkeysAvailable(new URL(context.origin)))
-      return reply.code(400).send({ error: "Passkeys require HTTPS or localhost." });
-    return authService.passkeyAuthenticationOptions(context);
-  });
+    app.post(
+        "/api/auth/passkey/options",
+        publicRoute,
+        async (request, reply) => {
+            const rateLimited = limited(
+                reply,
+                authService.consumePasskeyLoginAttempt(request.ip),
+            );
+            if (rateLimited) {
+                return rateLimited;
+            }
+            const context = webAuthnContext(request, configuredOrigin);
+            if (!passkeysAvailable(new URL(context.origin))) {
+                return reply
+                    .code(400)
+                    .send({ error: "Passkeys require HTTPS or localhost." });
+            }
+            return authService.passkeyAuthenticationOptions(context);
+        },
+    );
 
-  app.post("/api/auth/passkey", publicRoute, async (request, reply) => {
-    const body = passkeyCeremony.parse(request.body);
-    const rateLimited = limited(reply, authService.consumePasskeyAccountAttempt(body.response.id));
-    if (rateLimited) return rateLimited;
-    try {
-      const session = await authService.verifyPasskeyAuthentication(
-        body.ceremonyId,
-        body.response as unknown as AuthenticationResponseJSON,
-      );
-      if (!session) throw new Error("Passkey verification failed");
-      authService.passkeyLoginSucceeded(request.ip, session.user.username);
-      return sendSession(reply, request, authService, session, configuredOrigin);
-    } catch {
-      return reply.code(401).send({ error: "The passkey could not sign you in. Try again." });
-    }
-  });
+    app.post("/api/auth/passkey", publicRoute, async (request, reply) => {
+        const body = passkeyCeremony.parse(request.body);
+        const rateLimited = limited(
+            reply,
+            authService.consumePasskeyAccountAttempt(body.response.id),
+        );
+        if (rateLimited) {
+            return rateLimited;
+        }
+        try {
+            const session = await authService.verifyPasskeyAuthentication(
+                body.ceremonyId,
+                body.response as unknown as AuthenticationResponseJSON,
+            );
+            if (!session) {
+                throw new Error("Passkey verification failed");
+            }
+            authService.passkeyLoginSucceeded(
+                request.ip,
+                session.user.username,
+            );
+            return sendSession(
+                reply,
+                request,
+                authService,
+                session,
+                configuredOrigin,
+            );
+        } catch {
+            return reply.code(401).send({
+                error: "The passkey could not sign you in. Try again.",
+            });
+        }
+    });
 }

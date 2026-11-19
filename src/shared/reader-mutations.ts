@@ -2,25 +2,28 @@ import type { ApiOperation } from "./api/operations.js";
 
 /** Management operations whose committed changes must reach every open reader for the account. */
 export const readerMutationRoutes = {
-  createFeed: "POST /api/feeds",
-  updateFeed: "PATCH /api/feeds/:id",
-  deleteFeed: "DELETE /api/feeds/:id",
-  updateWebFeedSelection: "PATCH /api/feeds/:id/web-feed",
-  createFolder: "POST /api/folders",
-  updateFolder: "PATCH /api/folders/:id",
-  deleteFolder: "DELETE /api/folders/:id",
-  createRule: "POST /api/rules",
-  updateRule: "PATCH /api/rules/:id",
-  deleteRule: "DELETE /api/rules/:id",
-  updateSettings: "PATCH /api/settings",
-  importOpml: "POST /api/opml/import",
+    createFeed: "POST /api/feeds",
+    updateFeed: "PATCH /api/feeds/:id",
+    deleteFeed: "DELETE /api/feeds/:id",
+    updateWebFeedSelection: "PATCH /api/feeds/:id/web-feed",
+    createFolder: "POST /api/folders",
+    updateFolder: "PATCH /api/folders/:id",
+    deleteFolder: "DELETE /api/folders/:id",
+    createRule: "POST /api/rules",
+    updateRule: "PATCH /api/rules/:id",
+    deleteRule: "DELETE /api/rules/:id",
+    updateSettings: "PATCH /api/settings",
+    importOpml: "POST /api/opml/import",
 } satisfies Partial<Record<ApiOperation, string>>;
 
-/** Hosted changes the changing reader applies itself, which the account's other readers must receive. */
+/**
+ * Hosted changes the initiating reader applies locally and other readers
+ * on the account must receive.
+ */
 export const sharedReaderStateRoutes = {
-  updateArticleState: "PATCH /api/articles/:id/state",
-  markRead: "POST /api/articles/mark-read",
-  updateAiFeature: "PATCH /api/ai/features/:feature",
-  saveAiProviderKey: "PUT /api/ai/providers/:provider/key",
-  deleteAiProviderKey: "DELETE /api/ai/providers/:provider/key",
+    updateArticleState: "PATCH /api/articles/:id/state",
+    markRead: "POST /api/articles/mark-read",
+    updateAiFeature: "PATCH /api/ai/features/:feature",
+    saveAiProviderKey: "PUT /api/ai/providers/:provider/key",
+    deleteAiProviderKey: "DELETE /api/ai/providers/:provider/key",
 } satisfies Partial<Record<ApiOperation, string>>;

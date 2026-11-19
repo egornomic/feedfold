@@ -4,18 +4,24 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify, {
-  type FastifyInstance,
-  type FastifyReply,
-  type FastifyRequest,
-  type FastifyServerOptions,
-  LogController,
+    type FastifyInstance,
+    type FastifyReply,
+    type FastifyRequest,
+    type FastifyServerOptions,
+    LogController,
 } from "fastify";
 import { matchAppRoute } from "../shared/app-routes.js";
 import { normalizeBasePath } from "../shared/base-path.js";
-import { readerMutationRoutes, sharedReaderStateRoutes } from "../shared/reader-mutations.js";
+import {
+    readerMutationRoutes,
+    sharedReaderStateRoutes,
+} from "../shared/reader-mutations.js";
 import { socialUrlMetadata } from "../shared/social-metadata.js";
 import { applicationError } from "./application-error.js";
-import { ApplicationService, type ApplicationServices } from "./application-service.js";
+import {
+    ApplicationService,
+    type ApplicationServices,
+} from "./application-service.js";
 import { aiRoutes } from "./features/ai/routes.js";
 import { articleRoutes } from "./features/articles/routes.js";
 import { authRoutes } from "./features/auth/routes.js";
@@ -34,279 +40,355 @@ import { registerOperationalLogging } from "./logging.js";
 import { responsePolicies } from "./response-policy.js";
 
 export interface AppServices extends ApplicationServices {
-  authService: AuthService;
-  youtubeService?: YouTubeService;
-  staticDir?: string;
-  demoDir?: string;
-  logger?: FastifyServerOptions["logger"];
-  publicOrigin?: string;
-  basePath?: string;
+    authService: AuthService;
+    youtubeService?: YouTubeService;
+    staticDir?: string;
+    demoDir?: string;
+    logger?: FastifyServerOptions["logger"];
+    publicOrigin?: string;
+    basePath?: string;
 }
 
 function staticHeaders(reply: FastifyReply, path: string): void {
-  if (path.endsWith("sw.js") || path.endsWith(".html") || path.endsWith("security.txt")) {
-    reply.header("Cache-Control", "no-cache");
-  } else if (/[/\\]assets[/\\][^/\\]+-[\w-]{8}\.[\w]+$/.test(path)) {
-    reply.header("Cache-Control", "public, max-age=31536000, immutable");
-  }
+    if (
+        path.endsWith("sw.js") ||
+        path.endsWith(".html") ||
+        path.endsWith("security.txt")
+    ) {
+        reply.header("Cache-Control", "no-cache");
+    } else if (/[/\\]assets[/\\][^/\\]+-[\w-]{8}\.[\w]+$/.test(path)) {
+        reply.header("Cache-Control", "public, max-age=31536000, immutable");
+    }
 }
 
-export async function createApp(services: AppServices): Promise<FastifyInstance> {
-  const basePath = normalizeBasePath(services.basePath);
-  // Offline navigation also uses the public entry document.
-  const indexablePages = new Set(["/", "/index.html", "/privacy", "/terms"]);
-  const app = Fastify({
-    logger: services.logger ?? false,
-    logController: new LogController({ disableRequestLogging: true }),
-    bodyLimit: 10 * 1024 * 1024,
-    trustProxy: ["loopback", "linklocal", "uniquelocal"],
-  });
-  registerOperationalLogging(app);
-  const { aiService: ai, xMediaService: xMedia } = services;
-  const application = new ApplicationService(services);
-  const requestUsers = new WeakMap<FastifyRequest, { id: number; username: string }>();
-  const userId = (request: FastifyRequest): number => {
-    const user = requestUsers.get(request);
-    assert(user, "Authenticated user is missing");
-    return user.id;
-  };
-
-  const mutationRoutes = new Set<string>([
-    ...Object.values(readerMutationRoutes),
-    ...Object.values(sharedReaderStateRoutes),
-  ]);
-  app.addHook("onResponse", async (request, reply) => {
-    const account = requestUsers.get(request);
-    if (
-      account &&
-      reply.statusCode >= 200 &&
-      reply.statusCode < 300 &&
-      mutationRoutes.has(`${request.method} ${request.routeOptions.url}`)
-    ) {
-      const reader = request.headers["x-feedfold-reader"];
-      services.refreshService.notifyDataChanged(
-        account.id,
-        typeof reader === "string" ? reader : undefined,
-      );
-    }
-  });
-
-  app.setErrorHandler((error, request, reply) => {
-    const known = applicationError(error);
-    if (known) {
-      reply
-        .code(known.status)
-        .send({ error: known.message, ...(known.code ? { code: known.code } : {}) });
-      return;
-    }
-    request.log.error({ event: "request_handler_failed" }, "request handler failed");
-    reply.code(500).send({ error: "The server could not complete the request. Try again." });
-  });
-
-  app.get("/health", async () => {
-    services.database.connection.prepare("SELECT 1").get();
-    return { status: "ok" };
-  });
-
-  app.addHook("onSend", async (request, reply) => {
-    const pathname = request.url.split("?", 1)[0] ?? "/";
-    if (
-      String(reply.getHeader("Content-Type")).startsWith("text/html") &&
-      !indexablePages.has(pathname)
-    ) {
-      reply.header("X-Robots-Tag", "noindex");
-    }
-    reply.headers(responsePolicies[request.routeOptions.config.responsePolicy ?? "application"]);
-    if (request.routeOptions.url?.startsWith("/api/youtube"))
-      reply.header("Referrer-Policy", "no-referrer");
-    reply.header(
-      "Permissions-Policy",
-      "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self)",
-    );
-    reply.header("X-Content-Type-Options", "nosniff");
-    if (request.protocol === "https" || services.publicOrigin?.startsWith("https://")) {
-      reply.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-    }
-  });
-
-  app.addHook("onRequest", async (request, reply) => {
-    const path = request.routeOptions.url ?? request.url.split("?", 1)[0] ?? "";
-    if (!path.startsWith("/api/")) return;
-    reply.header("Cache-Control", "no-store");
-    if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
-      const expectedOrigin =
-        services.publicOrigin ??
-        `${request.protocol}://${request.headers.host ?? request.hostname}`;
-      if (request.headers.origin && request.headers.origin !== new URL(expectedOrigin).origin) {
-        return reply.code(403).send({ error: "This request is not allowed." });
-      }
-      if (request.headers["sec-fetch-site"] === "cross-site") {
-        return reply.code(403).send({ error: "This request is not allowed." });
-      }
-    }
-    const access = request.routeOptions.config.access ?? "account";
-    if (access === "public") return;
-    const user = services.authService.userForToken(sessionToken(request.headers.cookie));
-    if (!user) return reply.code(401).send({ error: "Sign in to continue." });
-    const browserAccount = request.headers["x-feedfold-account"];
-    if (browserAccount !== undefined && browserAccount !== user.publicId) {
-      return reply
-        .code(401)
-        .send({ error: "The signed-in account changed. Sign in again to continue." });
-    }
-    if (request.method === "POST" && path === "/api/auth/logout") {
-      ai.deleteDeviceKeys(user.id, browserDeviceId(request));
-    }
-    requestUsers.set(request, user);
-    if (access !== "recent-auth") return;
-    const recent = services.authService.beginSensitiveOperation(
-      sessionToken(request.headers.cookie),
-    );
-    if (!recent) return reply.code(401).send({ error: "Sign in to continue." });
-    if (!recent.required) return;
-    return reply.code(428).send({
-      error: "Authenticate again to continue.",
-      code: "RECENT_AUTH_REQUIRED",
-      operationId: recent.operationId,
+export async function createApp(
+    services: AppServices,
+): Promise<FastifyInstance> {
+    const basePath = normalizeBasePath(services.basePath);
+    // Offline navigation also uses the public entry document.
+    const indexablePages = new Set(["/", "/index.html", "/privacy", "/terms"]);
+    const app = Fastify({
+        logger: services.logger ?? false,
+        logController: new LogController({ disableRequestLogging: true }),
+        bodyLimit: 10 * 1024 * 1024,
+        trustProxy: ["loopback", "linklocal", "uniquelocal"],
     });
-  });
-
-  // biome-ignore-start lint/nursery/noMisusedPromises: Fastify awaits async plugins; Biome incorrectly selects its callback overload.
-  await app.register(youtubeRoutes, {
-    youtube: services.youtubeService,
-    userId,
-    basePath,
-    authService: services.authService,
-    publicOrigin: services.publicOrigin,
-  });
-  if (services.youtubeService) {
-    const youtube = services.youtubeService;
-    app.addHook("onReady", async () => youtube.start());
-    app.addHook("onClose", async () => youtube.stop());
-  }
-  await app.register(authRoutes, {
-    beforeDeleteAccount: async (id: number) => {
-      try {
-        await services.youtubeService?.disconnect(id, true);
-      } catch {
-        app.log.warn(
-          { event: "youtube_revocation_failed" },
-          "Google access could not be revoked; local account deletion will continue",
-        );
-      }
-    },
-    authService: services.authService,
-    ...(services.publicOrigin === undefined ? {} : { configuredOrigin: services.publicOrigin }),
-  });
-  await app.register(bootstrapRoutes, {
-    application,
-    userId,
-  });
-  await app.register(articleRoutes, {
-    articles: services.database.articles,
-    application,
-    ai,
-    xMedia,
-    userId,
-  });
-  await app.register(feedRoutes, {
-    feeds: services.database.feeds,
-    application,
-    ...(services.webFeedService === undefined ? {} : { webFeedService: services.webFeedService }),
-    userId,
-  });
-  await app.register(folderRoutes, { folders: services.database.folders, userId });
-  await app.register(ruleRoutes, { rules: services.database.rules, userId });
-  await app.register(settingsRoutes, { settings: services.database.settings, userId });
-  await app.register(aiRoutes, { ai, userId });
-  await app.register(refreshRoutes, {
-    application,
-    refreshService: services.refreshService,
-    authService: services.authService,
-    userId,
-  });
-  await app.register(opmlRoutes, {
-    opml: services.database.opml,
-    application,
-    userId,
-  });
-
-  // biome-ignore-end lint/nursery/noMisusedPromises: End of async plugin registrations.
-
-  if (services.staticDir && existsSync(join(services.staticDir, "index.html"))) {
-    const homepagePath = join(services.staticDir, "index.html");
-    const sendHomepage = async (reply: FastifyReply) => {
-      const homepageHtml = await readFile(homepagePath, "utf8");
-      const homepage = services.publicOrigin
-        ? homepageHtml.replace(
-            "</head>",
-            `${socialUrlMetadata(new URL(`${basePath}/`, services.publicOrigin).href)}\n</head>`,
-          )
-        : homepageHtml;
-      return reply
-        .type("text/html; charset=utf-8")
-        .header("Cache-Control", "no-cache")
-        .header("Content-Length", Buffer.byteLength(homepage))
-        .send(reply.request.method === "HEAD" ? undefined : homepage);
+    registerOperationalLogging(app);
+    const { aiService: ai, xMediaService: xMedia } = services;
+    const application = new ApplicationService(services);
+    const requestUsers = new WeakMap<
+        FastifyRequest,
+        { id: number; username: string }
+    >();
+    const userId = (request: FastifyRequest): number => {
+        const user = requestUsers.get(request);
+        assert(user, "Authenticated user is missing");
+        return user.id;
     };
-    for (const path of ["/", "/index.html"]) {
-      app.route({
-        method: ["GET", "HEAD"],
-        url: path,
-        handler: (_request, reply) => sendHomepage(reply),
-      });
-    }
-    app.get("/.well-known/security.txt", (_request, reply) =>
-      reply.type("text/plain; charset=utf-8").sendFile(".well-known/security.txt"),
-    );
-    app.get("/robots.txt", (_request, reply) =>
-      reply
-        .type("text/plain; charset=utf-8")
-        .header("Cache-Control", "no-cache")
-        .send(
-          `User-agent: *\nAllow: /\n${services.publicOrigin ? `Sitemap: ${services.publicOrigin}/sitemap.xml\n` : ""}`,
-        ),
-    );
-    for (const page of ["privacy", "terms"]) {
-      app.get(`/${page}`, (_request, reply) => reply.sendFile(`legal/${page}.html`));
-      app.get(`/${page}/`, (_request, reply) => reply.redirect(`${basePath}/${page}`, 308));
-    }
-    const demoDir =
-      services.demoDir && existsSync(join(services.demoDir, "index.html"))
-        ? services.demoDir
-        : undefined;
-    if (demoDir) {
-      indexablePages.add("/demo/");
-      indexablePages.add("/demo/index.html");
-      app.get("/demo", (_request, reply) => reply.redirect("/demo/", 308));
-      await app.register(fastifyStatic, {
-        root: demoDir,
-        prefix: "/demo/",
-        wildcard: false,
-        decorateReply: false,
-        setHeaders: staticHeaders,
-      });
-    }
-    await app.register(fastifyStatic, {
-      root: services.staticDir,
-      wildcard: false,
-      globIgnore: ["index.html"],
-      setHeaders: staticHeaders,
-    });
-    app.setNotFoundHandler((request, reply) => {
-      const pathname = request.url.split("?", 1)[0] ?? "";
-      if (request.method === "GET" || request.method === "HEAD") {
-        if (demoDir && matchAppRoute(pathname, "", "/demo")) {
-          return reply.sendFile("index.html", demoDir);
-        }
-        if (matchAppRoute(pathname, "", "/")) return sendHomepage(reply);
-      }
-      return reply
-        .code(404)
-        .header("Cache-Control", "no-store")
-        .send({ error: "This page does not exist." });
-    });
-  }
 
-  return app;
+    const mutationRoutes = new Set<string>([
+        ...Object.values(readerMutationRoutes),
+        ...Object.values(sharedReaderStateRoutes),
+    ]);
+    app.addHook("onResponse", async (request, reply) => {
+        const account = requestUsers.get(request);
+        if (
+            account &&
+            reply.statusCode >= 200 &&
+            reply.statusCode < 300 &&
+            mutationRoutes.has(`${request.method} ${request.routeOptions.url}`)
+        ) {
+            const reader = request.headers["x-feedfold-reader"];
+            services.refreshService.notifyDataChanged(
+                account.id,
+                typeof reader === "string" ? reader : undefined,
+            );
+        }
+    });
+
+    app.setErrorHandler((error, request, reply) => {
+        const known = applicationError(error);
+        if (known) {
+            reply.code(known.status).send({
+                error: known.message,
+                ...(known.code ? { code: known.code } : {}),
+            });
+            return;
+        }
+        request.log.error(
+            { event: "request_handler_failed" },
+            "request handler failed",
+        );
+        reply.code(500).send({
+            error: "The server could not complete the request. Try again.",
+        });
+    });
+
+    app.get("/health", async () => {
+        services.database.connection.prepare("SELECT 1").get();
+        return { status: "ok" };
+    });
+
+    app.addHook("onSend", async (request, reply) => {
+        const pathname = request.url.split("?", 1)[0] ?? "/";
+        if (
+            String(reply.getHeader("Content-Type")).startsWith("text/html") &&
+            !indexablePages.has(pathname)
+        ) {
+            reply.header("X-Robots-Tag", "noindex");
+        }
+        reply.headers(
+            responsePolicies[
+                request.routeOptions.config.responsePolicy ?? "application"
+            ],
+        );
+        if (request.routeOptions.url?.startsWith("/api/youtube")) {
+            reply.header("Referrer-Policy", "no-referrer");
+        }
+        reply.header(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self)",
+        );
+        reply.header("X-Content-Type-Options", "nosniff");
+        if (
+            request.protocol === "https" ||
+            services.publicOrigin?.startsWith("https://")
+        ) {
+            reply.header(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            );
+        }
+    });
+
+    app.addHook("onRequest", async (request, reply) => {
+        const path =
+            request.routeOptions.url ?? request.url.split("?", 1)[0] ?? "";
+        if (!path.startsWith("/api/")) {
+            return;
+        }
+        reply.header("Cache-Control", "no-store");
+        if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+            const expectedOrigin =
+                services.publicOrigin ??
+                `${request.protocol}://${request.headers.host ?? request.hostname}`;
+            if (
+                request.headers.origin &&
+                request.headers.origin !== new URL(expectedOrigin).origin
+            ) {
+                return reply
+                    .code(403)
+                    .send({ error: "This request is not allowed." });
+            }
+            if (request.headers["sec-fetch-site"] === "cross-site") {
+                return reply
+                    .code(403)
+                    .send({ error: "This request is not allowed." });
+            }
+        }
+        const access = request.routeOptions.config.access ?? "account";
+        if (access === "public") {
+            return;
+        }
+        const user = services.authService.userForToken(
+            sessionToken(request.headers.cookie),
+        );
+        if (!user) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        const browserAccount = request.headers["x-feedfold-account"];
+        if (browserAccount !== undefined && browserAccount !== user.publicId) {
+            return reply.code(401).send({
+                error: "The signed-in account changed. Sign in again to continue.",
+            });
+        }
+        if (request.method === "POST" && path === "/api/auth/logout") {
+            ai.deleteDeviceKeys(user.id, browserDeviceId(request));
+        }
+        requestUsers.set(request, user);
+        if (access !== "recent-auth") {
+            return;
+        }
+        const recent = services.authService.beginSensitiveOperation(
+            sessionToken(request.headers.cookie),
+        );
+        if (!recent) {
+            return reply.code(401).send({ error: "Sign in to continue." });
+        }
+        if (!recent.required) {
+            return;
+        }
+        return reply.code(428).send({
+            error: "Authenticate again to continue.",
+            code: "RECENT_AUTH_REQUIRED",
+            operationId: recent.operationId,
+        });
+    });
+
+    // biome-ignore-start lint/nursery/noMisusedPromises: Fastify awaits async plugins.
+    await app.register(youtubeRoutes, {
+        youtube: services.youtubeService,
+        userId,
+        basePath,
+        authService: services.authService,
+        publicOrigin: services.publicOrigin,
+    });
+    if (services.youtubeService) {
+        const youtube = services.youtubeService;
+        app.addHook("onReady", async () => youtube.start());
+        app.addHook("onClose", async () => youtube.stop());
+    }
+    await app.register(authRoutes, {
+        beforeDeleteAccount: async (id: number) => {
+            try {
+                await services.youtubeService?.disconnect(id, true);
+            } catch {
+                app.log.warn(
+                    { event: "youtube_revocation_failed" },
+                    "Google access could not be revoked; local account deletion will continue",
+                );
+            }
+        },
+        authService: services.authService,
+        ...(services.publicOrigin === undefined
+            ? {}
+            : { configuredOrigin: services.publicOrigin }),
+    });
+    await app.register(bootstrapRoutes, {
+        application,
+        userId,
+    });
+    await app.register(articleRoutes, {
+        articles: services.database.articles,
+        application,
+        ai,
+        xMedia,
+        userId,
+    });
+    await app.register(feedRoutes, {
+        feeds: services.database.feeds,
+        application,
+        ...(services.webFeedService === undefined
+            ? {}
+            : { webFeedService: services.webFeedService }),
+        userId,
+    });
+    await app.register(folderRoutes, {
+        folders: services.database.folders,
+        userId,
+    });
+    await app.register(ruleRoutes, { rules: services.database.rules, userId });
+    await app.register(settingsRoutes, {
+        settings: services.database.settings,
+        userId,
+    });
+    await app.register(aiRoutes, { ai, userId });
+    await app.register(refreshRoutes, {
+        application,
+        refreshService: services.refreshService,
+        authService: services.authService,
+        userId,
+    });
+    await app.register(opmlRoutes, {
+        opml: services.database.opml,
+        application,
+        userId,
+    });
+
+    // biome-ignore-end lint/nursery/noMisusedPromises: End of async plugin registrations.
+
+    if (
+        services.staticDir &&
+        existsSync(join(services.staticDir, "index.html"))
+    ) {
+        const homepagePath = join(services.staticDir, "index.html");
+        const sendHomepage = async (reply: FastifyReply) => {
+            const homepageHtml = await readFile(homepagePath, "utf8");
+            const homepage = services.publicOrigin
+                ? homepageHtml.replace(
+                      "</head>",
+                      `${socialUrlMetadata(new URL(`${basePath}/`, services.publicOrigin).href)}` +
+                          "\n</head>",
+                  )
+                : homepageHtml;
+            return reply
+                .type("text/html; charset=utf-8")
+                .header("Cache-Control", "no-cache")
+                .header("Content-Length", Buffer.byteLength(homepage))
+                .send(reply.request.method === "HEAD" ? undefined : homepage);
+        };
+        for (const path of ["/", "/index.html"]) {
+            app.route({
+                method: ["GET", "HEAD"],
+                url: path,
+                handler: (_request, reply) => sendHomepage(reply),
+            });
+        }
+        app.get("/.well-known/security.txt", (_request, reply) =>
+            reply
+                .type("text/plain; charset=utf-8")
+                .sendFile(".well-known/security.txt"),
+        );
+        app.get("/robots.txt", (_request, reply) =>
+            reply
+                .type("text/plain; charset=utf-8")
+                .header("Cache-Control", "no-cache")
+                .send(
+                    `User-agent: *\nAllow: /\n${
+                        services.publicOrigin
+                            ? `Sitemap: ${services.publicOrigin}/sitemap.xml\n`
+                            : ""
+                    }`,
+                ),
+        );
+        for (const page of ["privacy", "terms"]) {
+            app.get(`/${page}`, (_request, reply) =>
+                reply.sendFile(`legal/${page}.html`),
+            );
+            app.get(`/${page}/`, (_request, reply) =>
+                reply.redirect(`${basePath}/${page}`, 308),
+            );
+        }
+        const demoDir =
+            services.demoDir && existsSync(join(services.demoDir, "index.html"))
+                ? services.demoDir
+                : undefined;
+        if (demoDir) {
+            indexablePages.add("/demo/");
+            indexablePages.add("/demo/index.html");
+            app.get("/demo", (_request, reply) =>
+                reply.redirect("/demo/", 308),
+            );
+            await app.register(fastifyStatic, {
+                root: demoDir,
+                prefix: "/demo/",
+                wildcard: false,
+                decorateReply: false,
+                setHeaders: staticHeaders,
+            });
+        }
+        await app.register(fastifyStatic, {
+            root: services.staticDir,
+            wildcard: false,
+            globIgnore: ["index.html"],
+            setHeaders: staticHeaders,
+        });
+        app.setNotFoundHandler((request, reply) => {
+            const pathname = request.url.split("?", 1)[0] ?? "";
+            if (request.method === "GET" || request.method === "HEAD") {
+                if (demoDir && matchAppRoute(pathname, "", "/demo")) {
+                    return reply.sendFile("index.html", demoDir);
+                }
+                if (matchAppRoute(pathname, "", "/")) {
+                    return sendHomepage(reply);
+                }
+            }
+            return reply
+                .code(404)
+                .header("Cache-Control", "no-store")
+                .send({ error: "This page does not exist." });
+        });
+    }
+
+    return app;
 }

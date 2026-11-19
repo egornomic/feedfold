@@ -5,16 +5,16 @@ const ACCOUNT_ACTIVITY_WINDOW_DAYS = 7;
 const ACCOUNT_ACTIVITY_TOUCH_MINUTES = 5;
 
 function before(at: string, milliseconds: number): string {
-  return new Date(Date.parse(at) - milliseconds).toISOString();
+    return new Date(Date.parse(at) - milliseconds).toISOString();
 }
 
 export function accountActivityCutoff(
-  at: string,
-  windowDays = ACCOUNT_ACTIVITY_WINDOW_DAYS,
+    at: string,
+    windowDays = ACCOUNT_ACTIVITY_WINDOW_DAYS,
 ): string {
-  return before(at, windowDays * DAY_MS);
+    return before(at, windowDays * DAY_MS);
 }
 
 export function accountActivityTouchBefore(at: string): string {
-  return before(at, ACCOUNT_ACTIVITY_TOUCH_MINUTES * MINUTE_MS);
+    return before(at, ACCOUNT_ACTIVITY_TOUCH_MINUTES * MINUTE_MS);
 }

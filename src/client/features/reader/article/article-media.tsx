@@ -5,177 +5,233 @@ import { createPortal } from "react-dom";
 import type { Article } from "../../../../shared/types";
 import { xPostId } from "../../../../shared/x";
 import { errorMessage } from "../../../api/api";
-import { telegramArticleMediaQuery, xArticleMediaQuery } from "../../../api/query";
+import {
+    telegramArticleMediaQuery,
+    xArticleMediaQuery,
+} from "../../../api/query";
 import { articleImageUrl } from "./article-image-url";
-import { ImageLightbox, type ImageLightboxItem, type ImageLightboxState } from "./image-lightbox";
+import {
+    ImageLightbox,
+    type ImageLightboxItem,
+    type ImageLightboxState,
+} from "./image-lightbox";
 
 export function XPostVideo({
-  article,
-  postId,
-  targetId,
+    article,
+    postId,
+    targetId,
 }: {
-  article: Article;
-  postId: string;
-  targetId: string | null;
+    article: Article;
+    postId: string;
+    targetId: string | null;
 }) {
-  const mediaQuery = useQuery(xArticleMediaQuery(article.id, postId));
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    setPortalTarget(targetId && article.feedContentHtml ? document.getElementById(targetId) : null);
-  }, [article.feedContentHtml, targetId]);
+    const mediaQuery = useQuery(xArticleMediaQuery(article.id, postId));
+    const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+    useLayoutEffect(() => {
+        setPortalTarget(
+            targetId && article.feedContentHtml
+                ? document.getElementById(targetId)
+                : null,
+        );
+    }, [article.feedContentHtml, targetId]);
 
-  if (mediaQuery.isPending) return null;
-  const isQuotedPostVideo = xPostId(article.url) !== postId;
-  if (mediaQuery.isError) {
-    const error = (
-      <div className="x-media-state x-media-error" role="alert">
-        <AlertTriangle aria-hidden="true" size={16} />
-        <span>{errorMessage(mediaQuery.error)}</span>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={() => void mediaQuery.refetch()}
-        >
-          Try again
-        </button>
-        <a href={`https://x.com/i/status/${postId}`} target="_blank" rel="noreferrer">
-          Open on X
-        </a>
-      </div>
+    if (mediaQuery.isPending) {
+        return null;
+    }
+    const isQuotedPostVideo = xPostId(article.url) !== postId;
+    if (mediaQuery.isError) {
+        const error = (
+            <div className="x-media-state x-media-error" role="alert">
+                <AlertTriangle aria-hidden="true" size={16} />
+                <span>{errorMessage(mediaQuery.error)}</span>
+                <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => void mediaQuery.refetch()}
+                >
+                    Try again
+                </button>
+                <a
+                    href={`https://x.com/i/status/${postId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                >
+                    Open on X
+                </a>
+            </div>
+        );
+        return portalTarget ? createPortal(error, portalTarget) : error;
+    }
+
+    const video = (
+        // biome-ignore lint/a11y/useMediaCaption: X does not expose captions.
+        <video
+            className="x-video-player"
+            src={articleImageUrl(mediaQuery.data.sourceUrl)}
+            poster={
+                mediaQuery.data.posterUrl
+                    ? articleImageUrl(mediaQuery.data.posterUrl)
+                    : undefined
+            }
+            aria-label={
+                isQuotedPostVideo
+                    ? "X video from quoted post"
+                    : `X video from ${article.author ?? "this post"}`
+            }
+            style={
+                mediaQuery.data.aspectRatio
+                    ? { aspectRatio: mediaQuery.data.aspectRatio }
+                    : undefined
+            }
+            controls
+            playsInline
+            preload="metadata"
+        />
     );
-    return portalTarget ? createPortal(error, portalTarget) : error;
-  }
-
-  const video = (
-    // biome-ignore lint/a11y/useMediaCaption: X's public media metadata does not expose caption tracks.
-    <video
-      className="x-video-player"
-      src={articleImageUrl(mediaQuery.data.sourceUrl)}
-      poster={mediaQuery.data.posterUrl ? articleImageUrl(mediaQuery.data.posterUrl) : undefined}
-      aria-label={
-        isQuotedPostVideo
-          ? "X video from quoted post"
-          : `X video from ${article.author ?? "this post"}`
-      }
-      style={mediaQuery.data.aspectRatio ? { aspectRatio: mediaQuery.data.aspectRatio } : undefined}
-      controls
-      playsInline
-      preload="metadata"
-    />
-  );
-  return portalTarget ? createPortal(video, portalTarget) : video;
+    return portalTarget ? createPortal(video, portalTarget) : video;
 }
 
 export function TelegramPostMedia({ article }: { article: Article }) {
-  const mediaQuery = useQuery(telegramArticleMediaQuery(article.id));
-  const [lightbox, setLightbox] = useState<ImageLightboxState | null>(null);
-  if (mediaQuery.isPending) return null;
-  if (mediaQuery.isError) {
-    return (
-      <div className="telegram-media-state telegram-media-error" role="alert">
-        <AlertTriangle aria-hidden="true" size={16} />
-        <span>{errorMessage(mediaQuery.error)}</span>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={() => void mediaQuery.refetch()}
-        >
-          Try again
-        </button>
-      </div>
-    );
-  }
-  if (mediaQuery.data.items.length === 0) return null;
+    const mediaQuery = useQuery(telegramArticleMediaQuery(article.id));
+    const [lightbox, setLightbox] = useState<ImageLightboxState | null>(null);
+    if (mediaQuery.isPending) {
+        return null;
+    }
+    if (mediaQuery.isError) {
+        return (
+            <div
+                className="telegram-media-state telegram-media-error"
+                role="alert"
+            >
+                <AlertTriangle aria-hidden="true" size={16} />
+                <span>{errorMessage(mediaQuery.error)}</span>
+                <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => void mediaQuery.refetch()}
+                >
+                    Try again
+                </button>
+            </div>
+        );
+    }
+    if (mediaQuery.data.items.length === 0) {
+        return null;
+    }
 
-  const multiple = mediaQuery.data.items.length > 1;
-  const galleryImages: ImageLightboxItem[] = mediaQuery.data.items
-    .filter((item) => item.kind === "image")
-    .map((item, index, images) => ({
-      src: articleImageUrl(item.sourceUrl),
-      alt: `Telegram post image ${index + 1} of ${images.length}`,
-    }));
-  return (
-    <>
-      <section
-        className={`telegram-media-gallery${multiple ? " is-grouped" : ""}`}
-        aria-label="Telegram post media"
-      >
-        {mediaQuery.data.items.map((item, index) => {
-          const label = `Telegram post ${item.kind} ${index + 1} of ${mediaQuery.data.items.length}`;
-          const style = item.aspectRatio ? { aspectRatio: item.aspectRatio } : undefined;
-          if (item.kind === "image") {
-            const galleryIndex = mediaQuery.data.items
-              .slice(0, index)
-              .filter((candidate) => candidate.kind === "image").length;
-            return (
-              <button
-                key={item.sourceUrl}
-                className="telegram-image-lightbox-trigger"
-                type="button"
-                data-image-lightbox-trigger
-                aria-label={`Enlarge image: ${label}`}
-                onClick={(event) =>
-                  setLightbox({
-                    images: galleryImages,
-                    index: galleryIndex,
-                    returnFocus: event.currentTarget,
-                  })
-                }
-              >
-                <img
-                  src={articleImageUrl(item.sourceUrl)}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  data-image-lightbox-trigger
+    const multiple = mediaQuery.data.items.length > 1;
+    const galleryImages: ImageLightboxItem[] = mediaQuery.data.items
+        .filter((item) => item.kind === "image")
+        .map((item, index, images) => ({
+            src: articleImageUrl(item.sourceUrl),
+            alt: `Telegram post image ${index + 1} of ${images.length}`,
+        }));
+    return (
+        <>
+            <section
+                className={`telegram-media-gallery${multiple ? " is-grouped" : ""}`}
+                aria-label="Telegram post media"
+            >
+                {mediaQuery.data.items.map((item, index) => {
+                    const label =
+                        `Telegram post ${item.kind} ` +
+                        `${index + 1} of ` +
+                        `${mediaQuery.data.items.length}`;
+                    const style = item.aspectRatio
+                        ? { aspectRatio: item.aspectRatio }
+                        : undefined;
+                    if (item.kind === "image") {
+                        const galleryIndex = mediaQuery.data.items
+                            .slice(0, index)
+                            .filter(
+                                (candidate) => candidate.kind === "image",
+                            ).length;
+                        return (
+                            <button
+                                key={item.sourceUrl}
+                                className="telegram-image-lightbox-trigger"
+                                type="button"
+                                data-image-lightbox-trigger
+                                aria-label={`Enlarge image: ${label}`}
+                                onClick={(event) =>
+                                    setLightbox({
+                                        images: galleryImages,
+                                        index: galleryIndex,
+                                        returnFocus: event.currentTarget,
+                                    })
+                                }
+                            >
+                                <img
+                                    src={articleImageUrl(item.sourceUrl)}
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                    data-image-lightbox-trigger
+                                />
+                            </button>
+                        );
+                    }
+                    return (
+                        // biome-ignore lint/a11y/useMediaCaption: Telegram has no captions.
+                        <video
+                            key={item.sourceUrl}
+                            src={articleImageUrl(item.sourceUrl)}
+                            poster={
+                                item.posterUrl
+                                    ? articleImageUrl(item.posterUrl)
+                                    : undefined
+                            }
+                            aria-label={label}
+                            style={style}
+                            controls
+                            playsInline
+                            preload="metadata"
+                        />
+                    );
+                })}
+            </section>
+            {lightbox ? (
+                <ImageLightbox
+                    state={lightbox}
+                    onClose={() => setLightbox(null)}
                 />
-              </button>
-            );
-          }
-          return (
-            // biome-ignore lint/a11y/useMediaCaption: Telegram embeds do not expose caption tracks.
-            <video
-              key={item.sourceUrl}
-              src={articleImageUrl(item.sourceUrl)}
-              poster={item.posterUrl ? articleImageUrl(item.posterUrl) : undefined}
-              aria-label={label}
-              style={style}
-              controls
-              playsInline
-              preload="metadata"
-            />
-          );
-        })}
-      </section>
-      {lightbox ? <ImageLightbox state={lightbox} onClose={() => setLightbox(null)} /> : null}
-    </>
-  );
+            ) : null}
+        </>
+    );
 }
 
 export function ArticleMediaPlayer({ article }: { article: Article }) {
-  const media = article.media;
-  const [interactive, setInteractive] = useState(false);
-  if (!media) return null;
-  const playerUrl = interactive ? `${media.embedUrl}?autoplay=1&playsinline=1` : media.embedUrl;
-  return (
-    <div className={`article-media-player ${media.type}`}>
-      <iframe
-        src={playerUrl}
-        title={`Play ${article.title}`}
-        loading="lazy"
-        referrerPolicy="strict-origin-when-cross-origin"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-      />
-      {!interactive ? (
-        <button
-          className="article-media-swipe-surface"
-          type="button"
-          aria-label={`Play ${article.title || "video"}`}
-          data-article-swipe-surface
-          onClick={() => setInteractive(true)}
-        />
-      ) : null}
-    </div>
-  );
+    const media = article.media;
+    const [interactive, setInteractive] = useState(false);
+    if (!media) {
+        return null;
+    }
+    const playerUrl = interactive
+        ? `${media.embedUrl}?autoplay=1&playsinline=1`
+        : media.embedUrl;
+    return (
+        <div className={`article-media-player ${media.type}`}>
+            <iframe
+                src={playerUrl}
+                title={`Play ${article.title}`}
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allow={
+                    "accelerometer; autoplay; clipboard-write; " +
+                    "encrypted-media; gyroscope; picture-in-picture; " +
+                    "web-share"
+                }
+                allowFullScreen
+            />
+            {!interactive ? (
+                <button
+                    className="article-media-swipe-surface"
+                    type="button"
+                    aria-label={`Play ${article.title || "video"}`}
+                    data-article-swipe-surface
+                    onClick={() => setInteractive(true)}
+                />
+            ) : null}
+        </div>
+    );
 }

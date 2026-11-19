@@ -20,86 +20,111 @@ import { QuotaService } from "./quota.js";
 import { DESKTOP_POLICY, type ServicePolicy } from "./service-policy.js";
 
 export class AppDatabase {
-  readonly connection: Sqlite.Database;
-  readonly wasNewDatabase: boolean;
-  readonly ai: AiRepository;
-  readonly articles: ArticleRepository;
-  readonly auth: AuthRepository;
-  readonly bootstrap: BootstrapService;
-  readonly extractions: ExtractionService;
-  readonly feeds: FeedService;
-  readonly folders: FolderService;
-  readonly opml: OpmlService;
-  readonly rules: RuleRepository;
-  readonly settings: SettingsService;
-  readonly servicePolicy: ServicePolicy;
-  readonly quotas: QuotaService;
+    readonly connection: Sqlite.Database;
+    readonly wasNewDatabase: boolean;
+    readonly ai: AiRepository;
+    readonly articles: ArticleRepository;
+    readonly auth: AuthRepository;
+    readonly bootstrap: BootstrapService;
+    readonly extractions: ExtractionService;
+    readonly feeds: FeedService;
+    readonly folders: FolderService;
+    readonly opml: OpmlService;
+    readonly rules: RuleRepository;
+    readonly settings: SettingsService;
+    readonly servicePolicy: ServicePolicy;
+    readonly quotas: QuotaService;
 
-  constructor(path: string, defaultPollIntervalMinutes = 30, servicePolicy = DESKTOP_POLICY) {
-    this.servicePolicy = servicePolicy;
-    this.connection = new Sqlite(path);
-    this.connection.pragma("busy_timeout = 5000");
-    this.connection.pragma("foreign_keys = ON");
-    this.connection.pragma("journal_mode = WAL");
-    this.wasNewDatabase =
-      this.connection
-        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'")
-        .get() === undefined;
-    migrateDatabase(this.connection, WEB_FEED_POLL_INTERVAL_MINUTES);
-    this.quotas = new QuotaService(this.connection, servicePolicy);
-    if (this.wasNewDatabase && defaultPollIntervalMinutes !== 30) {
-      this.connection
-        .prepare("UPDATE settings SET poll_interval_minutes = ? WHERE user_id = 1")
-        .run(normalizeFeedPollInterval(defaultPollIntervalMinutes));
+    constructor(
+        path: string,
+        defaultPollIntervalMinutes = 30,
+        servicePolicy = DESKTOP_POLICY,
+    ) {
+        this.servicePolicy = servicePolicy;
+        this.connection = new Sqlite(path);
+        this.connection.pragma("busy_timeout = 5000");
+        this.connection.pragma("foreign_keys = ON");
+        this.connection.pragma("journal_mode = WAL");
+        this.wasNewDatabase =
+            this.connection
+                .prepare(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'",
+                )
+                .get() === undefined;
+        migrateDatabase(this.connection, WEB_FEED_POLL_INTERVAL_MINUTES);
+        this.quotas = new QuotaService(this.connection, servicePolicy);
+        if (this.wasNewDatabase && defaultPollIntervalMinutes !== 30) {
+            this.connection
+                .prepare(
+                    "UPDATE settings SET poll_interval_minutes = ? WHERE user_id = 1",
+                )
+                .run(normalizeFeedPollInterval(defaultPollIntervalMinutes));
+        }
+        this.connection
+            .prepare(
+                "UPDATE feed_sources SET refreshing = 0 WHERE refreshing = 1",
+            )
+            .run();
+        this.connection
+            .prepare(
+                "UPDATE articles SET extraction_status = 'pending' WHERE " +
+                    "extraction_status = 'processing'",
+            )
+            .run();
+
+        this.ai = new AiRepository(this.connection);
+        this.articles = new ArticleRepository(this.connection);
+        this.rules = new RuleRepository(this.connection);
+        const settingsRepository = new SettingsRepository(this.connection);
+        this.settings = new SettingsService(
+            this.connection,
+            settingsRepository,
+            this.ai,
+        );
+
+        const folderRepository = new FolderRepository(this.connection);
+        const feedRepository = new FeedRepository(
+            this.connection,
+            folderRepository,
+            servicePolicy.accountActivityWindowDays,
+        );
+        const extractionRepository = new ExtractionRepository(this.connection);
+        this.folders = new FolderService(
+            this.connection,
+            folderRepository,
+            this.rules,
+        );
+        this.feeds = new FeedService(
+            this.connection,
+            feedRepository,
+            folderRepository,
+            this.articles,
+            this.rules,
+            servicePolicy,
+            this.quotas,
+        );
+        this.auth = new AuthRepository(
+            this.connection,
+            this.quotas,
+            this.feeds,
+        );
+        this.extractions = new ExtractionService(
+            this.connection,
+            extractionRepository,
+            this.rules,
+            this.quotas,
+        );
+        this.bootstrap = new BootstrapService(
+            this.articles,
+            this.feeds,
+            this.folders,
+            this.settings,
+            servicePolicy,
+        );
+        this.opml = new OpmlService(this.feeds, this.folders, this.quotas);
     }
-    this.connection.prepare("UPDATE feed_sources SET refreshing = 0 WHERE refreshing = 1").run();
-    this.connection
-      .prepare(
-        "UPDATE articles SET extraction_status = 'pending' WHERE extraction_status = 'processing'",
-      )
-      .run();
 
-    this.ai = new AiRepository(this.connection);
-    this.articles = new ArticleRepository(this.connection);
-    this.rules = new RuleRepository(this.connection);
-    const settingsRepository = new SettingsRepository(this.connection);
-    this.settings = new SettingsService(this.connection, settingsRepository, this.ai);
-
-    const folderRepository = new FolderRepository(this.connection);
-    const feedRepository = new FeedRepository(
-      this.connection,
-      folderRepository,
-      servicePolicy.accountActivityWindowDays,
-    );
-    const extractionRepository = new ExtractionRepository(this.connection);
-    this.folders = new FolderService(this.connection, folderRepository, this.rules);
-    this.feeds = new FeedService(
-      this.connection,
-      feedRepository,
-      folderRepository,
-      this.articles,
-      this.rules,
-      servicePolicy,
-      this.quotas,
-    );
-    this.auth = new AuthRepository(this.connection, this.quotas, this.feeds);
-    this.extractions = new ExtractionService(
-      this.connection,
-      extractionRepository,
-      this.rules,
-      this.quotas,
-    );
-    this.bootstrap = new BootstrapService(
-      this.articles,
-      this.feeds,
-      this.folders,
-      this.settings,
-      servicePolicy,
-    );
-    this.opml = new OpmlService(this.feeds, this.folders, this.quotas);
-  }
-
-  close(): void {
-    this.connection.close();
-  }
+    close(): void {
+        this.connection.close();
+    }
 }

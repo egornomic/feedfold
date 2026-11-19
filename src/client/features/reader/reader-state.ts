@@ -1,218 +1,296 @@
 import type { ReaderRoute } from "../../../shared/app-routes.js";
 import { folderBranchIds, folderPath } from "../../../shared/folder-tree.js";
 import type {
-  AppSettings,
-  Article,
-  ArticleQuery,
-  ArticleState,
-  BootstrapData,
+    AppSettings,
+    Article,
+    ArticleQuery,
+    ArticleState,
+    BootstrapData,
 } from "../../../shared/types.js";
 
 const FILTER_RULE_NAME_TEXT_LIMIT = 72;
 
 export interface ArticleSettingsInvalidation {
-  resetTranslationState: boolean;
-  invalidatedSummaryPromptIds: ReadonlySet<string | null>;
+    resetTranslationState: boolean;
+    invalidatedSummaryPromptIds: ReadonlySet<string | null>;
 }
 
 export interface AppendedArticles {
-  articles: Article[];
-  appended: Article[];
+    articles: Article[];
+    appended: Article[];
 }
 
 export interface ArticlePageBatch {
-  candidates: Article[];
-  nextCursor: string | null;
+    candidates: Article[];
+    nextCursor: string | null;
 }
 
-export function articleMatchesState(article: Article, state: ArticleState): boolean {
-  if (state === "unread") return !article.isRead;
-  if (state === "read") return article.isRead;
-  if (state === "saved") return article.isSaved;
-  return true;
-}
-
-export function appendUnseenArticles(articles: Article[], candidates: Article[]): AppendedArticles {
-  const ids = new Set(articles.map((article) => article.id));
-  const appended = candidates.filter((article) => {
-    if (ids.has(article.id)) return false;
-    ids.add(article.id);
+export function articleMatchesState(
+    article: Article,
+    state: ArticleState,
+): boolean {
+    if (state === "unread") {
+        return !article.isRead;
+    }
+    if (state === "read") {
+        return article.isRead;
+    }
+    if (state === "saved") {
+        return article.isSaved;
+    }
     return true;
-  });
-  return {
-    articles: appended.length === 0 ? articles : [...articles, ...appended],
-    appended,
-  };
+}
+
+export function appendUnseenArticles(
+    articles: Article[],
+    candidates: Article[],
+): AppendedArticles {
+    const ids = new Set(articles.map((article) => article.id));
+    const appended = candidates.filter((article) => {
+        if (ids.has(article.id)) {
+            return false;
+        }
+        ids.add(article.id);
+        return true;
+    });
+    return {
+        articles: appended.length === 0 ? articles : [...articles, ...appended],
+        appended,
+    };
 }
 
 export async function firstUnseenArticlePage(
-  articles: Article[],
-  cursor: string,
-  loadPage: (cursor: string) => Promise<ArticlePageBatch | undefined>,
+    articles: Article[],
+    cursor: string,
+    loadPage: (cursor: string) => Promise<ArticlePageBatch | undefined>,
 ): Promise<ArticlePageBatch & { appended: Article[] }> {
-  let nextCursor: string | null = cursor;
-  while (nextCursor) {
-    const page = await loadPage(nextCursor);
-    if (!page) return { candidates: [], nextCursor, appended: [] };
-    const appended = appendUnseenArticles(articles, page.candidates).appended;
-    if (appended.length > 0 || page.nextCursor === null) return { ...page, appended };
-    nextCursor = page.nextCursor;
-  }
-  return { candidates: [], nextCursor: null, appended: [] };
+    let nextCursor: string | null = cursor;
+    while (nextCursor) {
+        const page = await loadPage(nextCursor);
+        if (!page) {
+            return { candidates: [], nextCursor, appended: [] };
+        }
+        const appended = appendUnseenArticles(
+            articles,
+            page.candidates,
+        ).appended;
+        if (appended.length > 0 || page.nextCursor === null) {
+            return { ...page, appended };
+        }
+        nextCursor = page.nextCursor;
+    }
+    return { candidates: [], nextCursor: null, appended: [] };
 }
 
 export function readerRouteForSelection(
-  state: ArticleState,
-  feedId: number | null,
-  folderId: number | null,
-  search: string,
+    state: ArticleState,
+    feedId: number | null,
+    folderId: number | null,
+    search: string,
 ): ReaderRoute {
-  if (feedId !== null) {
-    return { kind: "reader", scope: "feed", scopeId: feedId, state, search };
-  }
-  if (folderId !== null) {
-    return { kind: "reader", scope: "folder", scopeId: folderId, state, search };
-  }
-  return { kind: "reader", scope: "all", scopeId: null, state, search };
+    if (feedId !== null) {
+        return {
+            kind: "reader",
+            scope: "feed",
+            scopeId: feedId,
+            state,
+            search,
+        };
+    }
+    if (folderId !== null) {
+        return {
+            kind: "reader",
+            scope: "folder",
+            scopeId: folderId,
+            state,
+            search,
+        };
+    }
+    return { kind: "reader", scope: "all", scopeId: null, state, search };
 }
 
 export function articleQueryForReaderRoute(
-  route: ReaderRoute,
-  options: {
-    limit: number;
-    includeContent: boolean;
-    cursor?: string;
-    anchorId?: number;
-  },
+    route: ReaderRoute,
+    options: {
+        limit: number;
+        includeContent: boolean;
+        cursor?: string;
+        anchorId?: number;
+    },
 ): ArticleQuery {
-  return {
-    state: route.state,
-    ...(route.scope === "feed" && route.scopeId !== null ? { feedId: route.scopeId } : {}),
-    ...(route.scope === "folder" && route.scopeId !== null ? { folderId: route.scopeId } : {}),
-    ...(route.search ? { search: route.search } : {}),
-    ...options,
-  };
+    return {
+        state: route.state,
+        ...(route.scope === "feed" && route.scopeId !== null
+            ? { feedId: route.scopeId }
+            : {}),
+        ...(route.scope === "folder" && route.scopeId !== null
+            ? { folderId: route.scopeId }
+            : {}),
+        ...(route.search ? { search: route.search } : {}),
+        ...options,
+    };
 }
 
 export function shouldAutoMarkRoutedArticleRead(
-  article: Article,
-  routedArticleId: number | null,
-  manuallyUnreadArticleIds: ReadonlySet<number>,
+    article: Article,
+    routedArticleId: number | null,
+    manuallyUnreadArticleIds: ReadonlySet<number>,
 ): boolean {
-  return (
-    article.id === routedArticleId && !article.isRead && !manuallyUnreadArticleIds.has(article.id)
-  );
+    return (
+        article.id === routedArticleId &&
+        !article.isRead &&
+        !manuallyUnreadArticleIds.has(article.id)
+    );
 }
 
 export function filterRuleName(text: string): string {
-  const label =
-    text.length > FILTER_RULE_NAME_TEXT_LIMIT
-      ? `${text.slice(0, FILTER_RULE_NAME_TEXT_LIMIT - 1).trimEnd()}…`
-      : text;
-  return `Filter: ${label}`;
+    const label =
+        text.length > FILTER_RULE_NAME_TEXT_LIMIT
+            ? `${text.slice(0, FILTER_RULE_NAME_TEXT_LIMIT - 1).trimEnd()}…`
+            : text;
+    return `Filter: ${label}`;
 }
 
 export function readerScopeLabel(
-  bootstrap: BootstrapData,
-  feedId: number | null,
-  folderId: number | null,
-  state: ArticleState,
+    bootstrap: BootstrapData,
+    feedId: number | null,
+    folderId: number | null,
+    state: ArticleState,
 ): string {
-  if (feedId !== null) return bootstrap.feeds.find((feed) => feed.id === feedId)?.title ?? "Feed";
-  if (folderId !== null) {
-    return bootstrap.folders.find((folder) => folder.id === folderId)?.name ?? "Folder";
-  }
-  if (state === "read") return "Read";
-  if (state === "saved") return "Saved";
-  return "Feed";
+    if (feedId !== null) {
+        return (
+            bootstrap.feeds.find((feed) => feed.id === feedId)?.title ?? "Feed"
+        );
+    }
+    if (folderId !== null) {
+        return (
+            bootstrap.folders.find((folder) => folder.id === folderId)?.name ??
+            "Folder"
+        );
+    }
+    if (state === "read") {
+        return "Read";
+    }
+    if (state === "saved") {
+        return "Saved";
+    }
+    return "Feed";
 }
 
 export function readerScopeUnreadCount(
-  bootstrap: BootstrapData,
-  feedId: number | null,
-  folderId: number | null,
+    bootstrap: BootstrapData,
+    feedId: number | null,
+    folderId: number | null,
 ): number {
-  if (feedId !== null) {
-    return bootstrap.feeds.find((feed) => feed.id === feedId)?.unreadCount ?? 0;
-  }
-  if (folderId !== null) {
-    return bootstrap.folders.find((folder) => folder.id === folderId)?.unreadCount ?? 0;
-  }
-  return bootstrap.counts.unread;
+    if (feedId !== null) {
+        return (
+            bootstrap.feeds.find((feed) => feed.id === feedId)?.unreadCount ?? 0
+        );
+    }
+    if (folderId !== null) {
+        return (
+            bootstrap.folders.find((folder) => folder.id === folderId)
+                ?.unreadCount ?? 0
+        );
+    }
+    return bootstrap.counts.unread;
 }
 
 export function refreshFeedIds(
-  bootstrap: BootstrapData,
-  feedId: number | null,
-  folderId: number | null,
+    bootstrap: BootstrapData,
+    feedId: number | null,
+    folderId: number | null,
 ): number[] | undefined {
-  if (feedId !== null) return [feedId];
-  if (folderId === null) return undefined;
-  const folderIds = folderBranchIds(folderId, bootstrap.folders);
-  return bootstrap.feeds
-    .filter((feed) => feed.folderId !== null && folderIds.has(feed.folderId))
-    .map((feed) => feed.id);
+    if (feedId !== null) {
+        return [feedId];
+    }
+    if (folderId === null) {
+        return undefined;
+    }
+    const folderIds = folderBranchIds(folderId, bootstrap.folders);
+    return bootstrap.feeds
+        .filter(
+            (feed) => feed.folderId !== null && folderIds.has(feed.folderId),
+        )
+        .map((feed) => feed.id);
 }
 
 export function articleSettingsInvalidation(
-  previous: AppSettings,
-  next: AppSettings,
+    previous: AppSettings,
+    next: AppSettings,
 ): ArticleSettingsInvalidation {
-  const invalidatedSummaryPromptIds = new Set<string | null>();
-  if (previous.summaryPrompt !== next.summaryPrompt) invalidatedSummaryPromptIds.add(null);
-
-  const nextCustomPrompts = new Map(next.customPrompts.map((prompt) => [prompt.id, prompt.prompt]));
-  for (const prompt of previous.customPrompts) {
-    if (nextCustomPrompts.get(prompt.id) !== prompt.prompt) {
-      invalidatedSummaryPromptIds.add(prompt.id);
+    const invalidatedSummaryPromptIds = new Set<string | null>();
+    if (previous.summaryPrompt !== next.summaryPrompt) {
+        invalidatedSummaryPromptIds.add(null);
     }
-  }
 
-  return {
-    resetTranslationState:
-      previous.translationLanguage !== next.translationLanguage ||
-      previous.translationPrompt !== next.translationPrompt,
-    invalidatedSummaryPromptIds,
-  };
+    const nextCustomPrompts = new Map(
+        next.customPrompts.map((prompt) => [prompt.id, prompt.prompt]),
+    );
+    for (const prompt of previous.customPrompts) {
+        if (nextCustomPrompts.get(prompt.id) !== prompt.prompt) {
+            invalidatedSummaryPromptIds.add(prompt.id);
+        }
+    }
+
+    return {
+        resetTranslationState:
+            previous.translationLanguage !== next.translationLanguage ||
+            previous.translationPrompt !== next.translationPrompt,
+        invalidatedSummaryPromptIds,
+    };
 }
 
 export function invalidateArticleSummaries(
-  articles: Article[],
-  promptIds: ReadonlySet<string | null>,
+    articles: Article[],
+    promptIds: ReadonlySet<string | null>,
 ): Article[] {
-  if (promptIds.size === 0) return articles;
-  return articles.map((article) =>
-    article.aiSummary && promptIds.has(article.aiSummary.promptId)
-      ? { ...article, aiSummary: null }
-      : article,
-  );
+    if (promptIds.size === 0) {
+        return articles;
+    }
+    return articles.map((article) =>
+        article.aiSummary && promptIds.has(article.aiSummary.promptId)
+            ? { ...article, aiSummary: null }
+            : article,
+    );
 }
 
 export function updateBootstrapCounts(
-  bootstrap: BootstrapData,
-  article: Article,
-  unreadDelta: number,
-  savedDelta: number,
+    bootstrap: BootstrapData,
+    article: Article,
+    unreadDelta: number,
+    savedDelta: number,
 ): BootstrapData {
-  const affectedFolderIds = new Set(
-    folderPath(article.folderId, bootstrap.folders).map((folder) => folder.id),
-  );
-  return {
-    ...bootstrap,
-    counts: {
-      ...bootstrap.counts,
-      unread: Math.max(0, bootstrap.counts.unread + unreadDelta),
-      saved: Math.max(0, bootstrap.counts.saved + savedDelta),
-    },
-    feeds: bootstrap.feeds.map((feed) =>
-      feed.id === article.feedId
-        ? { ...feed, unreadCount: Math.max(0, feed.unreadCount + unreadDelta) }
-        : feed,
-    ),
-    folders: bootstrap.folders.map((folder) =>
-      affectedFolderIds.has(folder.id)
-        ? { ...folder, unreadCount: Math.max(0, folder.unreadCount + unreadDelta) }
-        : folder,
-    ),
-  };
+    const affectedFolderIds = new Set(
+        folderPath(article.folderId, bootstrap.folders).map(
+            (folder) => folder.id,
+        ),
+    );
+    return {
+        ...bootstrap,
+        counts: {
+            ...bootstrap.counts,
+            unread: Math.max(0, bootstrap.counts.unread + unreadDelta),
+            saved: Math.max(0, bootstrap.counts.saved + savedDelta),
+        },
+        feeds: bootstrap.feeds.map((feed) =>
+            feed.id === article.feedId
+                ? {
+                      ...feed,
+                      unreadCount: Math.max(0, feed.unreadCount + unreadDelta),
+                  }
+                : feed,
+        ),
+        folders: bootstrap.folders.map((folder) =>
+            affectedFolderIds.has(folder.id)
+                ? {
+                      ...folder,
+                      unreadCount: Math.max(
+                          0,
+                          folder.unreadCount + unreadDelta,
+                      ),
+                  }
+                : folder,
+        ),
+    };
 }

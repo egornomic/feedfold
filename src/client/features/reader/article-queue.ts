@@ -1,478 +1,614 @@
 import {
-  skipToken,
-  useInfiniteQuery,
-  useIsMutating,
-  useQuery,
-  useQueryClient,
+    skipToken,
+    useInfiniteQuery,
+    useIsMutating,
+    useQuery,
+    useQueryClient,
 } from "@tanstack/react-query";
 import {
-  type Dispatch,
-  type SetStateAction,
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
+    type Dispatch,
+    type SetStateAction,
+    useCallback,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import { appRoutePath, type ReaderRoute } from "../../../shared/app-routes";
 import type { Article, ReadingMode } from "../../../shared/types";
 import { errorMessage } from "../../api/api";
-import { articlePagesQuery, articleQuery, counterMutationKey, readerKeys } from "../../api/query";
+import {
+    articlePagesQuery,
+    articleQuery,
+    counterMutationKey,
+    readerKeys,
+} from "../../api/query";
 import type { AppRouteController } from "../../app/route";
 import { useDelayedPending } from "../../ui/loading";
 import { updateReaderArticleStates } from "./article-state";
-import { articlesWithContextReturn, type ContextArticleReturn } from "./contextual-filter";
 import {
-  appendUnseenArticles,
-  articleMatchesState,
-  articleQueryForReaderRoute,
-  firstUnseenArticlePage,
+    articlesWithContextReturn,
+    type ContextArticleReturn,
+} from "./contextual-filter";
+import {
+    appendUnseenArticles,
+    articleMatchesState,
+    articleQueryForReaderRoute,
+    firstUnseenArticlePage,
 } from "./reader-state";
 
 export interface ArticleQueueController {
-  loadMoreError: boolean;
-  queueReady: boolean;
-  readingMode: ReadingMode;
-  articles: Article[];
-  setArticles: Dispatch<SetStateAction<Article[]>>;
-  getArticles: () => Article[];
-  loading: boolean;
-  showLoading: boolean;
-  loadedReaderRoute: ReaderRoute | null;
-  loadingMore: boolean;
-  error: string | null;
-  nextCursor: string | null;
-  activeArticleId: number | null;
-  activeArticle: Article | null;
-  activeArticleIndex: number;
-  expandedKeyboardTargetId: number | null;
-  queryRevision: number;
-  fullContentLoadedIds: React.RefObject<Set<number>>;
-  loadArticles: () => Promise<void>;
-  refreshQueue: () => Promise<void>;
-  loadOlderArticles: () => Promise<Article[]>;
-  selectArticle: (articleId: number, keyboardTarget?: boolean) => void;
-  clearKeyboardTarget: () => void;
-  mergeArticle: (article: Article) => void;
-  preserveContextArticle: (
-    article: Article,
-    articleIndex: number,
-    returnRoute: ReaderRoute,
-  ) => void;
-  invalidate: () => void;
-  retryRoutedArticle: () => void;
+    loadMoreError: boolean;
+    queueReady: boolean;
+    readingMode: ReadingMode;
+    articles: Article[];
+    setArticles: Dispatch<SetStateAction<Article[]>>;
+    getArticles: () => Article[];
+    loading: boolean;
+    showLoading: boolean;
+    loadedReaderRoute: ReaderRoute | null;
+    loadingMore: boolean;
+    error: string | null;
+    nextCursor: string | null;
+    activeArticleId: number | null;
+    activeArticle: Article | null;
+    activeArticleIndex: number;
+    expandedKeyboardTargetId: number | null;
+    queryRevision: number;
+    fullContentLoadedIds: React.RefObject<Set<number>>;
+    loadArticles: () => Promise<void>;
+    refreshQueue: () => Promise<void>;
+    loadOlderArticles: () => Promise<Article[]>;
+    selectArticle: (articleId: number, keyboardTarget?: boolean) => void;
+    clearKeyboardTarget: () => void;
+    mergeArticle: (article: Article) => void;
+    preserveContextArticle: (
+        article: Article,
+        articleIndex: number,
+        returnRoute: ReaderRoute,
+    ) => void;
+    invalidate: () => void;
+    retryRoutedArticle: () => void;
 }
 
 // An article opened by link loads before its list; the list then loads around that article
 // until the reader returns to it.
 type ListAnchor =
-  | { phase: "awaiting-article"; articleId: number }
-  | { phase: "around-article"; articleId: number }
-  | { phase: "unanchored" };
+    | { phase: "awaiting-article"; articleId: number }
+    | { phase: "around-article"; articleId: number }
+    | { phase: "unanchored" };
 
 interface ArticleQueueOptions {
-  route: AppRouteController;
-  mutationRevision: number;
-  enabled: boolean;
-  readingMode: ReadingMode;
-  onReadingModeChange: (mode: ReadingMode) => void;
-  showToast: (message: string) => void;
+    route: AppRouteController;
+    mutationRevision: number;
+    enabled: boolean;
+    readingMode: ReadingMode;
+    onReadingModeChange: (mode: ReadingMode) => void;
+    showToast: (message: string) => void;
 }
 
 export function useArticleQueue({
-  route,
-  mutationRevision,
-  enabled,
-  readingMode,
-  onReadingModeChange,
-  showToast,
-}: ArticleQueueOptions): ArticleQueueController {
-  const client = useQueryClient();
-  const [reloadRevision, setReloadRevision] = useState(0);
-  const reconciliationRevision = mutationRevision + reloadRevision;
-  const changingCounters = useIsMutating({ mutationKey: counterMutationKey }) > 0;
-  const { data: articles = [] } = useQuery<Article[]>({
-    queryKey: readerKeys.queue,
-    initialData: [] as Article[],
-    queryFn: skipToken,
-  });
-  const getArticles = useCallback(
-    () => client.getQueryData<Article[]>(readerKeys.queue) ?? [],
-    [client],
-  );
-  const setArticles: Dispatch<SetStateAction<Article[]>> = useCallback(
-    (update) => {
-      client.setQueryData<Article[]>(readerKeys.queue, (current = []) =>
-        typeof update === "function" ? update(current) : update,
-      );
-    },
-    [client],
-  );
-  const reconcileArticleStates = useCallback(
-    (candidates: Article[]) => {
-      updateReaderArticleStates(
-        client,
-        new Map(
-          candidates.map((article) => [
-            article.id,
-            { isRead: article.isRead, isSaved: article.isSaved },
-          ]),
-        ),
-        false,
-      );
-    },
-    [client],
-  );
-  const [displayedReadingMode, setDisplayedReadingMode] = useState(readingMode);
-  const [loadedReaderRoute, setLoadedReaderRoute] = useState<ReaderRoute | null>(null);
-  const [activeArticleId, setActiveArticleId] = useState<number | null>(route.routedArticleId);
-  const [expandedKeyboardTargetId, setExpandedKeyboardTargetId] = useState<number | null>(
-    route.routedArticleId,
-  );
-  const [queryRevision, setQueryRevision] = useState(0);
-  const fullContentLoadedIds = useRef(new Set<number>());
-  const contextReturn = useRef<(ContextArticleReturn & { route: ReaderRoute }) | null>(null);
-  const [listAnchor, setListAnchor] = useState<ListAnchor>(() =>
-    route.routedArticleId === null
-      ? { phase: "unanchored" }
-      : { phase: "awaiting-article", articleId: route.routedArticleId },
-  );
-  const anchor = listAnchor.phase === "unanchored" ? null : listAnchor.articleId;
-  const applied = useRef<{
-    key: string;
-    data: unknown;
-    updatedAt: number;
-    reconciliationRevision: number;
-  } | null>(null);
-  const appliedDetail = useRef<Article | null>(null);
-  const previousRouteKind = useRef(route.route.kind);
-
-  const detail = useQuery({
-    ...articleQuery(route.routedArticleId ?? 0),
-    enabled: enabled && route.routedArticleId !== null && !changingCounters,
-  });
-  const request = articleQueryForReaderRoute(route.readerRoute, {
-    limit: readingMode === "expanded" ? 20 : 100,
-    includeContent: readingMode === "expanded",
-    ...(anchor !== null ? { anchorId: anchor } : {}),
-  });
-  const options = articlePagesQuery(request);
-  const requestKey = JSON.stringify(options.queryKey);
-  const pages = useInfiniteQuery({
-    ...options,
-    enabled:
-      enabled &&
-      listAnchor.phase !== "awaiting-article" &&
-      route.view === "reader" &&
-      !changingCounters,
-  });
-  const latestRequestKey = useRef(requestKey);
-  latestRequestKey.current = requestKey;
-
-  useLayoutEffect(() => {
-    const article = detail.data;
-    if (
-      !article ||
-      article.id !== route.routedArticleId ||
-      changingCounters ||
-      appliedDetail.current === article
-    )
-      return;
-    appliedDetail.current = article;
-    fullContentLoadedIds.current.add(article.id);
-    reconcileArticleStates([article]);
-    setArticles((current) =>
-      current.some((item) => item.id === article.id)
-        ? current.map((item) => (item.id === article.id ? article : item))
-        : [article, ...current],
-    );
-    setActiveArticleId(article.id);
-    if (listAnchor.phase !== "awaiting-article") return;
-    const context = route.articleContext();
-    const surrounding: ReaderRoute = context?.route ?? {
-      kind: "reader",
-      scope: article.feedId === null ? "all" : "feed",
-      scopeId: article.feedId,
-      state: article.feedId === null ? "saved" : "all",
-      search: "",
-    };
-    route.setArticleContext(surrounding, context?.articleIndex);
-    setLoadedReaderRoute(surrounding);
-    setListAnchor({ phase: "around-article", articleId: listAnchor.articleId });
-  }, [
-    detail.data,
-    route.routedArticleId,
-    listAnchor,
-    changingCounters,
-    route.articleContext,
-    route.setArticleContext,
-    reconcileArticleStates,
-    setArticles,
-  ]);
-
-  useLayoutEffect(() => {
-    if (route.routedArticleId !== null) setActiveArticleId(route.routedArticleId);
-    const returning = previousRouteKind.current === "article" && route.route.kind === "reader";
-    previousRouteKind.current = route.route.kind;
-    if (!returning) return;
-    setListAnchor({ phase: "unanchored" });
-    setActiveArticleId(null);
-    setExpandedKeyboardTargetId(null);
-    const target = contextReturn.current;
-    setArticles((current) =>
-      current.filter(
-        (article) =>
-          article.id === target?.article.id ||
-          articleMatchesState(article, route.readerRoute.state),
-      ),
-    );
-  }, [route.route.kind, route.routedArticleId, route.readerRoute.state, setArticles]);
-
-  useLayoutEffect(() => {
-    if (!pages.data || route.view !== "reader" || changingCounters) return;
-    if (
-      applied.current?.key === requestKey &&
-      applied.current.data === pages.data &&
-      applied.current.updatedAt === pages.dataUpdatedAt &&
-      applied.current.reconciliationRevision === reconciliationRevision
-    )
-      return;
-    const sameQueue = applied.current?.key === requestKey;
-    const reconcile =
-      sameQueue && applied.current?.reconciliationRevision !== reconciliationRevision;
-    // A server event can replace the refetch awaited by an explicit change.
-    // Keep that change pending until the replacement delivers fresh articles.
-    if (reconcile && (pages.isFetching || pages.isStale)) return;
-    const candidates = appendUnseenArticles(
-      [],
-      pages.data.pages.flatMap((page) => page.articles),
-    ).articles;
-    const matchingCandidates = candidates.filter((article) =>
-      articleMatchesState(article, route.readerRoute.state),
-    );
-    const target = contextReturn.current;
-    const returnTarget =
-      target && appRoutePath(target.route) === appRoutePath(route.readerRoute) ? target : null;
-    reconcileArticleStates(candidates);
-    const current = getArticles();
-    // Background deliveries retain the reading queue; explicit changes apply its new contents and order.
-    const reading = !reconcile && (route.routedArticleId !== null || sameQueue);
-    const delivered = new Set(candidates.map((article) => article.id));
-    // Newer deliveries can push loaded articles past the refreshed pages without changing them.
-    const refreshedThrough =
-      pages.data.pages.at(-1)?.nextCursor === null
-        ? current.length
-        : current.findLastIndex((article) => delivered.has(article.id));
-    // Articles another reader moved out of this view leave it; this reader's own changes keep their place.
-    const retained = sameQueue
-      ? current.filter(
-          (article, index) =>
-            delivered.has(article.id) ||
-            index > refreshedThrough ||
-            article.id === activeArticleId ||
-            !articleMatchesState(article, route.readerRoute.state),
-        )
-      : current;
-    let next =
-      reading && (sameQueue || anchor === null)
-        ? appendUnseenArticles(retained, matchingCandidates).articles
-        : matchingCandidates.map((article) => {
-            const complete = current.find((item) => item.id === article.id);
-            return complete && fullContentLoadedIds.current.has(article.id)
-              ? { ...complete, isRead: article.isRead, isSaved: article.isSaved }
-              : article;
-          });
-    next = articlesWithContextReturn(next, returnTarget);
-    if (detail.data && route.routedArticleId === detail.data.id) {
-      next = articlesWithContextReturn(next, {
-        article: detail.data,
-        index: current.findIndex((article) => article.id === detail.data.id),
-      });
-    }
-    if (readingMode === "expanded")
-      for (const article of candidates) fullContentLoadedIds.current.add(article.id);
-    applied.current = {
-      key: requestKey,
-      data: pages.data,
-      updatedAt: pages.dataUpdatedAt,
-      reconciliationRevision,
-    };
-    setArticles(next);
-    setLoadedReaderRoute(route.readerRoute);
-    setDisplayedReadingMode(readingMode);
-    setActiveArticleId((id) =>
-      route.routedArticleId !== null
-        ? route.routedArticleId
-        : sameQueue && next.some((article) => article.id === id)
-          ? id
-          : null,
-    );
-    if (!sameQueue) {
-      setQueryRevision((revision) => revision + 1);
-      setExpandedKeyboardTargetId(
-        returnTarget && readingMode === "expanded" ? returnTarget.article.id : null,
-      );
-    }
-    if (returnTarget) contextReturn.current = null;
-  }, [
-    pages.data,
-    pages.dataUpdatedAt,
-    pages.isFetching,
-    pages.isStale,
-    reconciliationRevision,
-    activeArticleId,
-    anchor,
-    requestKey,
+    route,
+    mutationRevision,
+    enabled,
     readingMode,
-    route.view,
-    route.routedArticleId,
-    route.readerRoute,
-    detail.data,
-    changingCounters,
-    setArticles,
-    reconcileArticleStates,
-    getArticles,
-  ]);
-
-  useLayoutEffect(() => {
-    if (pages.isError && readingMode !== displayedReadingMode && loadedReaderRoute) {
-      onReadingModeChange(displayedReadingMode);
-      showToast(`Could not change reading view: ${errorMessage(pages.error)}`);
-    }
-  }, [
-    pages.isError,
-    pages.error,
-    readingMode,
-    displayedReadingMode,
-    loadedReaderRoute,
     onReadingModeChange,
     showToast,
-  ]);
-
-  const pendingPage = useRef<{ key: string; promise: Promise<Article[]> } | null>(null);
-  const loadOlderArticles = useCallback((): Promise<Article[]> => {
-    if (pendingPage.current?.key === requestKey) return pendingPage.current.promise;
-    const cursor = pages.data?.pages.at(-1)?.nextCursor;
-    if (!cursor || pages.isFetching) return Promise.resolve([]);
-    const promise = (async () => {
-      const before = getArticles();
-      try {
-        const { appended } = await firstUnseenArticlePage(before, cursor, async () => {
-          if (latestRequestKey.current !== requestKey) return;
-          const result = await pages.fetchNextPage({ cancelRefetch: false, throwOnError: true });
-          return {
-            candidates:
-              result.data?.pages
-                .flatMap((page) => page.articles)
-                .filter((article) => articleMatchesState(article, route.readerRoute.state)) ?? [],
-            nextCursor: result.data?.pages.at(-1)?.nextCursor ?? null,
-          };
-        });
-        if (latestRequestKey.current !== requestKey) return [];
-        setArticles((current) => appendUnseenArticles(current, appended).articles);
-        return appended;
-      } catch (error) {
-        showToast(`Could not load more articles: ${errorMessage(error)}`);
-        return [];
-      }
-    })();
-    pendingPage.current = { key: requestKey, promise };
-    void promise.finally(() => {
-      if (pendingPage.current?.promise === promise) pendingPage.current = null;
+}: ArticleQueueOptions): ArticleQueueController {
+    const client = useQueryClient();
+    const [reloadRevision, setReloadRevision] = useState(0);
+    const reconciliationRevision = mutationRevision + reloadRevision;
+    const changingCounters =
+        useIsMutating({ mutationKey: counterMutationKey }) > 0;
+    const { data: articles = [] } = useQuery<Article[]>({
+        queryKey: readerKeys.queue,
+        initialData: [] as Article[],
+        queryFn: skipToken,
     });
-    return promise;
-  }, [getArticles, pages, requestKey, route.readerRoute.state, setArticles, showToast]);
+    const getArticles = useCallback(
+        () => client.getQueryData<Article[]>(readerKeys.queue) ?? [],
+        [client],
+    );
+    const setArticles: Dispatch<SetStateAction<Article[]>> = useCallback(
+        (update) => {
+            client.setQueryData<Article[]>(readerKeys.queue, (current = []) =>
+                typeof update === "function" ? update(current) : update,
+            );
+        },
+        [client],
+    );
+    const reconcileArticleStates = useCallback(
+        (candidates: Article[]) => {
+            updateReaderArticleStates(
+                client,
+                new Map(
+                    candidates.map((article) => [
+                        article.id,
+                        { isRead: article.isRead, isSaved: article.isSaved },
+                    ]),
+                ),
+                false,
+            );
+        },
+        [client],
+    );
+    const [displayedReadingMode, setDisplayedReadingMode] =
+        useState(readingMode);
+    const [loadedReaderRoute, setLoadedReaderRoute] =
+        useState<ReaderRoute | null>(null);
+    const [activeArticleId, setActiveArticleId] = useState<number | null>(
+        route.routedArticleId,
+    );
+    const [expandedKeyboardTargetId, setExpandedKeyboardTargetId] = useState<
+        number | null
+    >(route.routedArticleId);
+    const [queryRevision, setQueryRevision] = useState(0);
+    const fullContentLoadedIds = useRef(new Set<number>());
+    const contextReturn = useRef<
+        (ContextArticleReturn & { route: ReaderRoute }) | null
+    >(null);
+    const [listAnchor, setListAnchor] = useState<ListAnchor>(() =>
+        route.routedArticleId === null
+            ? { phase: "unanchored" }
+            : { phase: "awaiting-article", articleId: route.routedArticleId },
+    );
+    const anchor =
+        listAnchor.phase === "unanchored" ? null : listAnchor.articleId;
+    const applied = useRef<{
+        key: string;
+        data: unknown;
+        updatedAt: number;
+        reconciliationRevision: number;
+    } | null>(null);
+    const appliedDetail = useRef<Article | null>(null);
+    const previousRouteKind = useRef(route.route.kind);
 
-  const loadArticles = useCallback(async () => {
-    await client.invalidateQueries({ queryKey: readerKeys.lists });
-    setReloadRevision((revision) => revision + 1);
-  }, [client]);
-  const refreshQueue = useCallback(async () => {
-    try {
-      const result = await pages.refetch({ cancelRefetch: false, throwOnError: true });
-      if (latestRequestKey.current !== requestKey) return;
-      const candidates = result.data?.pages.flatMap((page) => page.articles) ?? [];
-      reconcileArticleStates(candidates);
-      setArticles(
-        (current) =>
-          appendUnseenArticles(
-            current,
-            candidates.filter((article) => articleMatchesState(article, route.readerRoute.state)),
-          ).articles,
-      );
-    } catch (error) {
-      showToast(`Could not load more articles: ${errorMessage(error)}`);
-    }
-  }, [reconcileArticleStates, pages, requestKey, route.readerRoute.state, setArticles, showToast]);
-  const mergeArticle = useCallback(
-    (updated: Article) => {
-      fullContentLoadedIds.current.add(updated.id);
-      setArticles((current) =>
-        current.map((article) =>
-          article.id === updated.id
-            ? { ...updated, isRead: article.isRead, isSaved: article.isSaved }
-            : article,
-        ),
-      );
-    },
-    [setArticles],
-  );
-  const selectArticle = useCallback((id: number, keyboardTarget = false) => {
-    setActiveArticleId(id);
-    setExpandedKeyboardTargetId(keyboardTarget ? id : null);
-  }, []);
-  const activeArticleIndex = useMemo(
-    () => articles.findIndex((article) => article.id === activeArticleId),
-    [articles, activeArticleId],
-  );
-  const articleReady =
-    route.routedArticleId !== null &&
-    articles.some((article) => article.id === route.routedArticleId);
-  const loading =
-    route.routedArticleId !== null ? !articleReady && detail.isPending : pages.isPending;
-  const showLoading = useDelayedPending(loading && route.route.kind === "reader", requestKey);
-  const error =
-    route.routedArticleId !== null
-      ? !articleReady && detail.error
-        ? errorMessage(detail.error)
-        : null
-      : pages.error && !pages.data
-        ? errorMessage(pages.error)
-        : null;
+    const detail = useQuery({
+        ...articleQuery(route.routedArticleId ?? 0),
+        enabled: enabled && route.routedArticleId !== null && !changingCounters,
+    });
+    const request = articleQueryForReaderRoute(route.readerRoute, {
+        limit: readingMode === "expanded" ? 20 : 100,
+        includeContent: readingMode === "expanded",
+        ...(anchor !== null ? { anchorId: anchor } : {}),
+    });
+    const options = articlePagesQuery(request);
+    const requestKey = JSON.stringify(options.queryKey);
+    const pages = useInfiniteQuery({
+        ...options,
+        enabled:
+            enabled &&
+            listAnchor.phase !== "awaiting-article" &&
+            route.view === "reader" &&
+            !changingCounters,
+    });
+    const latestRequestKey = useRef(requestKey);
+    latestRequestKey.current = requestKey;
 
-  return {
-    loadMoreError: pages.isFetchNextPageError,
-    queueReady: pages.data !== undefined && applied.current?.key === requestKey,
-    readingMode: displayedReadingMode,
-    articles,
-    setArticles,
-    getArticles,
-    loading,
-    showLoading: loading && (route.route.kind !== "reader" || showLoading),
-    loadedReaderRoute,
-    loadingMore: pages.isFetchingNextPage || (articleReady && pages.isPending),
-    error,
-    nextCursor: pages.data?.pages.at(-1)?.nextCursor ?? null,
-    activeArticleId,
-    activeArticle: articles[activeArticleIndex] ?? null,
-    activeArticleIndex,
-    expandedKeyboardTargetId,
-    queryRevision,
-    fullContentLoadedIds,
-    loadArticles,
-    refreshQueue,
-    loadOlderArticles,
-    selectArticle,
-    clearKeyboardTarget: () => setExpandedKeyboardTargetId(null),
-    mergeArticle,
-    preserveContextArticle: (article, index, returnRoute) => {
-      contextReturn.current = { article, index, route: returnRoute };
-    },
-    invalidate: () => {
-      void client.invalidateQueries({ queryKey: readerKeys.lists });
-    },
-    retryRoutedArticle: () => {
-      void detail.refetch();
-    },
-  };
+    useLayoutEffect(() => {
+        const article = detail.data;
+        if (
+            !article ||
+            article.id !== route.routedArticleId ||
+            changingCounters ||
+            appliedDetail.current === article
+        ) {
+            return;
+        }
+        appliedDetail.current = article;
+        fullContentLoadedIds.current.add(article.id);
+        reconcileArticleStates([article]);
+        setArticles((current) =>
+            current.some((item) => item.id === article.id)
+                ? current.map((item) =>
+                      item.id === article.id ? article : item,
+                  )
+                : [article, ...current],
+        );
+        setActiveArticleId(article.id);
+        if (listAnchor.phase !== "awaiting-article") {
+            return;
+        }
+        const context = route.articleContext();
+        const surrounding: ReaderRoute = context?.route ?? {
+            kind: "reader",
+            scope: article.feedId === null ? "all" : "feed",
+            scopeId: article.feedId,
+            state: article.feedId === null ? "saved" : "all",
+            search: "",
+        };
+        route.setArticleContext(surrounding, context?.articleIndex);
+        setLoadedReaderRoute(surrounding);
+        setListAnchor({
+            phase: "around-article",
+            articleId: listAnchor.articleId,
+        });
+    }, [
+        detail.data,
+        route.routedArticleId,
+        listAnchor,
+        changingCounters,
+        route.articleContext,
+        route.setArticleContext,
+        reconcileArticleStates,
+        setArticles,
+    ]);
+
+    useLayoutEffect(() => {
+        if (route.routedArticleId !== null) {
+            setActiveArticleId(route.routedArticleId);
+        }
+        const returning =
+            previousRouteKind.current === "article" &&
+            route.route.kind === "reader";
+        previousRouteKind.current = route.route.kind;
+        if (!returning) {
+            return;
+        }
+        setListAnchor({ phase: "unanchored" });
+        setActiveArticleId(null);
+        setExpandedKeyboardTargetId(null);
+        const target = contextReturn.current;
+        setArticles((current) =>
+            current.filter(
+                (article) =>
+                    article.id === target?.article.id ||
+                    articleMatchesState(article, route.readerRoute.state),
+            ),
+        );
+    }, [
+        route.route.kind,
+        route.routedArticleId,
+        route.readerRoute.state,
+        setArticles,
+    ]);
+
+    useLayoutEffect(() => {
+        if (!pages.data || route.view !== "reader" || changingCounters) {
+            return;
+        }
+        if (
+            applied.current?.key === requestKey &&
+            applied.current.data === pages.data &&
+            applied.current.updatedAt === pages.dataUpdatedAt &&
+            applied.current.reconciliationRevision === reconciliationRevision
+        ) {
+            return;
+        }
+        const sameQueue = applied.current?.key === requestKey;
+        const reconcile =
+            sameQueue &&
+            applied.current?.reconciliationRevision !== reconciliationRevision;
+        // A server event can replace the refetch awaited by an explicit change.
+        // Keep that change pending until the replacement delivers fresh articles.
+        if (reconcile && (pages.isFetching || pages.isStale)) {
+            return;
+        }
+        const candidates = appendUnseenArticles(
+            [],
+            pages.data.pages.flatMap((page) => page.articles),
+        ).articles;
+        const matchingCandidates = candidates.filter((article) =>
+            articleMatchesState(article, route.readerRoute.state),
+        );
+        const target = contextReturn.current;
+        const returnTarget =
+            target &&
+            appRoutePath(target.route) === appRoutePath(route.readerRoute)
+                ? target
+                : null;
+        reconcileArticleStates(candidates);
+        const current = getArticles();
+        // Background deliveries retain the reading queue; explicit changes
+        // apply its new contents and order.
+        const reading =
+            !reconcile && (route.routedArticleId !== null || sameQueue);
+        const delivered = new Set(candidates.map((article) => article.id));
+        // Newer deliveries can push loaded articles past the refreshed pages without changing them.
+        const refreshedThrough =
+            pages.data.pages.at(-1)?.nextCursor === null
+                ? current.length
+                : current.findLastIndex((article) => delivered.has(article.id));
+        // Articles another reader moved out of this view leave it; this
+        // reader's own changes keep their place.
+        const retained = sameQueue
+            ? current.filter(
+                  (article, index) =>
+                      delivered.has(article.id) ||
+                      index > refreshedThrough ||
+                      article.id === activeArticleId ||
+                      !articleMatchesState(article, route.readerRoute.state),
+              )
+            : current;
+        let next =
+            reading && (sameQueue || anchor === null)
+                ? appendUnseenArticles(retained, matchingCandidates).articles
+                : matchingCandidates.map((article) => {
+                      const complete = current.find(
+                          (item) => item.id === article.id,
+                      );
+                      return complete &&
+                          fullContentLoadedIds.current.has(article.id)
+                          ? {
+                                ...complete,
+                                isRead: article.isRead,
+                                isSaved: article.isSaved,
+                            }
+                          : article;
+                  });
+        next = articlesWithContextReturn(next, returnTarget);
+        if (detail.data && route.routedArticleId === detail.data.id) {
+            next = articlesWithContextReturn(next, {
+                article: detail.data,
+                index: current.findIndex(
+                    (article) => article.id === detail.data.id,
+                ),
+            });
+        }
+        if (readingMode === "expanded") {
+            for (const article of candidates) {
+                fullContentLoadedIds.current.add(article.id);
+            }
+        }
+        applied.current = {
+            key: requestKey,
+            data: pages.data,
+            updatedAt: pages.dataUpdatedAt,
+            reconciliationRevision,
+        };
+        setArticles(next);
+        setLoadedReaderRoute(route.readerRoute);
+        setDisplayedReadingMode(readingMode);
+        setActiveArticleId((id) =>
+            route.routedArticleId !== null
+                ? route.routedArticleId
+                : sameQueue && next.some((article) => article.id === id)
+                  ? id
+                  : null,
+        );
+        if (!sameQueue) {
+            setQueryRevision((revision) => revision + 1);
+            setExpandedKeyboardTargetId(
+                returnTarget && readingMode === "expanded"
+                    ? returnTarget.article.id
+                    : null,
+            );
+        }
+        if (returnTarget) {
+            contextReturn.current = null;
+        }
+    }, [
+        pages.data,
+        pages.dataUpdatedAt,
+        pages.isFetching,
+        pages.isStale,
+        reconciliationRevision,
+        activeArticleId,
+        anchor,
+        requestKey,
+        readingMode,
+        route.view,
+        route.routedArticleId,
+        route.readerRoute,
+        detail.data,
+        changingCounters,
+        setArticles,
+        reconcileArticleStates,
+        getArticles,
+    ]);
+
+    useLayoutEffect(() => {
+        if (
+            pages.isError &&
+            readingMode !== displayedReadingMode &&
+            loadedReaderRoute
+        ) {
+            onReadingModeChange(displayedReadingMode);
+            showToast(
+                `Could not change reading view: ${errorMessage(pages.error)}`,
+            );
+        }
+    }, [
+        pages.isError,
+        pages.error,
+        readingMode,
+        displayedReadingMode,
+        loadedReaderRoute,
+        onReadingModeChange,
+        showToast,
+    ]);
+
+    const pendingPage = useRef<{
+        key: string;
+        promise: Promise<Article[]>;
+    } | null>(null);
+    const loadOlderArticles = useCallback((): Promise<Article[]> => {
+        if (pendingPage.current?.key === requestKey) {
+            return pendingPage.current.promise;
+        }
+        const cursor = pages.data?.pages.at(-1)?.nextCursor;
+        if (!cursor || pages.isFetching) {
+            return Promise.resolve([]);
+        }
+        const promise = (async () => {
+            const before = getArticles();
+            try {
+                const { appended } = await firstUnseenArticlePage(
+                    before,
+                    cursor,
+                    async () => {
+                        if (latestRequestKey.current !== requestKey) {
+                            return;
+                        }
+                        const result = await pages.fetchNextPage({
+                            cancelRefetch: false,
+                            throwOnError: true,
+                        });
+                        return {
+                            candidates:
+                                result.data?.pages
+                                    .flatMap((page) => page.articles)
+                                    .filter((article) =>
+                                        articleMatchesState(
+                                            article,
+                                            route.readerRoute.state,
+                                        ),
+                                    ) ?? [],
+                            nextCursor:
+                                result.data?.pages.at(-1)?.nextCursor ?? null,
+                        };
+                    },
+                );
+                if (latestRequestKey.current !== requestKey) {
+                    return [];
+                }
+                setArticles(
+                    (current) =>
+                        appendUnseenArticles(current, appended).articles,
+                );
+                return appended;
+            } catch (error) {
+                showToast(
+                    `Could not load more articles: ${errorMessage(error)}`,
+                );
+                return [];
+            }
+        })();
+        pendingPage.current = { key: requestKey, promise };
+        void promise.finally(() => {
+            if (pendingPage.current?.promise === promise) {
+                pendingPage.current = null;
+            }
+        });
+        return promise;
+    }, [
+        getArticles,
+        pages,
+        requestKey,
+        route.readerRoute.state,
+        setArticles,
+        showToast,
+    ]);
+
+    const loadArticles = useCallback(async () => {
+        await client.invalidateQueries({ queryKey: readerKeys.lists });
+        setReloadRevision((revision) => revision + 1);
+    }, [client]);
+    const refreshQueue = useCallback(async () => {
+        try {
+            const result = await pages.refetch({
+                cancelRefetch: false,
+                throwOnError: true,
+            });
+            if (latestRequestKey.current !== requestKey) {
+                return;
+            }
+            const candidates =
+                result.data?.pages.flatMap((page) => page.articles) ?? [];
+            reconcileArticleStates(candidates);
+            setArticles(
+                (current) =>
+                    appendUnseenArticles(
+                        current,
+                        candidates.filter((article) =>
+                            articleMatchesState(
+                                article,
+                                route.readerRoute.state,
+                            ),
+                        ),
+                    ).articles,
+            );
+        } catch (error) {
+            showToast(`Could not load more articles: ${errorMessage(error)}`);
+        }
+    }, [
+        reconcileArticleStates,
+        pages,
+        requestKey,
+        route.readerRoute.state,
+        setArticles,
+        showToast,
+    ]);
+    const mergeArticle = useCallback(
+        (updated: Article) => {
+            fullContentLoadedIds.current.add(updated.id);
+            setArticles((current) =>
+                current.map((article) =>
+                    article.id === updated.id
+                        ? {
+                              ...updated,
+                              isRead: article.isRead,
+                              isSaved: article.isSaved,
+                          }
+                        : article,
+                ),
+            );
+        },
+        [setArticles],
+    );
+    const selectArticle = useCallback((id: number, keyboardTarget = false) => {
+        setActiveArticleId(id);
+        setExpandedKeyboardTargetId(keyboardTarget ? id : null);
+    }, []);
+    const activeArticleIndex = useMemo(
+        () => articles.findIndex((article) => article.id === activeArticleId),
+        [articles, activeArticleId],
+    );
+    const articleReady =
+        route.routedArticleId !== null &&
+        articles.some((article) => article.id === route.routedArticleId);
+    const loading =
+        route.routedArticleId !== null
+            ? !articleReady && detail.isPending
+            : pages.isPending;
+    const showLoading = useDelayedPending(
+        loading && route.route.kind === "reader",
+        requestKey,
+    );
+    const error =
+        route.routedArticleId !== null
+            ? !articleReady && detail.error
+                ? errorMessage(detail.error)
+                : null
+            : pages.error && !pages.data
+              ? errorMessage(pages.error)
+              : null;
+
+    return {
+        loadMoreError: pages.isFetchNextPageError,
+        queueReady:
+            pages.data !== undefined && applied.current?.key === requestKey,
+        readingMode: displayedReadingMode,
+        articles,
+        setArticles,
+        getArticles,
+        loading,
+        showLoading: loading && (route.route.kind !== "reader" || showLoading),
+        loadedReaderRoute,
+        loadingMore:
+            pages.isFetchingNextPage || (articleReady && pages.isPending),
+        error,
+        nextCursor: pages.data?.pages.at(-1)?.nextCursor ?? null,
+        activeArticleId,
+        activeArticle: articles[activeArticleIndex] ?? null,
+        activeArticleIndex,
+        expandedKeyboardTargetId,
+        queryRevision,
+        fullContentLoadedIds,
+        loadArticles,
+        refreshQueue,
+        loadOlderArticles,
+        selectArticle,
+        clearKeyboardTarget: () => setExpandedKeyboardTargetId(null),
+        mergeArticle,
+        preserveContextArticle: (article, index, returnRoute) => {
+            contextReturn.current = { article, index, route: returnRoute };
+        },
+        invalidate: () => {
+            void client.invalidateQueries({ queryKey: readerKeys.lists });
+        },
+        retryRoutedArticle: () => {
+            void detail.refetch();
+        },
+    };
 }

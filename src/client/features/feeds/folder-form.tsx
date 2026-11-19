@@ -9,101 +9,127 @@ import type { ReaderDataMutations } from "../reader/reader-data";
 import { folderPathLabel } from "./folder-hierarchy";
 
 export function FolderForm({
-  folders,
-  initial,
-  defaultParentId = null,
-  motionState,
-  mutations,
-  onCancel,
-  onSaved,
-  showToast,
+    folders,
+    initial,
+    defaultParentId = null,
+    motionState,
+    mutations,
+    onCancel,
+    onSaved,
+    showToast,
 }: {
-  folders: Folder[];
-  initial?: Folder;
-  defaultParentId?: number | null;
-  motionState?: MotionState;
-  mutations: ReaderDataMutations;
-  onCancel: () => void;
-  onSaved: (folder: Folder) => Promise<void> | void;
-  showToast: (message: string) => void;
+    folders: Folder[];
+    initial?: Folder;
+    defaultParentId?: number | null;
+    motionState?: MotionState;
+    mutations: ReaderDataMutations;
+    onCancel: () => void;
+    onSaved: (folder: Folder) => Promise<void> | void;
+    showToast: (message: string) => void;
 }) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [parentId, setParentId] = useState<number | null>(initial?.parentId ?? defaultParentId);
-  const [sortDirection, setSortDirection] = useState<FolderSortDirection>(
-    initial?.sortDirection ?? "newest",
-  );
-  const [saving, setSaving] = useState(false);
-  const unavailableParentIds = initial ? folderBranchIds(initial.id, folders) : new Set<number>();
-  const availableParents = folders.filter((folder) => !unavailableParentIds.has(folder.id));
+    const [name, setName] = useState(initial?.name ?? "");
+    const [parentId, setParentId] = useState<number | null>(
+        initial?.parentId ?? defaultParentId,
+    );
+    const [sortDirection, setSortDirection] = useState<FolderSortDirection>(
+        initial?.sortDirection ?? "newest",
+    );
+    const [saving, setSaving] = useState(false);
+    const unavailableParentIds = initial
+        ? folderBranchIds(initial.id, folders)
+        : new Set<number>();
+    const availableParents = folders.filter(
+        (folder) => !unavailableParentIds.has(folder.id),
+    );
 
-  return (
-    <form
-      className={`compact-form${motionState ? " add-folder-form" : ""}`}
-      data-motion-state={motionState}
-      inert={motionState === "closed" ? true : undefined}
-      aria-busy={saving}
-      onSubmit={(event) => {
-        event.preventDefault();
-        setSaving(true);
-        const input = { name: name.trim(), parentId, sortDirection };
-        const save = initial
-          ? mutations.updateFolder(initial.id, input)
-          : mutations.createFolder(input);
-        void save
-          .then(onSaved)
-          .catch((error) => showToast(`Could not save the folder: ${errorMessage(error)}`))
-          .finally(() => setSaving(false));
-      }}
-    >
-      <label className="field">
-        <span>Folder name</span>
-        <input
-          data-dialog-initial-focus
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </label>
-      <div className="field">
-        <span>Parent folder</span>
-        <DropdownSelect
-          ariaLabel="Parent folder"
-          value={parentId === null ? "" : String(parentId)}
-          options={[
-            { value: "", label: "No parent" },
-            ...availableParents.map((folder) => ({
-              value: String(folder.id),
-              label: folderPathLabel(folder.id, folders),
-            })),
-          ]}
-          onChange={(value) => setParentId(value ? Number(value) : null)}
-        />
-      </div>
-      <div className="field">
-        <span>Article order</span>
-        <DropdownSelect
-          ariaLabel="Article order"
-          value={sortDirection}
-          options={[
-            { value: "newest", label: "Newest first" },
-            { value: "oldest", label: "Oldest first" },
-          ]}
-          onChange={(value) => setSortDirection(value as FolderSortDirection)}
-        />
-      </div>
-      <div className="form-actions">
-        <button className="secondary-button" type="button" onClick={onCancel}>
-          Cancel
-        </button>
-        <button className="primary-button" type="submit" disabled={saving || !name.trim()}>
-          {saving ? (
-            <LoaderCircle className="spin" aria-hidden="true" size={15} />
-          ) : (
-            <Check aria-hidden="true" size={15} />
-          )}
-          {initial ? "Save folder" : "Create folder"}
-        </button>
-      </div>
-    </form>
-  );
+    return (
+        <form
+            className={`compact-form${motionState ? " add-folder-form" : ""}`}
+            data-motion-state={motionState}
+            inert={motionState === "closed" ? true : undefined}
+            aria-busy={saving}
+            onSubmit={(event) => {
+                event.preventDefault();
+                setSaving(true);
+                const input = { name: name.trim(), parentId, sortDirection };
+                const save = initial
+                    ? mutations.updateFolder(initial.id, input)
+                    : mutations.createFolder(input);
+                void save
+                    .then(onSaved)
+                    .catch((error) =>
+                        showToast(
+                            `Could not save the folder: ${errorMessage(error)}`,
+                        ),
+                    )
+                    .finally(() => setSaving(false));
+            }}
+        >
+            <label className="field">
+                <span>Folder name</span>
+                <input
+                    data-dialog-initial-focus
+                    required
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                />
+            </label>
+            <div className="field">
+                <span>Parent folder</span>
+                <DropdownSelect
+                    ariaLabel="Parent folder"
+                    value={parentId === null ? "" : String(parentId)}
+                    options={[
+                        { value: "", label: "No parent" },
+                        ...availableParents.map((folder) => ({
+                            value: String(folder.id),
+                            label: folderPathLabel(folder.id, folders),
+                        })),
+                    ]}
+                    onChange={(value) =>
+                        setParentId(value ? Number(value) : null)
+                    }
+                />
+            </div>
+            <div className="field">
+                <span>Article order</span>
+                <DropdownSelect
+                    ariaLabel="Article order"
+                    value={sortDirection}
+                    options={[
+                        { value: "newest", label: "Newest first" },
+                        { value: "oldest", label: "Oldest first" },
+                    ]}
+                    onChange={(value) =>
+                        setSortDirection(value as FolderSortDirection)
+                    }
+                />
+            </div>
+            <div className="form-actions">
+                <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={onCancel}
+                >
+                    Cancel
+                </button>
+                <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={saving || !name.trim()}
+                >
+                    {saving ? (
+                        <LoaderCircle
+                            className="spin"
+                            aria-hidden="true"
+                            size={15}
+                        />
+                    ) : (
+                        <Check aria-hidden="true" size={15} />
+                    )}
+                    {initial ? "Save folder" : "Create folder"}
+                </button>
+            </div>
+        </form>
+    );
 }
