@@ -1,5 +1,4 @@
-import type { JSX } from "react";
-import Markdown, { type Components, type ExtraProps, type UrlTransform } from "react-markdown";
+import Markdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -7,41 +6,24 @@ import "katex/dist/katex.min.css";
 import type { AiGrounding } from "../../../../shared/types.js";
 import { CodeBlock } from "./code-block.js";
 
-const safeUrl: UrlTransform = (value) => {
-  if (value.startsWith("#")) return value;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-};
-
-function MarkdownLink({
-  node: _node,
-  href,
-  children,
-  ...props
-}: JSX.IntrinsicElements["a"] & ExtraProps) {
-  if (!href) return children;
-  if (href.startsWith("#")) {
-    return (
-      <a {...props} href={href}>
-        {children}
-      </a>
-    );
-  }
-  return (
-    <a {...props} href={href} target="_blank" rel="noreferrer">
-      {children}
-      <span className="sr-only"> (opens in a new tab)</span>
-    </a>
-  );
-}
-
 const components: Components = {
   pre: ({ node: _node, ...props }) => <CodeBlock {...props} />,
-  a: MarkdownLink,
+  a: ({ node: _node, href, children, ...props }) => {
+    if (!href) return children;
+    if (href.startsWith("#")) {
+      return (
+        <a {...props} href={href}>
+          {children}
+        </a>
+      );
+    }
+    return (
+      <a {...props} href={href} target="_blank" rel="noreferrer">
+        {children}
+        <span className="sr-only"> (opens in a new tab)</span>
+      </a>
+    );
+  },
   h1: ({ node: _node, ...props }) => <h4 {...props} />,
   h2: ({ node: _node, ...props }) => <h5 {...props} />,
   h3: ({ node: _node, ...props }) => <h6 {...props} />,
@@ -55,41 +37,6 @@ const components: Components = {
   ),
 };
 
-function normalizeAiMarkdown(text: string): string {
-  return text.replace(/^([ \t]{0,3})•(?=[ \t]|$)/gmu, "$1-");
-}
-
-function markdownLinkTitle(title: string): string {
-  return title.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll(/\s+/gu, " ");
-}
-
-function addGroundingCitations(text: string, grounding: AiGrounding): string {
-  const citationsByEndIndex = new Map<number, Set<number>>();
-  for (const support of grounding.supports) {
-    if (support.endIndex > text.length) continue;
-    const citations = citationsByEndIndex.get(support.endIndex) ?? new Set<number>();
-    for (const sourceIndex of support.sourceIndices) {
-      if (grounding.sources[sourceIndex]) citations.add(sourceIndex);
-    }
-    if (citations.size > 0) citationsByEndIndex.set(support.endIndex, citations);
-  }
-
-  let citedText = text;
-  const insertions = [...citationsByEndIndex].sort(([left], [right]) => right - left);
-  for (const [endIndex, sourceIndices] of insertions) {
-    const citations = [...sourceIndices]
-      .sort((left, right) => left - right)
-      .map((sourceIndex) => {
-        const source = grounding.sources[sourceIndex];
-        if (!source) return "";
-        return `[${sourceIndex + 1}](${source.uri} "${markdownLinkTitle(source.title)}")`;
-      })
-      .join("");
-    citedText = `${citedText.slice(0, endIndex)} ${citations}${citedText.slice(endIndex)}`;
-  }
-  return citedText;
-}
-
 export function AiMarkdown({
   text,
   grounding = null,
@@ -97,7 +44,35 @@ export function AiMarkdown({
   text: string;
   grounding?: AiGrounding | null;
 }) {
-  const markdown = grounding ? addGroundingCitations(text, grounding) : text;
+  let citedText = text;
+  if (grounding) {
+    const citationsByEndIndex = new Map<number, Set<number>>();
+    for (const support of grounding.supports) {
+      if (support.endIndex > text.length) continue;
+      const citations = citationsByEndIndex.get(support.endIndex) ?? new Set<number>();
+      for (const sourceIndex of support.sourceIndices) {
+        if (grounding.sources[sourceIndex]) citations.add(sourceIndex);
+      }
+      if (citations.size > 0) citationsByEndIndex.set(support.endIndex, citations);
+    }
+
+    const insertions = [...citationsByEndIndex].sort(([left], [right]) => right - left);
+    for (const [endIndex, sourceIndices] of insertions) {
+      const citations = [...sourceIndices]
+        .sort((left, right) => left - right)
+        .map((sourceIndex) => {
+          const source = grounding.sources[sourceIndex];
+          if (!source) return "";
+          const title = source.title
+            .replaceAll("\\", "\\\\")
+            .replaceAll('"', '\\"')
+            .replaceAll(/\s+/gu, " ");
+          return `[${sourceIndex + 1}](${source.uri} "${title}")`;
+        })
+        .join("");
+      citedText = `${citedText.slice(0, endIndex)} ${citations}${citedText.slice(endIndex)}`;
+    }
+  }
   return (
     <>
       <Markdown
@@ -109,9 +84,17 @@ export function AiMarkdown({
         ]}
         rehypePlugins={[[rehypeKatex, { errorColor: "currentColor" }]]}
         skipHtml
-        urlTransform={safeUrl}
+        urlTransform={(value) => {
+          if (value.startsWith("#")) return value;
+          try {
+            const url = new URL(value);
+            return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+          } catch {
+            return null;
+          }
+        }}
       >
-        {normalizeAiMarkdown(markdown)}
+        {citedText.replace(/^([ \t]{0,3})•(?=[ \t]|$)/gmu, "$1-")}
       </Markdown>
       {grounding?.searchSuggestionsHtml ? (
         <section

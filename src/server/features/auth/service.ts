@@ -86,14 +86,6 @@ async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password, ARGON2_OPTIONS);
 }
 
-function verifyLegacyPassword(password: string, stored: string): boolean {
-  const [algorithm, saltValue, digestValue] = stored.split("$");
-  if (algorithm !== "scrypt" || !saltValue || !digestValue) return false;
-  const expected = Buffer.from(digestValue, "base64url");
-  const actual = scryptSync(password, Buffer.from(saltValue, "base64url"), expected.length);
-  return timingSafeEqual(actual, expected);
-}
-
 async function verifyPassword(password: string, stored: string): Promise<boolean> {
   if (stored.startsWith("$argon2id$")) {
     try {
@@ -102,7 +94,11 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
       return false;
     }
   }
-  return verifyLegacyPassword(password, stored);
+  const [algorithm, saltValue, digestValue] = stored.split("$");
+  if (algorithm !== "scrypt" || !saltValue || !digestValue) return false;
+  const expected = Buffer.from(digestValue, "base64url");
+  const actual = scryptSync(password, Buffer.from(saltValue, "base64url"), expected.length);
+  return timingSafeEqual(actual, expected);
 }
 
 function tokenHash(token: string): string {

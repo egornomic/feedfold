@@ -2,45 +2,7 @@ import { ChevronDown } from "lucide-react";
 import type { Article } from "../../../../shared/types";
 import { Menu, MenuPopup } from "../../../ui/menu";
 import { FeedActionMenuItems, type FeedManagementAction } from "../../feeds/feed-management";
-import { articleDate, formatViewCount, mediaTypeLabel } from "./article-format";
-
-function ArticleSourceMenu({
-  article,
-  onFeedAction,
-}: {
-  article: Article;
-  onFeedAction: (feedId: number, action: FeedManagementAction) => void;
-}) {
-  const menuId = `article-${article.id}-source-menu`;
-  const feedId = article.feedId;
-  if (feedId === null) return <span>{article.feedTitle}</span>;
-
-  return (
-    <Menu.Root modal={false}>
-      <Menu.Trigger
-        data-management-feed-id={article.feedId}
-        className="article-source-trigger"
-        aria-label={`${article.feedTitle} feed actions`}
-      >
-        <span>{article.feedTitle}</span>
-        <ChevronDown aria-hidden="true" size={15} />
-      </Menu.Trigger>
-      <MenuPopup
-        positioner={{ align: "start" }}
-        id={menuId}
-        className="article-source-menu context-action-menu"
-        aria-label={`${article.feedTitle} feed actions`}
-      >
-        <FeedActionMenuItems
-          sourceKind={article.feedSourceKind}
-          onAction={(action) => {
-            onFeedAction(feedId, action);
-          }}
-        />
-      </MenuPopup>
-    </Menu.Root>
-  );
-}
+import { articleDate, mediaTypeLabel } from "./article-format";
 
 export function ArticleHeader({
   article,
@@ -51,10 +13,40 @@ export function ArticleHeader({
   id: string;
   onFeedAction: (feedId: number, action: FeedManagementAction) => void;
 }) {
+  const feedId = article.feedId;
+  const source =
+    feedId === null ? (
+      <span>{article.feedTitle}</span>
+    ) : (
+      <Menu.Root modal={false}>
+        <Menu.Trigger
+          data-management-feed-id={article.feedId}
+          className="article-source-trigger"
+          aria-label={`${article.feedTitle} feed actions`}
+        >
+          <span>{article.feedTitle}</span>
+          <ChevronDown aria-hidden="true" size={15} />
+        </Menu.Trigger>
+        <MenuPopup
+          positioner={{ align: "start" }}
+          id={`article-${article.id}-source-menu`}
+          className="article-source-menu context-action-menu"
+          aria-label={`${article.feedTitle} feed actions`}
+        >
+          <FeedActionMenuItems
+            sourceKind={article.feedSourceKind}
+            onAction={(action) => {
+              onFeedAction(feedId, action);
+            }}
+          />
+        </MenuPopup>
+      </Menu.Root>
+    );
+  const views = article.media?.viewCount;
   return (
     <header className="article-header" id={id}>
       <div className="article-source-row">
-        <ArticleSourceMenu article={article} onFeedAction={onFeedAction} />
+        {source}
         <span aria-hidden="true">·</span>
         <time dateTime={article.publishedAt ?? article.discoveredAt}>{articleDate(article)}</time>
         {article.media ? (
@@ -63,12 +55,15 @@ export function ArticleHeader({
             <span className={`article-media-badge ${article.media.type}`}>
               {mediaTypeLabel(article)}
             </span>
-            {article.media.viewCount !== null ? (
+            {views != null ? (
               <>
                 <span aria-hidden="true">·</span>
                 <span>
-                  {formatViewCount(article.media.viewCount)}{" "}
-                  {article.media.viewCount === 1 ? "view" : "views"}
+                  {new Intl.NumberFormat(undefined, {
+                    notation: "compact",
+                    maximumFractionDigits: 1,
+                  }).format(views)}{" "}
+                  {views === 1 ? "view" : "views"}
                 </span>
               </>
             ) : null}

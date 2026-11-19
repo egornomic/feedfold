@@ -1,5 +1,5 @@
 import { Check, LoaderCircle, Plus, X } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   BootstrapData,
   Rule,
@@ -79,86 +79,34 @@ export function RuleForm({
     [],
   );
 
-  const addCondition = () => {
-    const id = nextConditionId.current;
-    nextConditionId.current += 1;
-    setConditions((current) => [
-      ...current,
-      {
-        id,
-        field: current[current.length - 1]?.field ?? "title",
-        pattern: "",
-        animatePresence: true,
-      },
-    ]);
-    window.requestAnimationFrame(() => conditionInputRefs.current.get(id)?.focus());
-  };
-
-  const removeCondition = (id: number) => {
-    if (conditionRemovalTimers.current.has(id)) return;
-    const activeConditions = conditions.filter(
-      (condition) => !removingConditionIds.has(condition.id),
-    );
-    if (activeConditions.length <= 1) return;
-    const index = activeConditions.findIndex((condition) => condition.id === id);
-    const focusId = activeConditions[index - 1]?.id ?? activeConditions[index + 1]?.id;
-    const finishRemoval = () => {
-      conditionRemovalTimers.current.delete(id);
-      setConditions((current) => current.filter((condition) => condition.id !== id));
-      setRemovingConditionIds((current) => {
-        const next = new Set(current);
-        next.delete(id);
-        return next;
-      });
-      conditionInputRefs.current.delete(id);
-    };
-    const duration = motionExitDuration();
-    if (duration === 0) finishRemoval();
-    else {
-      setRemovingConditionIds((current) => new Set(current).add(id));
-      const row = conditionInputRefs.current.get(id)?.closest("li");
-      if (row) collapseWhileExiting(row, duration);
-      conditionRemovalTimers.current.set(id, window.setTimeout(finishRemoval, duration));
-    }
-    window.requestAnimationFrame(() => {
-      if (focusId === undefined) addConditionButtonRef.current?.focus();
-      else conditionInputRefs.current.get(focusId)?.focus();
-    });
-  };
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const [scopeType, rawId] = scope.split(":");
-    const input: RuleInput = {
-      name: name.trim(),
-      feedId: scopeType === "feed" ? Number(rawId) : null,
-      folderId: scopeType === "folder" ? Number(rawId) : null,
-      conditions: conditions
-        .filter((condition) => !removingConditionIds.has(condition.id))
-        .map(({ field, pattern }) => ({ field, pattern: pattern.trim() })),
-      conditionOperator,
-      action,
-      enabled,
-    };
-    setSaving(true);
-    try {
-      const rule = initial
-        ? await mutations.updateRule(initial.id, input)
-        : await mutations.createRule(input);
-      await onSaved(rule);
-    } catch (error) {
-      showToast(`Could not save the rule: ${errorMessage(error)}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <form
       className="inline-editor rule-form"
       data-motion-state={motionState}
       inert={motionState === "closed"}
-      onSubmit={(event) => void submit(event)}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const [scopeType, rawId] = scope.split(":");
+        const input: RuleInput = {
+          name: name.trim(),
+          feedId: scopeType === "feed" ? Number(rawId) : null,
+          folderId: scopeType === "folder" ? Number(rawId) : null,
+          conditions: conditions
+            .filter((condition) => !removingConditionIds.has(condition.id))
+            .map(({ field, pattern }) => ({ field, pattern: pattern.trim() })),
+          conditionOperator,
+          action,
+          enabled,
+        };
+        setSaving(true);
+        const save = initial
+          ? mutations.updateRule(initial.id, input)
+          : mutations.createRule(input);
+        void save
+          .then(onSaved)
+          .catch((error) => showToast(`Could not save the rule: ${errorMessage(error)}`))
+          .finally(() => setSaving(false));
+      }}
     >
       <div className="inline-editor-heading">
         <div>
@@ -326,7 +274,46 @@ export function RuleForm({
                       <button
                         className="icon-button rule-condition-remove"
                         type="button"
-                        onClick={() => removeCondition(condition.id)}
+                        onClick={() => {
+                          const conditionId = condition.id;
+                          if (conditionRemovalTimers.current.has(conditionId)) return;
+                          const activeConditions = conditions.filter(
+                            (condition) => !removingConditionIds.has(condition.id),
+                          );
+                          if (activeConditions.length <= 1) return;
+                          const index = activeConditions.findIndex(
+                            (condition) => condition.id === conditionId,
+                          );
+                          const focusId =
+                            activeConditions[index - 1]?.id ?? activeConditions[index + 1]?.id;
+                          const finishRemoval = () => {
+                            conditionRemovalTimers.current.delete(conditionId);
+                            setConditions((current) =>
+                              current.filter((condition) => condition.id !== conditionId),
+                            );
+                            setRemovingConditionIds((current) => {
+                              const next = new Set(current);
+                              next.delete(conditionId);
+                              return next;
+                            });
+                            conditionInputRefs.current.delete(conditionId);
+                          };
+                          const duration = motionExitDuration();
+                          if (duration === 0) finishRemoval();
+                          else {
+                            setRemovingConditionIds((current) => new Set(current).add(conditionId));
+                            const row = conditionInputRefs.current.get(conditionId)?.closest("li");
+                            if (row) collapseWhileExiting(row, duration);
+                            conditionRemovalTimers.current.set(
+                              conditionId,
+                              window.setTimeout(finishRemoval, duration),
+                            );
+                          }
+                          window.requestAnimationFrame(() => {
+                            if (focusId === undefined) addConditionButtonRef.current?.focus();
+                            else conditionInputRefs.current.get(focusId)?.focus();
+                          });
+                        }}
                         aria-label={`Remove condition ${index + 1}${
                           condition.pattern ? `: ${condition.pattern}` : ""
                         }`}
@@ -346,7 +333,20 @@ export function RuleForm({
               ref={addConditionButtonRef}
               className="quiet-button"
               type="button"
-              onClick={addCondition}
+              onClick={() => {
+                const id = nextConditionId.current;
+                nextConditionId.current += 1;
+                setConditions((current) => [
+                  ...current,
+                  {
+                    id,
+                    field: current[current.length - 1]?.field ?? "title",
+                    pattern: "",
+                    animatePresence: true,
+                  },
+                ]);
+                window.requestAnimationFrame(() => conditionInputRefs.current.get(id)?.focus());
+              }}
             >
               <Plus aria-hidden="true" size={15} />
               Add condition

@@ -13,14 +13,6 @@ const articleVirtualConsole = new VirtualConsole().forwardTo(console, {
   jsdomErrors: ["not-implemented", "resource-loading", "unhandled-exception"],
 });
 
-function containsText(html: string): boolean {
-  return sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} }).trim().length > 0;
-}
-
-function message(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).slice(0, 500);
-}
-
 async function cancelBody(response: Response): Promise<void> {
   if (!response.body) return;
   try {
@@ -28,20 +20,6 @@ async function cancelBody(response: Response): Promise<void> {
   } catch {
     // The extraction error remains factual even if the remote peer closes first.
   }
-}
-
-async function readHtmlResponse(response: Response): Promise<string> {
-  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType && contentType !== "text/html" && contentType !== "application/xhtml+xml") {
-    await cancelBody(response);
-    throw new Error(`The source returned ${contentType} instead of an HTML page.`);
-  }
-
-  return readResponseText(
-    response,
-    MAX_ARTICLE_BYTES,
-    "The source page is larger than the 5 MiB full-article limit.",
-  );
 }
 
 export type ExtractionOutcome = {
@@ -67,7 +45,20 @@ export async function extractArticle(
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) throw new Error(`The source page returned HTTP ${response.status}.`);
-      const html = await readHtmlResponse(response);
+      const contentType = response.headers
+        .get("content-type")
+        ?.split(";", 1)[0]
+        ?.trim()
+        .toLowerCase();
+      if (contentType && contentType !== "text/html" && contentType !== "application/xhtml+xml") {
+        await cancelBody(response);
+        throw new Error(`The source returned ${contentType} instead of an HTML page.`);
+      }
+      const html = await readResponseText(
+        response,
+        MAX_ARTICLE_BYTES,
+        "The source page is larger than the 5 MiB full-article limit.",
+      );
       const dom = new JSDOM(html, {
         url: response.url || record.url,
         virtualConsole: articleVirtualConsole,
@@ -79,7 +70,9 @@ export async function extractArticle(
         if (!result?.content)
           throw new Error("The source page did not contain readable article text.");
         const contentHtml = cleanArticleHtml(result.content, response.url || record.url);
-        if (!containsText(contentHtml))
+        if (
+          !(sanitizeHtml(contentHtml, { allowedTags: [], allowedAttributes: {} }).trim().length > 0)
+        )
           throw new Error("The extracted article did not contain text.");
         return {
           contentHtml,
@@ -97,7 +90,7 @@ export async function extractArticle(
         imageUrl: null,
         contentSource: null,
         status: "failed",
-        error: message(error),
+        error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
       };
     }
   }

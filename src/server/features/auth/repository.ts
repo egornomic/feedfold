@@ -246,24 +246,6 @@ export class AuthRepository {
     return !this.quotas.canRegisterAccount();
   }
 
-  private createDefaultSettings(userId: number, pollIntervalMinutes: number): void {
-    this.sqlite
-      .prepare(
-        `INSERT INTO settings (
-           user_id, poll_interval_minutes, single_key_shortcuts, mark_read_on_scroll,
-           show_youtube_descriptions, translation_language, summary_prompt,
-           translation_prompt, custom_prompts_json
-         ) VALUES (?, ?, 1, 1, 0, 'English', ?, ?, ?)`,
-      )
-      .run(
-        userId,
-        pollIntervalMinutes,
-        DEFAULT_ARTICLE_SUMMARY_PROMPT,
-        DEFAULT_ARTICLE_TRANSLATION_PROMPT,
-        JSON.stringify(DEFAULT_CUSTOM_PROMPTS),
-      );
-  }
-
   private createUser(
     username: string,
     passwordHash: string,
@@ -316,7 +298,21 @@ export class AuthRepository {
           at,
         );
       id = Number(result.lastInsertRowid);
-      this.createDefaultSettings(id, pollIntervalMinutes);
+      this.sqlite
+        .prepare(
+          `INSERT INTO settings (
+           user_id, poll_interval_minutes, single_key_shortcuts, mark_read_on_scroll,
+           show_youtube_descriptions, translation_language, summary_prompt,
+           translation_prompt, custom_prompts_json
+         ) VALUES (?, ?, 1, 1, 0, 'English', ?, ?, ?)`,
+        )
+        .run(
+          id,
+          pollIntervalMinutes,
+          DEFAULT_ARTICLE_SUMMARY_PROMPT,
+          DEFAULT_ARTICLE_TRANSLATION_PROMPT,
+          JSON.stringify(DEFAULT_CUSTOM_PROMPTS),
+        );
     }
     return {
       id,

@@ -48,25 +48,6 @@ import {
 import { ADD_FEED_SOURCE_OPTIONS } from "../feeds/feed-source-options";
 import { useDrawerSwipe } from "./drawer-swipe";
 
-function selectedFolderPath(
-  folders: FolderType[],
-  feeds: Feed[],
-  selectedFeedId: number | null,
-  selectedFolderId: number | null,
-): Set<number> {
-  const parentIds = new Map(folders.map((folder) => [folder.id, folder.parentId]));
-  let folderId =
-    selectedFolderId ?? feeds.find((feed) => feed.id === selectedFeedId)?.folderId ?? null;
-  const path = new Set<number>();
-
-  while (folderId !== null) {
-    path.add(folderId);
-    folderId = parentIds.get(folderId) ?? null;
-  }
-
-  return path;
-}
-
 function ArticleCount({ count }: { count: number }) {
   const exactCount = formatNumber(count);
 
@@ -145,7 +126,6 @@ function SidebarContent({
   const collapsed = useReaderPreferences((state) => state.desktopSidebarCollapsed);
   const onToggleCollapse = useReaderPreferences((state) => state.toggleDesktopSidebar);
   const setManagementRequest = useInterfaceState((state) => state.setManagementRequest);
-  const onAddFolder = () => setManagementRequest({ kind: "create-folder" });
   const onFeedAction = useInterfaceState((state) => state.openFeedManagement);
   const onFolderAction = useInterfaceState((state) => state.openFolderManagement);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
@@ -165,12 +145,16 @@ function SidebarContent({
   const { draggedFeed } = feedDrag;
   const hasFeedErrors = bootstrap.feeds.some((feed) => feed.lastError);
   const refreshing = bootstrap.feeds.some((feed) => feed.refreshing);
-  const selectedFolderPathIds = selectedFolderPath(
-    bootstrap.folders,
-    bootstrap.feeds,
-    selectedFeedId,
-    selectedFolderId,
-  );
+  const parentIds = new Map(bootstrap.folders.map((folder) => [folder.id, folder.parentId]));
+  let ancestorId =
+    selectedFolderId ??
+    bootstrap.feeds.find((feed) => feed.id === selectedFeedId)?.folderId ??
+    null;
+  const selectedFolderPathIds = new Set<number>();
+  while (ancestorId !== null) {
+    selectedFolderPathIds.add(ancestorId);
+    ancestorId = parentIds.get(ancestorId) ?? null;
+  }
 
   const closeContextMenu = useCallback(() => {
     contextMenu?.trigger.focus();
@@ -445,7 +429,7 @@ function SidebarContent({
             }}
             onAddFolder={() => {
               closeContextMenu();
-              onAddFolder();
+              setManagementRequest({ kind: "create-folder" });
             }}
             onFeedAction={(feed, action) => {
               closeContextMenu();

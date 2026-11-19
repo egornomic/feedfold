@@ -40,12 +40,6 @@ function readerRouteFromReturnPath(path: string | undefined, basePath: string): 
   return route.kind === "reader" ? route : null;
 }
 
-function routeView(route: AppRoute): AppView {
-  if (route.kind === "reader" || route.kind === "article") return "reader";
-  if (route.kind === "add-feed") return "feeds";
-  return route.kind;
-}
-
 export interface AppRouteController {
   route: AppRoute;
   readerRoute: ReaderRoute;
@@ -245,7 +239,7 @@ export function useAppRoute(basePath: string): AppRouteController {
   return {
     route,
     readerRoute,
-    view: routeView(route),
+    view: route.kind === "article" ? "reader" : route.kind === "add-feed" ? "feeds" : route.kind,
     pending,
     routedArticleId: route.kind === "article" ? route.articleId : null,
     searchInput,

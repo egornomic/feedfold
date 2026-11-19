@@ -10,40 +10,6 @@ import type { ArticleQuery, RuleCondition } from "../../src/shared/types.js";
 import { createTestApp } from "../helpers/app.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
 
-function readerData() {
-  const data = createDemoData(new Date("2026-10-14T12:00:00Z"));
-  data.rules = [];
-  data.folders = data.folders.slice(0, 3).map((folder, index) => ({
-    ...folder,
-    id: index + 1,
-    parentId: index === 1 ? 1 : null,
-    name: ["Parent", "Child", "Outside"][index] ?? "",
-  }));
-  data.feeds = data.feeds.slice(0, 3).map((feed, index) => ({
-    ...feed,
-    id: index + 1,
-    folderId: index + 1,
-    title: "FeedTitleOnlyZqx",
-  }));
-  data.articles = data.articles.slice(0, 4).map((article, index) => ({
-    ...article,
-    id: index + 1,
-    feedId: index < 2 ? 1 : index,
-    folderId: index < 2 ? 1 : index,
-    feedTitle: "FeedTitleOnlyZqx",
-    title: ["Alpha Rust École", "Alpha only", "Rust report", "Plain"][index] ?? "",
-    author: index % 2 === 0 ? "Avery" : "Someone",
-    summary: "Summaryneedle raw  spaces",
-    feedContentHtml: "<p>Bodyneedle <strong>visible</strong> 50%_done</p>",
-    contentHtml: null,
-    media: null,
-    isRead: false,
-    isSaved: false,
-    publishedAt: `2026-10-14T0${index}:00:00Z`,
-  }));
-  return data;
-}
-
 describe.each(["demo", "server"] as const)("%s reader business rules", (mode) => {
   let api: ReturnType<typeof createApiClient>;
   let close = async () => {};
@@ -55,7 +21,36 @@ describe.each(["demo", "server"] as const)("%s reader business rules", (mode) =>
   let alphaId: number;
 
   beforeEach(async () => {
-    const data = readerData();
+    const data = createDemoData(new Date("2026-10-14T12:00:00Z"));
+    data.rules = [];
+    data.folders = data.folders.slice(0, 3).map((folder, index) => ({
+      ...folder,
+      id: index + 1,
+      parentId: index === 1 ? 1 : null,
+      name: ["Parent", "Child", "Outside"][index] ?? "",
+    }));
+    data.feeds = data.feeds.slice(0, 3).map((feed, index) => ({
+      ...feed,
+      id: index + 1,
+      folderId: index + 1,
+      title: "FeedTitleOnlyZqx",
+    }));
+    data.articles = data.articles.slice(0, 4).map((article, index) => ({
+      ...article,
+      id: index + 1,
+      feedId: index < 2 ? 1 : index,
+      folderId: index < 2 ? 1 : index,
+      feedTitle: "FeedTitleOnlyZqx",
+      title: ["Alpha Rust École", "Alpha only", "Rust report", "Plain"][index] ?? "",
+      author: index % 2 === 0 ? "Avery" : "Someone",
+      summary: "Summaryneedle raw  spaces",
+      feedContentHtml: "<p>Bodyneedle <strong>visible</strong> 50%_done</p>",
+      contentHtml: null,
+      media: null,
+      isRead: false,
+      isSaved: false,
+      publishedAt: `2026-10-14T0${index}:00:00Z`,
+    }));
     let request: ApiRuntime["request"];
     if (mode === "demo") {
       const store = new DemoStore(undefined, data);

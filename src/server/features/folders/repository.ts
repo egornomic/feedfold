@@ -2,7 +2,7 @@ import type Sqlite from "better-sqlite3";
 import { validFolderParent } from "../../../shared/folder-tree.js";
 import type { Folder, FolderSortDirection } from "../../../shared/types.js";
 import { InvalidRequestError } from "../../errors.js";
-import { mapFolder, now, type Row, visibleClause } from "../shared.js";
+import { now, type Row, visibleClause } from "../shared.js";
 
 export class FolderRepository {
   constructor(private readonly sqlite: Sqlite.Database) {}
@@ -37,7 +37,16 @@ export class FolderRepository {
       )
       .all(userId, userId, userId) as Row[];
     return rows
-      .map(mapFolder)
+      .map(
+        (row): Folder => ({
+          id: Number(row.id),
+          parentId: row.parentId === null ? null : Number(row.parentId),
+          name: String(row.name),
+          position: Number(row.position),
+          sortDirection: row.sortDirection as FolderSortDirection,
+          unreadCount: Number(row.unreadCount),
+        }),
+      )
       .sort(
         (left, right) =>
           left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }) ||
@@ -70,13 +79,18 @@ export class FolderRepository {
       .prepare(
         `INSERT INTO folders (
            user_id, name, parent_id, position, sort_direction, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (
+           ?, ?, ?, COALESCE(?, (
+             SELECT COALESCE(MAX(position), -1) + 1 FROM folders WHERE user_id = ?
+           )), ?, ?, ?
+         )`,
       )
       .run(
         userId,
         input.name,
         input.parentId ?? null,
-        input.position ?? this.nextFolderPosition(userId),
+        input.position ?? null,
+        userId,
         input.sortDirection ?? "newest",
         timestamp,
         timestamp,
@@ -126,13 +140,6 @@ export class FolderRepository {
       this.sqlite.prepare("DELETE FROM folders WHERE id = ? AND user_id = ?").run(id, userId)
         .changes > 0
     );
-  }
-
-  private nextFolderPosition(userId: number): number {
-    const row = this.sqlite
-      .prepare("SELECT COALESCE(MAX(position), -1) + 1 AS position FROM folders WHERE user_id = ?")
-      .get(userId) as { position: number };
-    return row.position;
   }
 
   listOpmlFolders(userId: number): Array<{ id: number; name: string; parentId: number | null }> {

@@ -40,7 +40,7 @@ export async function refreshRoutes(
     });
     let closed = false;
     const sessionActive = () => authService.userForToken(token)?.id === accountId;
-    const sendChange = (sourceReaderId?: string) => {
+    const unsubscribe = refreshService.subscribe(accountId, (sourceReaderId?: string) => {
       // The reader that made a change has already applied it.
       if (sourceReaderId !== undefined && sourceReaderId === reader) return;
       if (!sessionActive()) {
@@ -48,8 +48,7 @@ export async function refreshRoutes(
         return;
       }
       writeEvent(stream, "data: changed\n\n");
-    };
-    const unsubscribe = refreshService.subscribe(accountId, sendChange);
+    });
     const heartbeat = setInterval(() => {
       if (!sessionActive()) {
         close();

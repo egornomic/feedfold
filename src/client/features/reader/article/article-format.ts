@@ -1,6 +1,7 @@
 import type { Article } from "../../../../shared/types.js";
 
-function formatRelativeDate(value: string | null): string {
+export function articleDate(article: Article): string {
+  const value = article.publishedAt ?? article.discoveredAt;
   if (!value) return "No date";
   const date = new Date(value);
   const seconds = Math.round((date.getTime() - Date.now()) / 1000);
@@ -19,18 +20,8 @@ function formatRelativeDate(value: string | null): string {
   return "Just now";
 }
 
-export function articleDate(article: Article): string {
-  return formatRelativeDate(article.publishedAt ?? article.discoveredAt);
-}
-
 export function articleLabel(article: Article): string {
   return article.title.trim() || article.summary.trim() || "Untitled article";
-}
-
-export function formatViewCount(value: number): string {
-  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(
-    value,
-  );
 }
 
 export function mediaTypeLabel(article: Article): string | null {

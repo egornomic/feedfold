@@ -66,7 +66,6 @@ export function ReaderToolbar({
   const navOpen = useInterfaceState((state) => state.navOpen);
   const onToggleNav = useInterfaceState((state) => state.toggleNav);
   const setShortcutHelpOpen = useInterfaceState((state) => state.setShortcutHelpOpen);
-  const onHelp = () => setShortcutHelpOpen(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
@@ -255,7 +254,7 @@ export function ReaderToolbar({
           />
           <IconButton
             label="Open keyboard shortcut reference (?)"
-            onClick={onHelp}
+            onClick={() => setShortcutHelpOpen(true)}
             className="help-action"
             tooltip
           >

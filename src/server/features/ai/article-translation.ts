@@ -60,25 +60,18 @@ function linkifiedParagraph(text: string): string {
   return parts.join("");
 }
 
-function plainTextHtml(value: string): string {
-  return value
-    .split(/\n{2,}/u)
-    .filter((paragraph) => paragraph.trim())
-    .map((paragraph) => `<p>${linkifiedParagraph(paragraph)}</p>`)
-    .join("");
-}
-
 function selectedSourceHtml(
   article: AiArticleRecord,
   sourceKind: AiArticleSourceKind,
 ): string | null {
   if (sourceKind === "full") return article.contentHtml;
   if (sourceKind === "feed") return article.feedContentHtml;
-  return plainTextHtml(article.excerpt);
-}
-
-function isUntranslatedElement(element: Element): boolean {
-  return UNTRANSLATED_ELEMENTS.has(element.tagName);
+  const value = article.excerpt;
+  return value
+    .split(/\n{2,}/u)
+    .filter((paragraph) => paragraph.trim())
+    .map((paragraph) => `<p>${linkifiedParagraph(paragraph)}</p>`)
+    .join("");
 }
 
 function translationSegments(root: ParentNode): TranslationSegment[] {
@@ -101,29 +94,13 @@ function translationSegments(root: ParentNode): TranslationSegment[] {
       });
       return;
     }
-    if (node.nodeType === node.ELEMENT_NODE && isUntranslatedElement(node as Element)) return;
+    if (node.nodeType === node.ELEMENT_NODE && UNTRANSLATED_ELEMENTS.has((node as Element).tagName))
+      return;
     for (const child of node.childNodes) visit(child);
   };
 
   for (const child of root.childNodes) visit(child);
   return segments;
-}
-
-function promptHtml(sourceHtml: string): { html: string; segmentCount: number } {
-  const fragment = JSDOM.fragment(sourceHtml);
-  const segments = translationSegments(fragment);
-  for (const [id, segment] of segments.entries()) {
-    const marker = fragment.ownerDocument.createElement("span");
-    marker.setAttribute("data-translation-id", String(id));
-    marker.textContent = segment.text;
-    segment.node.replaceWith(segment.prefix, marker, segment.suffix);
-  }
-  for (const element of fragment.querySelectorAll("*")) {
-    for (const attribute of [...element.attributes]) {
-      if (attribute.name !== "data-translation-id") element.removeAttribute(attribute.name);
-    }
-  }
-  return { html: fragmentHtml(fragment), segmentCount: segments.length };
 }
 
 function invalidTranslationResponse(): AiError {
@@ -132,27 +109,6 @@ function invalidTranslationResponse(): AiError {
     502,
     "The AI provider returned an incomplete translation. Try the translation again.",
   );
-}
-
-function translatedSegments(value: string, count: number): string[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw invalidTranslationResponse();
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw invalidTranslationResponse();
-  }
-  const record = parsed as Record<string, unknown>;
-  if (Object.keys(record).length !== count) throw invalidTranslationResponse();
-  return Array.from({ length: count }, (_, id) => {
-    const translated = record[String(id)];
-    if (typeof translated !== "string" || !translated.trim()) {
-      throw invalidTranslationResponse();
-    }
-    return translated;
-  });
 }
 
 export function prepareArticleTranslation(
@@ -168,7 +124,20 @@ export function prepareArticleTranslation(
       "This article view has no text to translate. Choose another view or open the source.",
     );
   }
-  const prompt = promptHtml(sourceHtml);
+  const fragment = JSDOM.fragment(sourceHtml);
+  const segments = translationSegments(fragment);
+  for (const [id, segment] of segments.entries()) {
+    const marker = fragment.ownerDocument.createElement("span");
+    marker.setAttribute("data-translation-id", String(id));
+    marker.textContent = segment.text;
+    segment.node.replaceWith(segment.prefix, marker, segment.suffix);
+  }
+  for (const element of fragment.querySelectorAll("*")) {
+    for (const attribute of [...element.attributes]) {
+      if (attribute.name !== "data-translation-id") element.removeAttribute(attribute.name);
+    }
+  }
+  const prompt = { html: fragmentHtml(fragment), segmentCount: segments.length };
   if (prompt.segmentCount === 0) {
     throw new AiError(
       "ARTICLE_HAS_NO_TEXT",
@@ -188,7 +157,25 @@ export function renderArticleTranslation(
   prepared: PreparedArticleTranslation,
   generatedText: string,
 ): string {
-  const translated = translatedSegments(generatedText, prepared.segmentCount);
+  const count = prepared.segmentCount;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(generatedText);
+  } catch {
+    throw invalidTranslationResponse();
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw invalidTranslationResponse();
+  }
+  const record = parsed as Record<string, unknown>;
+  if (Object.keys(record).length !== count) throw invalidTranslationResponse();
+  const translated = Array.from({ length: count }, (_, id) => {
+    const translated = record[String(id)];
+    if (typeof translated !== "string" || !translated.trim()) {
+      throw invalidTranslationResponse();
+    }
+    return translated;
+  });
   const fragment = JSDOM.fragment(prepared.sourceHtml);
   const segments = translationSegments(fragment);
   if (segments.length !== prepared.segmentCount) throw invalidTranslationResponse();

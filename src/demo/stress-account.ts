@@ -1,4 +1,4 @@
-import type { ApiOutput, PasskeySummary } from "../shared/api/operations.js";
+import type { ApiOutput } from "../shared/api/operations.js";
 import type { InvitationSummary } from "../shared/types.js";
 import type { DataMode } from "./worst-case.js";
 
@@ -11,35 +11,6 @@ interface StressAccount {
 
 function daysFrom(now: Date, days: number): string {
   return new Date(now.getTime() + days * 86_400_000).toISOString();
-}
-
-function passkey(index: number, now: Date): PasskeySummary {
-  // Renamed passkeys accept 80 characters; these are display records, with no key material.
-  const names = [
-    "MacBook Pro — Aleksandra Wiśniewska-Kowalczyk — research, travel and backup access for field work".slice(
-      0,
-      80,
-    ),
-    "Jo",
-    "Đặng Thị Ngọc Hân — workstation",
-    "王秀英 — 同步通行密钥",
-    "نور الهدى عبد الرحمن — مفتاح الأمان",
-    "👩🏽‍💻 Priya — office laptop",
-    "iPhone — travel",
-    "iPad — home",
-    "Desktop — studio",
-    "Security key — primary",
-    "Security key — spare",
-    "Previous laptop — retained backup",
-  ];
-  return {
-    id: `break-ui-passkey-${index + 1}`,
-    name: names[index] ?? `Security key ${index + 1}`,
-    createdAt: daysFrom(now, -index * 45),
-    lastUsedAt: index === 1 ? null : daysFrom(now, -index * 3),
-    deviceType: index % 2 === 0 ? "multiDevice" : "singleDevice",
-    backedUp: index % 2 === 0,
-  };
 }
 
 function invitation(index: number, now: Date): InvitationSummary {
@@ -90,7 +61,34 @@ export function createStressAccount(mode: DataMode, now = new Date()): StressAcc
       passkeysAvailable: true,
     },
     passkeys: {
-      passkeys: Array.from({ length: passkeyCount }, (_, index) => passkey(index, now)),
+      passkeys: Array.from({ length: passkeyCount }, (_, index) => {
+        // Renamed passkeys accept 80 characters; these are display records, with no key material.
+        const names = [
+          "MacBook Pro — Aleksandra Wiśniewska-Kowalczyk — research, travel and backup access for field work".slice(
+            0,
+            80,
+          ),
+          "Jo",
+          "Đặng Thị Ngọc Hân — workstation",
+          "王秀英 — 同步通行密钥",
+          "نور الهدى عبد الرحمن — مفتاح الأمان",
+          "👩🏽‍💻 Priya — office laptop",
+          "iPhone — travel",
+          "iPad — home",
+          "Desktop — studio",
+          "Security key — primary",
+          "Security key — spare",
+          "Previous laptop — retained backup",
+        ];
+        return {
+          id: `break-ui-passkey-${index + 1}`,
+          name: names[index] ?? `Security key ${index + 1}`,
+          createdAt: daysFrom(now, -index * 45),
+          lastUsedAt: index === 1 ? null : daysFrom(now, -index * 3),
+          deviceType: index % 2 === 0 ? "multiDevice" : "singleDevice",
+          backedUp: index % 2 === 0,
+        };
+      }),
       hasPassword: true,
     },
     invitations: {

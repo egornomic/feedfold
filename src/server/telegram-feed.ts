@@ -25,10 +25,6 @@ export function telegramChannelUrls(value: string): TelegramChannelUrls | null {
   };
 }
 
-function text(value: string | null | undefined): string {
-  return value?.replace(/\s+/g, " ").trim() ?? "";
-}
-
 function date(value: string | null): string | null {
   if (!value) return null;
   const timestamp = Date.parse(value);
@@ -124,64 +120,58 @@ export function removeTelegramFeedImages(html: string): string {
   return container.innerHTML.trim();
 }
 
-function article(
-  message: Element,
-  channel: string,
-  channelTitle: string,
-  channelUrl: string,
-): ParsedArticle | null {
-  const externalId = message.getAttribute("data-post");
-  if (!externalId) return null;
-  const [postChannel, postId, ...rest] = externalId.split("/");
-  if (
-    rest.length > 0 ||
-    postChannel?.toLowerCase() !== channel.toLowerCase() ||
-    !postId ||
-    !POST_ID.test(postId)
-  ) {
-    return null;
-  }
-
-  const postUrl = `${channelUrl}/${postId}`;
-  const messageText = message.querySelector<HTMLElement>(".js-message_text");
-  const summary = plainText(messageText?.innerHTML ?? null);
-  const media = messageMedia(message, channelUrl);
-  const imageUrl = media[0]?.posterUrl ?? media[0]?.url ?? null;
-  const content = message.ownerDocument.createElement("div");
-  if (messageText) content.innerHTML = messageText.innerHTML.trim();
-  if (!content.innerHTML.trim()) {
-    const link = message.ownerDocument.createElement("a");
-    link.href = postUrl;
-    link.textContent = "View this post on Telegram";
-    content.append(link);
-  }
-
-  return {
-    externalId,
-    title: "",
-    url: postUrl,
-    author: channelTitle,
-    publishedAt: date(message.querySelector("time[datetime]")?.getAttribute("datetime") ?? null),
-    summary,
-    imageUrl,
-    feedContentHtml: content.innerHTML,
-  };
-}
-
 export function parseAndNormalizeTelegramFeed(source: string, channelUrl: string): ParsedFeed {
   const urls = telegramChannelUrls(channelUrl);
   if (!urls) throw new Error("Invalid Telegram channel URL");
   const channel = new URL(urls.channelUrl).pathname.slice(1);
   const dom = new JSDOM(source, { url: urls.previewUrl });
   try {
-    const title = text(
-      dom.window.document.querySelector(".tgme_channel_info_header_title")?.textContent,
-    );
+    const value = dom.window.document.querySelector(".tgme_channel_info_header_title")?.textContent;
+    const title = value?.replace(/\s+/g, " ").trim() ?? "";
     if (!title) throw new Error("Telegram channel preview was not found");
     const articles = Array.from(
       dom.window.document.querySelectorAll(".js-widget_message[data-post]"),
     )
-      .map((message) => article(message, channel, title, urls.channelUrl))
+      .map((message): ParsedArticle | null => {
+        const externalId = message.getAttribute("data-post");
+        if (!externalId) return null;
+        const [postChannel, postId, ...rest] = externalId.split("/");
+        if (
+          rest.length > 0 ||
+          postChannel?.toLowerCase() !== channel.toLowerCase() ||
+          !postId ||
+          !POST_ID.test(postId)
+        ) {
+          return null;
+        }
+
+        const postUrl = `${urls.channelUrl}/${postId}`;
+        const messageText = message.querySelector<HTMLElement>(".js-message_text");
+        const summary = plainText(messageText?.innerHTML ?? null);
+        const media = messageMedia(message, urls.channelUrl);
+        const imageUrl = media[0]?.posterUrl ?? media[0]?.url ?? null;
+        const content = message.ownerDocument.createElement("div");
+        if (messageText) content.innerHTML = messageText.innerHTML.trim();
+        if (!content.innerHTML.trim()) {
+          const link = message.ownerDocument.createElement("a");
+          link.href = postUrl;
+          link.textContent = "View this post on Telegram";
+          content.append(link);
+        }
+
+        return {
+          externalId,
+          title: "",
+          url: postUrl,
+          author: title,
+          publishedAt: date(
+            message.querySelector("time[datetime]")?.getAttribute("datetime") ?? null,
+          ),
+          summary,
+          imageUrl,
+          feedContentHtml: content.innerHTML,
+        };
+      })
       .filter((item): item is ParsedArticle => item !== null)
       .reverse();
     return { title, siteUrl: urls.channelUrl, articles };

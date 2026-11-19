@@ -265,294 +265,301 @@ function geminiGrounding(value: unknown, text: string): AiGrounding | null {
   return { sources, supports, searchSuggestionsHtml };
 }
 
-function geminiAdapter(baseUrl: string): AiProviderAdapter {
-  const label = "Google Gemini";
-  return {
-    id: "gemini",
-    label,
-    defaultModel: "gemini-3.6-flash",
-    models: [{ id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" }],
-    async generateText(request): Promise<AiGenerationResult> {
-      const requestParts: Array<Record<string, unknown>> = [];
-      if (request.videoUrl) {
-        requestParts.push({
-          fileData: { fileUri: request.videoUrl, mimeType: "video/*" },
-        });
-      }
-      requestParts.push({ text: request.input });
-      const response = await postJson(
-        label,
-        endpoint(baseUrl, `/models/${encodeURIComponent(request.model)}:generateContent`),
-        { "x-goog-api-key": request.apiKey },
-        {
-          store: false,
-          systemInstruction: { parts: [{ text: request.system }] },
-          contents: [{ role: "user", parts: requestParts }],
-          generationConfig: {
-            // Gemini counts reasoning against the output budget, too.
-            maxOutputTokens: Math.max(request.maxOutputTokens, 8_192),
-            thinkingConfig: { thinkingLevel: "low" },
-          },
-          ...(request.webSearch ? { tools: [{ google_search: {} }] } : {}),
-        },
-        request.signal,
-      );
-      const promptFeedback = response.promptFeedback as Record<string, unknown> | undefined;
-      if (typeof promptFeedback?.blockReason === "string") {
-        throw new AiError("AI_RESPONSE_REFUSED", 422, `${label} could not process this article.`);
-      }
-      const candidates = Array.isArray(response.candidates) ? response.candidates : [];
-      const first = candidates[0] as Record<string, unknown> | undefined;
-      const finishReason = first?.finishReason;
-      const refused =
-        typeof finishReason === "string" &&
-        ["SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "IMAGE_SAFETY"].includes(finishReason);
-      if (refused) {
-        throw new AiError("AI_RESPONSE_REFUSED", 422, `${label} could not process this article.`);
-      }
-      if (finishReason !== "STOP") {
-        throw new AiError(
-          "AI_PROVIDER_FAILED",
-          502,
-          `${label} did not finish processing this article. Try again.`,
-        );
-      }
-      const content = first?.content as Record<string, unknown> | undefined;
-      const parts = Array.isArray(content?.parts) ? content.parts : [];
-      const values = parts.flatMap((part) => {
-        if (!part || typeof part !== "object") return [];
-        const text = (part as Record<string, unknown>).text;
-        return typeof text === "string" ? [text] : [];
-      });
-      const text = requireText(label, values);
-      const usage = response.usageMetadata as Record<string, unknown> | undefined;
-      return {
-        text,
-        usage: usage
-          ? {
-              inputTokens: tokenCount(usage.promptTokenCount),
-              outputTokens: tokenCount(usage.candidatesTokenCount),
-            }
-          : EMPTY_USAGE,
-        grounding: request.webSearch ? geminiGrounding(first?.groundingMetadata, text) : null,
-      };
-    },
-  };
-}
-
-function openAiAdapter(baseUrl: string): AiProviderAdapter {
-  const label = "OpenAI";
-  return {
-    id: "openai",
-    label,
-    defaultModel: "gpt-5.6-luna",
-    models: [{ id: "gpt-5.6-luna", label: "GPT-5.6 Luna" }],
-    async generateText(request): Promise<AiGenerationResult> {
-      const response = await postJson(
-        label,
-        endpoint(baseUrl, "/responses"),
-        { Authorization: `Bearer ${request.apiKey}` },
-        {
-          model: request.model,
-          instructions: request.system,
-          input: request.input,
-          max_output_tokens: request.maxOutputTokens,
-          reasoning: { effort: request.webSearch ? "low" : "none" },
-          text: { verbosity: "low" },
-          store: false,
-          ...(request.webSearch
-            ? {
-                tools: [{ type: "web_search", search_context_size: "medium" }],
-                tool_choice: "required",
-                max_tool_calls: 5,
-              }
-            : {}),
-        },
-        request.signal,
-      );
-      if (response.status !== "completed") {
-        const details = response.incomplete_details as Record<string, unknown> | undefined;
-        if (details?.reason === "content_filter") {
-          throw new AiError("AI_RESPONSE_REFUSED", 422, `${label} could not process this article.`);
+export function createAiProviders(
+  endpoints: AiProviderEndpoints = {},
+): ReadonlyMap<AiProvider, AiProviderAdapter> {
+  const geminiLabel = "Google Gemini";
+  const geminiUrl = endpoints.gemini ?? "https://generativelanguage.googleapis.com/v1beta";
+  const openAiLabel = "OpenAI";
+  const openAiUrl = endpoints.openai ?? "https://api.openai.com/v1";
+  const anthropicLabel = "Anthropic";
+  const anthropicUrl = endpoints.anthropic ?? "https://api.anthropic.com/v1";
+  const providers: AiProviderAdapter[] = [
+    {
+      id: "gemini",
+      label: geminiLabel,
+      defaultModel: "gemini-3.6-flash",
+      models: [{ id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" }],
+      async generateText(request): Promise<AiGenerationResult> {
+        const requestParts: Array<Record<string, unknown>> = [];
+        if (request.videoUrl) {
+          requestParts.push({
+            fileData: { fileUri: request.videoUrl, mimeType: "video/*" },
+          });
         }
-        throw new AiError(
-          "AI_PROVIDER_FAILED",
-          502,
-          `${label} did not finish processing this article. Try again.`,
-        );
-      }
-      const output = Array.isArray(response.output) ? response.output : [];
-      let refused = false;
-      const values: string[] = [];
-      let textLength = 0;
-      const sources: AiGrounding["sources"] = [];
-      const sourceIndices = new Map<string, number>();
-      const supports: AiGrounding["supports"] = [];
-      for (const item of output) {
-        if (!item || typeof item !== "object") continue;
-        const content = (item as Record<string, unknown>).content;
-        if (!Array.isArray(content)) continue;
-        for (const part of content) {
-          if (!part || typeof part !== "object") continue;
-          const block = part as Record<string, unknown>;
-          if (block.type === "refusal") refused = true;
-          if (block.type === "output_text" && typeof block.text === "string") {
-            values.push(block.text);
-            const annotations = Array.isArray(block.annotations) ? block.annotations : [];
-            for (const annotationValue of annotations) {
-              const annotation = record(annotationValue);
-              if (annotation?.type !== "url_citation") continue;
-              const sourceIndex = addGroundingSource(
-                sources,
-                sourceIndices,
-                annotation.url,
-                annotation.title,
-              );
-              if (
-                sourceIndex === null ||
-                typeof annotation.start_index !== "number" ||
-                typeof annotation.end_index !== "number" ||
-                !Number.isInteger(annotation.start_index) ||
-                !Number.isInteger(annotation.end_index) ||
-                annotation.start_index < 0 ||
-                annotation.end_index <= annotation.start_index ||
-                annotation.end_index > block.text.length
-              ) {
-                continue;
-              }
-              supports.push({
-                startIndex: textLength + annotation.start_index,
-                endIndex: textLength + annotation.end_index,
-                sourceIndices: [sourceIndex],
-              });
-            }
-            textLength += block.text.length;
-          }
-        }
-      }
-      const usage = response.usage as Record<string, unknown> | undefined;
-      return {
-        text: requireText(label, values, refused),
-        usage: usage
-          ? {
-              inputTokens: tokenCount(usage.input_tokens),
-              outputTokens: tokenCount(usage.output_tokens),
-            }
-          : EMPTY_USAGE,
-        grounding: request.webSearch ? citationGrounding(sources, supports) : null,
-      };
-    },
-  };
-}
-
-function anthropicAdapter(baseUrl: string): AiProviderAdapter {
-  const label = "Anthropic";
-  return {
-    id: "anthropic",
-    label,
-    defaultModel: "claude-haiku-4-5",
-    models: [{ id: "claude-haiku-4-5", label: "Claude Haiku 4.5" }],
-    async generateText(request): Promise<AiGenerationResult> {
-      const messages: Array<{ role: "user" | "assistant"; content: unknown }> = [
-        { role: "user", content: request.input },
-      ];
-      const responses: Array<Record<string, unknown>> = [];
-      let response: Record<string, unknown>;
-      do {
-        response = await postJson(
-          label,
-          endpoint(baseUrl, "/messages"),
+        requestParts.push({ text: request.input });
+        const response = await postJson(
+          geminiLabel,
+          endpoint(geminiUrl, `/models/${encodeURIComponent(request.model)}:generateContent`),
+          { "x-goog-api-key": request.apiKey },
           {
-            "x-api-key": request.apiKey,
-            "anthropic-version": "2023-06-01",
+            store: false,
+            systemInstruction: { parts: [{ text: request.system }] },
+            contents: [{ role: "user", parts: requestParts }],
+            generationConfig: {
+              // Gemini counts reasoning against the output budget, too.
+              maxOutputTokens: Math.max(request.maxOutputTokens, 8_192),
+              thinkingConfig: { thinkingLevel: "low" },
+            },
+            ...(request.webSearch ? { tools: [{ google_search: {} }] } : {}),
           },
+          request.signal,
+        );
+        const promptFeedback = response.promptFeedback as Record<string, unknown> | undefined;
+        if (typeof promptFeedback?.blockReason === "string") {
+          throw new AiError(
+            "AI_RESPONSE_REFUSED",
+            422,
+            `${geminiLabel} could not process this article.`,
+          );
+        }
+        const candidates = Array.isArray(response.candidates) ? response.candidates : [];
+        const first = candidates[0] as Record<string, unknown> | undefined;
+        const finishReason = first?.finishReason;
+        const refused =
+          typeof finishReason === "string" &&
+          ["SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "IMAGE_SAFETY"].includes(finishReason);
+        if (refused) {
+          throw new AiError(
+            "AI_RESPONSE_REFUSED",
+            422,
+            `${geminiLabel} could not process this article.`,
+          );
+        }
+        if (finishReason !== "STOP") {
+          throw new AiError(
+            "AI_PROVIDER_FAILED",
+            502,
+            `${geminiLabel} did not finish processing this article. Try again.`,
+          );
+        }
+        const content = first?.content as Record<string, unknown> | undefined;
+        const parts = Array.isArray(content?.parts) ? content.parts : [];
+        const values = parts.flatMap((part) => {
+          if (!part || typeof part !== "object") return [];
+          const text = (part as Record<string, unknown>).text;
+          return typeof text === "string" ? [text] : [];
+        });
+        const text = requireText(geminiLabel, values);
+        const usage = response.usageMetadata as Record<string, unknown> | undefined;
+        return {
+          text,
+          usage: usage
+            ? {
+                inputTokens: tokenCount(usage.promptTokenCount),
+                outputTokens: tokenCount(usage.candidatesTokenCount),
+              }
+            : EMPTY_USAGE,
+          grounding: request.webSearch ? geminiGrounding(first?.groundingMetadata, text) : null,
+        };
+      },
+    },
+    {
+      id: "openai",
+      label: openAiLabel,
+      defaultModel: "gpt-5.6-luna",
+      models: [{ id: "gpt-5.6-luna", label: "GPT-5.6 Luna" }],
+      async generateText(request): Promise<AiGenerationResult> {
+        const response = await postJson(
+          openAiLabel,
+          endpoint(openAiUrl, "/responses"),
+          { Authorization: `Bearer ${request.apiKey}` },
           {
             model: request.model,
-            max_tokens: request.maxOutputTokens,
-            system: request.system,
-            messages,
+            instructions: request.system,
+            input: request.input,
+            max_output_tokens: request.maxOutputTokens,
+            reasoning: { effort: request.webSearch ? "low" : "none" },
+            text: { verbosity: "low" },
+            store: false,
             ...(request.webSearch
               ? {
-                  tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
+                  tools: [{ type: "web_search", search_context_size: "medium" }],
+                  tool_choice: "required",
+                  max_tool_calls: 5,
                 }
               : {}),
           },
           request.signal,
         );
-        responses.push(response);
-        if (response.stop_reason === "pause_turn") {
-          const pausedContent = Array.isArray(response.content) ? response.content : [];
-          messages.push({ role: "assistant", content: pausedContent });
-        }
-      } while (response.stop_reason === "pause_turn");
-      if (response.stop_reason === "refusal") {
-        throw new AiError("AI_RESPONSE_REFUSED", 422, `${label} could not process this article.`);
-      }
-      if (response.stop_reason !== "end_turn") {
-        throw new AiError(
-          "AI_PROVIDER_FAILED",
-          502,
-          `${label} did not finish processing this article. Try again.`,
-        );
-      }
-      const content = Array.isArray(response.content) ? response.content : [];
-      const values: string[] = [];
-      let textLength = 0;
-      const sources: AiGrounding["sources"] = [];
-      const sourceIndices = new Map<string, number>();
-      const supports: AiGrounding["supports"] = [];
-      for (const part of content) {
-        const block = record(part);
-        if (block?.type !== "text" || typeof block.text !== "string") continue;
-        values.push(block.text);
-        const citedSources = new Set<number>();
-        const citations = Array.isArray(block.citations) ? block.citations : [];
-        for (const citationValue of citations) {
-          const citation = record(citationValue);
-          if (citation?.type !== "web_search_result_location") continue;
-          const sourceIndex = addGroundingSource(
-            sources,
-            sourceIndices,
-            citation.url,
-            citation.title,
+        if (response.status !== "completed") {
+          const details = response.incomplete_details as Record<string, unknown> | undefined;
+          if (details?.reason === "content_filter") {
+            throw new AiError(
+              "AI_RESPONSE_REFUSED",
+              422,
+              `${openAiLabel} could not process this article.`,
+            );
+          }
+          throw new AiError(
+            "AI_PROVIDER_FAILED",
+            502,
+            `${openAiLabel} did not finish processing this article. Try again.`,
           );
-          if (sourceIndex !== null) citedSources.add(sourceIndex);
         }
-        if (block.text.length > 0 && citedSources.size > 0) {
-          supports.push({
-            startIndex: textLength,
-            endIndex: textLength + block.text.length,
-            sourceIndices: [...citedSources],
-          });
+        const output = Array.isArray(response.output) ? response.output : [];
+        let refused = false;
+        const values: string[] = [];
+        let textLength = 0;
+        const sources: AiGrounding["sources"] = [];
+        const sourceIndices = new Map<string, number>();
+        const supports: AiGrounding["supports"] = [];
+        for (const item of output) {
+          if (!item || typeof item !== "object") continue;
+          const content = (item as Record<string, unknown>).content;
+          if (!Array.isArray(content)) continue;
+          for (const part of content) {
+            if (!part || typeof part !== "object") continue;
+            const block = part as Record<string, unknown>;
+            if (block.type === "refusal") refused = true;
+            if (block.type === "output_text" && typeof block.text === "string") {
+              values.push(block.text);
+              const annotations = Array.isArray(block.annotations) ? block.annotations : [];
+              for (const annotationValue of annotations) {
+                const annotation = record(annotationValue);
+                if (annotation?.type !== "url_citation") continue;
+                const sourceIndex = addGroundingSource(
+                  sources,
+                  sourceIndices,
+                  annotation.url,
+                  annotation.title,
+                );
+                if (
+                  sourceIndex === null ||
+                  typeof annotation.start_index !== "number" ||
+                  typeof annotation.end_index !== "number" ||
+                  !Number.isInteger(annotation.start_index) ||
+                  !Number.isInteger(annotation.end_index) ||
+                  annotation.start_index < 0 ||
+                  annotation.end_index <= annotation.start_index ||
+                  annotation.end_index > block.text.length
+                ) {
+                  continue;
+                }
+                supports.push({
+                  startIndex: textLength + annotation.start_index,
+                  endIndex: textLength + annotation.end_index,
+                  sourceIndices: [sourceIndex],
+                });
+              }
+              textLength += block.text.length;
+            }
+          }
         }
-        textLength += block.text.length;
-      }
-      const usageValues = responses.map((item) => record(item.usage));
-      const totalTokens = (key: string): number | null => {
-        const values = usageValues.map((usage) => tokenCount(usage?.[key]));
-        return values.every((value) => value === null)
-          ? null
-          : values.reduce<number>((total, value) => total + (value ?? 0), 0);
-      };
-      return {
-        text: requireText(label, values),
-        usage: {
-          inputTokens: totalTokens("input_tokens"),
-          outputTokens: totalTokens("output_tokens"),
-        },
-        grounding: request.webSearch ? citationGrounding(sources, supports) : null,
-      };
+        const usage = response.usage as Record<string, unknown> | undefined;
+        return {
+          text: requireText(openAiLabel, values, refused),
+          usage: usage
+            ? {
+                inputTokens: tokenCount(usage.input_tokens),
+                outputTokens: tokenCount(usage.output_tokens),
+              }
+            : EMPTY_USAGE,
+          grounding: request.webSearch ? citationGrounding(sources, supports) : null,
+        };
+      },
     },
-  };
-}
-
-export function createAiProviders(
-  endpoints: AiProviderEndpoints = {},
-): ReadonlyMap<AiProvider, AiProviderAdapter> {
-  const providers: AiProviderAdapter[] = [
-    geminiAdapter(endpoints.gemini ?? "https://generativelanguage.googleapis.com/v1beta"),
-    openAiAdapter(endpoints.openai ?? "https://api.openai.com/v1"),
-    anthropicAdapter(endpoints.anthropic ?? "https://api.anthropic.com/v1"),
+    {
+      id: "anthropic",
+      label: anthropicLabel,
+      defaultModel: "claude-haiku-4-5",
+      models: [{ id: "claude-haiku-4-5", label: "Claude Haiku 4.5" }],
+      async generateText(request): Promise<AiGenerationResult> {
+        const messages: Array<{ role: "user" | "assistant"; content: unknown }> = [
+          { role: "user", content: request.input },
+        ];
+        const responses: Array<Record<string, unknown>> = [];
+        let response: Record<string, unknown>;
+        do {
+          response = await postJson(
+            anthropicLabel,
+            endpoint(anthropicUrl, "/messages"),
+            {
+              "x-api-key": request.apiKey,
+              "anthropic-version": "2023-06-01",
+            },
+            {
+              model: request.model,
+              max_tokens: request.maxOutputTokens,
+              system: request.system,
+              messages,
+              ...(request.webSearch
+                ? {
+                    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
+                  }
+                : {}),
+            },
+            request.signal,
+          );
+          responses.push(response);
+          if (response.stop_reason === "pause_turn") {
+            const pausedContent = Array.isArray(response.content) ? response.content : [];
+            messages.push({ role: "assistant", content: pausedContent });
+          }
+        } while (response.stop_reason === "pause_turn");
+        if (response.stop_reason === "refusal") {
+          throw new AiError(
+            "AI_RESPONSE_REFUSED",
+            422,
+            `${anthropicLabel} could not process this article.`,
+          );
+        }
+        if (response.stop_reason !== "end_turn") {
+          throw new AiError(
+            "AI_PROVIDER_FAILED",
+            502,
+            `${anthropicLabel} did not finish processing this article. Try again.`,
+          );
+        }
+        const content = Array.isArray(response.content) ? response.content : [];
+        const values: string[] = [];
+        let textLength = 0;
+        const sources: AiGrounding["sources"] = [];
+        const sourceIndices = new Map<string, number>();
+        const supports: AiGrounding["supports"] = [];
+        for (const part of content) {
+          const block = record(part);
+          if (block?.type !== "text" || typeof block.text !== "string") continue;
+          values.push(block.text);
+          const citedSources = new Set<number>();
+          const citations = Array.isArray(block.citations) ? block.citations : [];
+          for (const citationValue of citations) {
+            const citation = record(citationValue);
+            if (citation?.type !== "web_search_result_location") continue;
+            const sourceIndex = addGroundingSource(
+              sources,
+              sourceIndices,
+              citation.url,
+              citation.title,
+            );
+            if (sourceIndex !== null) citedSources.add(sourceIndex);
+          }
+          if (block.text.length > 0 && citedSources.size > 0) {
+            supports.push({
+              startIndex: textLength,
+              endIndex: textLength + block.text.length,
+              sourceIndices: [...citedSources],
+            });
+          }
+          textLength += block.text.length;
+        }
+        const usageValues = responses.map((item) => record(item.usage));
+        const totalTokens = (key: string): number | null => {
+          const values = usageValues.map((usage) => tokenCount(usage?.[key]));
+          return values.every((value) => value === null)
+            ? null
+            : values.reduce<number>((total, value) => total + (value ?? 0), 0);
+        };
+        return {
+          text: requireText(anthropicLabel, values),
+          usage: {
+            inputTokens: totalTokens("input_tokens"),
+            outputTokens: totalTokens("output_tokens"),
+          },
+          grounding: request.webSearch ? citationGrounding(sources, supports) : null,
+        };
+      },
+    },
   ];
   return new Map(providers.map((provider) => [provider.id, provider]));
 }

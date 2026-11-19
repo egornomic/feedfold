@@ -21,25 +21,6 @@ interface AppShortcuts {
   changeReadingMode: (mode: ReadingMode) => void;
 }
 
-function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable ||
-    target.tagName === "INPUT" ||
-    target.tagName === "TEXTAREA" ||
-    target.tagName === "SELECT"
-  );
-}
-
-function usesSpaceForActivation(target: EventTarget | null): boolean {
-  return (
-    target instanceof Element &&
-    target.closest(
-      'button, a[href], summary, [role="button"], [role="checkbox"], [role="menuitem"], [role="option"], [role="radio"], [role="switch"], [role="tab"]',
-    ) !== null
-  );
-}
-
 export function useAppShortcuts({
   bootstrap,
   route,
@@ -69,7 +50,13 @@ export function useAppShortcuts({
         return;
       }
       if (shortcutHelpOpen) return;
-      if (isEditable(event.target) || !bootstrap?.settings.singleKeyShortcuts) return;
+      if (!bootstrap?.settings.singleKeyShortcuts) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      )
+        return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       const key = event.key.toLowerCase();
@@ -102,7 +89,13 @@ export function useAppShortcuts({
         return;
       }
       if (key === " ") {
-        if (usesSpaceForActivation(event.target)) return;
+        if (
+          target instanceof Element &&
+          target.closest(
+            'button, a[href], summary, [role="button"], [role="checkbox"], [role="menuitem"], [role="option"], [role="radio"], [role="switch"], [role="tab"]',
+          )
+        )
+          return;
         if (scrollArticlePage(event.shiftKey ? -1 : 1)) event.preventDefault();
         return;
       }

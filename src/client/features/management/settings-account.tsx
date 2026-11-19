@@ -83,16 +83,6 @@ export function AccountSettingsSection({
     }
   };
 
-  const startRenamingPasskey = (id: string, name: string) => {
-    setEditingPasskeyId(id);
-    setPasskeyName(name);
-    setError(null);
-    window.requestAnimationFrame(() => {
-      passkeyNameRef.current?.focus();
-      passkeyNameRef.current?.select();
-    });
-  };
-
   const cancelRenamingPasskey = () => {
     if (renamingPasskey) return;
     setEditingPasskeyId(null);
@@ -292,7 +282,15 @@ export function AccountSettingsSection({
                       type="button"
                       aria-label={`Rename ${passkey.name}`}
                       disabled={busy}
-                      onClick={() => startRenamingPasskey(passkey.id, passkey.name)}
+                      onClick={() => {
+                        setEditingPasskeyId(passkey.id);
+                        setPasskeyName(passkey.name);
+                        setError(null);
+                        window.requestAnimationFrame(() => {
+                          passkeyNameRef.current?.focus();
+                          passkeyNameRef.current?.select();
+                        });
+                      }}
                     >
                       <Pencil aria-hidden="true" size={15} />
                     </button>

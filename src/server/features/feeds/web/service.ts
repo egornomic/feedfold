@@ -39,10 +39,6 @@ interface StoredSnapshot {
   expiresAt: number;
 }
 
-function finitePositive(value: number | undefined, fallback: number): number {
-  return value !== undefined && Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
 export class WebFeedService {
   readonly #loader: WebFeedBrowserLoader;
   readonly #snapshotTtlMs: number;
@@ -52,7 +48,11 @@ export class WebFeedService {
 
   constructor(options: WebFeedServiceOptions = {}) {
     this.#loader = new WebFeedBrowserLoader(options);
-    this.#snapshotTtlMs = finitePositive(options.snapshotTtlMs, DEFAULT_SNAPSHOT_TTL_MS);
+    const { snapshotTtlMs } = options;
+    this.#snapshotTtlMs =
+      snapshotTtlMs !== undefined && Number.isFinite(snapshotTtlMs) && snapshotTtlMs > 0
+        ? snapshotTtlMs
+        : DEFAULT_SNAPSHOT_TTL_MS;
     this.#now = options.now ?? Date.now;
     this.#quotas = options.quotas;
   }

@@ -40,11 +40,6 @@ export const bootstrapQuery = () =>
     queryKey: readerKeys.bootstrap,
     queryFn: ({ signal }) => api.bootstrap(signal),
   });
-export const rulesQuery = () =>
-  queryOptions({
-    queryKey: readerKeys.rules,
-    queryFn: ({ signal }) => api.rules(signal),
-  });
 export const articleQuery = (id: number) =>
   queryOptions({
     queryKey: readerKeys.article(id),

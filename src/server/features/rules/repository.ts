@@ -7,7 +7,7 @@ import type {
   RuleConditionOperator,
 } from "../../../shared/types.js";
 import { InvalidRequestError } from "../../errors.js";
-import { mapRule, now, parseArticleMedia, type Row } from "../shared.js";
+import { now, parseArticleMedia, type Row, toBoolean } from "../shared.js";
 
 export class RuleRepository {
   constructor(private readonly sqlite: Sqlite.Database) {}
@@ -22,7 +22,21 @@ export class RuleRepository {
          FROM rules WHERE user_id = ? ORDER BY created_at DESC, id DESC`,
       )
       .all(userId) as Row[];
-    return rows.map(mapRule);
+    return rows.map(
+      (row): Rule => ({
+        id: Number(row.id),
+        name: String(row.name),
+        feedId: row.feedId === null ? null : Number(row.feedId),
+        folderId: row.folderId === null ? null : Number(row.folderId),
+        conditions: JSON.parse(String(row.conditionsJson)) as RuleCondition[],
+        conditionOperator: row.conditionOperator as RuleConditionOperator,
+        action: row.action as RuleAction,
+        enabled: toBoolean(row.enabled),
+        matchedCount: Number(row.matchedCount),
+        createdAt: String(row.createdAt),
+        updatedAt: String(row.updatedAt),
+      }),
+    );
   }
 
   getRule(userId: number, id: number): Rule | null {
@@ -168,10 +182,6 @@ export class RuleRepository {
     this.recomputeRules(articleIds);
   }
 
-  recomputeRulesForAccountArticles(userId: number, articleIds: Iterable<number>): void {
-    this.recomputeRules(articleIds, { userId });
-  }
-
   recomputeRulesForFeedArticles(
     userId: number,
     feedId: number,
@@ -190,9 +200,9 @@ export class RuleRepository {
          WHERE feeds.user_id = ?`,
       )
       .all(userId) as Array<{ id: number }>;
-    this.recomputeRulesForAccountArticles(
-      userId,
-      articles.map((article) => article.id),
+    this.recomputeRules(
+      articles.map(({ id }) => id),
+      { userId },
     );
   }
 

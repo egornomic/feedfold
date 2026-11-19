@@ -64,10 +64,21 @@ async function savedReader(path = ":memory:", policy = DESKTOP_POLICY) {
       (await request(`/api/articles/${article.id}/state`, "PATCH", { isSaved: true })).status,
     ).toBe(200);
   }
-  const saved = async () =>
-    ((await (await request("/api/articles?state=saved&includeContent=true")).json()) as ArticlePage)
-      .articles;
-  return { database, reader, stranger, feed, articles, request, saved, parsed };
+  return {
+    database,
+    reader,
+    stranger,
+    feed,
+    articles,
+    request,
+    saved: async () =>
+      (
+        (await (
+          await request("/api/articles?state=saved&includeContent=true")
+        ).json()) as ArticlePage
+      ).articles,
+    parsed,
+  };
 }
 
 describe("account-owned Saved", () => {

@@ -5,13 +5,9 @@ import { thumbnailWidth } from "../shared/thumbnail.js";
 
 const blockedBadgeHosts = new Set(["img.shields.io", "api.star-history.com"]);
 
-function hasBadgePathToken(pathname: string): boolean {
-  return pathname.split("/").some((segment) => /(?:^|[-_.])badge(?:$|[-_.])/i.test(segment));
-}
-
 function isDirectBadgeUrl(url: URL): boolean {
   if (blockedBadgeHosts.has(url.hostname)) return true;
-  return hasBadgePathToken(url.pathname);
+  return url.pathname.split("/").some((segment) => /(?:^|[-_.])badge(?:$|[-_.])/i.test(segment));
 }
 
 function isBlockedBadgeUrl(url: URL): boolean {

@@ -106,15 +106,17 @@ export function AiSettingsSection({
     translationPrompt.trim() === DEFAULT_ARTICLE_TRANSLATION_PROMPT;
   const busy = pendingAction !== null;
 
-  const updateFeature = async (nextProvider: AiProvider, nextModel: string) => {
+  const saveModel = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!modelId.trim()) return;
     setPendingAction("feature");
     setError(null);
     try {
       onAiSettings(
         await mutateRequest(() =>
           api.updateAiFeature("article_summary", {
-            provider: nextProvider,
-            model: nextModel.trim(),
+            provider: providerId,
+            model: modelId.trim(),
           }),
         ),
       );
@@ -124,25 +126,6 @@ export function AiSettingsSection({
     } finally {
       setPendingAction(null);
     }
-  };
-
-  const selectProvider = (nextProviderId: AiProvider) => {
-    const nextProvider = aiSettings.providers.find((option) => option.id === nextProviderId);
-    if (!nextProvider) return;
-    setProviderId(nextProviderId);
-    setModelId(
-      activeFeature?.provider === nextProviderId ? activeFeature.model : nextProvider.defaultModel,
-    );
-    setApiKey("");
-    setShowKey(false);
-    setError(null);
-    window.requestAnimationFrame(() => modelInputRef.current?.focus());
-  };
-
-  const saveModel = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!modelId.trim()) return;
-    await updateFeature(providerId, modelId);
   };
 
   const saveKey = async (event: FormEvent) => {
@@ -200,13 +183,6 @@ export function AiSettingsSection({
     } finally {
       setPendingAction(null);
     }
-  };
-
-  const openPromptDialog = () => {
-    setSummaryPrompt(settings.summaryPrompt);
-    setTranslationPrompt(settings.translationPrompt);
-    setPromptError(null);
-    promptDialog.open();
   };
 
   const closePromptDialog = () => {
@@ -343,7 +319,23 @@ export function AiSettingsSection({
               value: option.id,
               label: `${option.label}${option.configured ? " (key saved)" : ""}`,
             }))}
-            onChange={(value) => selectProvider(value as AiProvider)}
+            onChange={(value) => {
+              const nextProviderId = value as AiProvider;
+              const nextProvider = aiSettings.providers.find(
+                (option) => option.id === nextProviderId,
+              );
+              if (!nextProvider) return;
+              setProviderId(nextProviderId);
+              setModelId(
+                activeFeature?.provider === nextProviderId
+                  ? activeFeature.model
+                  : nextProvider.defaultModel,
+              );
+              setApiKey("");
+              setShowKey(false);
+              setError(null);
+              window.requestAnimationFrame(() => modelInputRef.current?.focus());
+            }}
           />
         </div>
       </div>
@@ -474,7 +466,12 @@ export function AiSettingsSection({
           className="secondary-button"
           type="button"
           disabled={busy}
-          onClick={openPromptDialog}
+          onClick={() => {
+            setSummaryPrompt(settings.summaryPrompt);
+            setTranslationPrompt(settings.translationPrompt);
+            setPromptError(null);
+            promptDialog.open();
+          }}
         >
           <Edit3 aria-hidden="true" size={15} />
           Edit defaults

@@ -34,25 +34,6 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
     }
   };
 
-  const createInvitation = () =>
-    refreshAfterMutation(async () => {
-      setCreatedInvitation(await api.createInvitation());
-      showToast("Invite created");
-    });
-
-  const replaceInvitation = (id: string) =>
-    refreshAfterMutation(async () => {
-      setCreatedInvitation(await api.createInvitation(id));
-      showToast("Invite replaced");
-    });
-
-  const revokeInvitation = (id: string) =>
-    refreshAfterMutation(async () => {
-      await api.revokeInvitation(id);
-      if (createdInvitation?.id === id) setCreatedInvitation(null);
-      showToast("Invite revoked");
-    });
-
   const copyCreatedInvitation = async (value: string, confirmation: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -95,7 +76,12 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
               type="button"
               className="secondary-button"
               disabled={busy}
-              onClick={() => void createInvitation()}
+              onClick={() =>
+                void refreshAfterMutation(async () => {
+                  setCreatedInvitation(await api.createInvitation());
+                  showToast("Invite created");
+                })
+              }
             >
               Create invite
             </button>
@@ -164,7 +150,12 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
                         className="secondary-button"
                         disabled={busy}
                         aria-label={`Replace invite ${invitation.number}`}
-                        onClick={() => void replaceInvitation(invitation.id)}
+                        onClick={() =>
+                          void refreshAfterMutation(async () => {
+                            setCreatedInvitation(await api.createInvitation(invitation.id));
+                            showToast("Invite replaced");
+                          })
+                        }
                       >
                         Replace
                       </button>
@@ -173,7 +164,13 @@ export function InvitationsSection({ showToast }: { showToast: (message: string)
                         className="secondary-button"
                         disabled={busy}
                         aria-label={`Revoke invite ${invitation.number}`}
-                        onClick={() => void revokeInvitation(invitation.id)}
+                        onClick={() =>
+                          void refreshAfterMutation(async () => {
+                            await api.revokeInvitation(invitation.id);
+                            if (createdInvitation?.id === invitation.id) setCreatedInvitation(null);
+                            showToast("Invite revoked");
+                          })
+                        }
                       >
                         Revoke
                       </button>

@@ -7,11 +7,6 @@ interface YouTubeEmbedRequest {
   webContentsId?: number;
 }
 
-function headerName(headers: Record<string, string>, name: string): string | undefined {
-  const normalizedName = name.toLowerCase();
-  return Object.keys(headers).find((candidate) => candidate.toLowerCase() === normalizedName);
-}
-
 export function youtubeEmbedRequestHeaders(
   request: YouTubeEmbedRequest,
   rendererId: number,
@@ -31,7 +26,11 @@ export function youtubeEmbedRequestHeaders(
   }
   if (!url.pathname.startsWith("/embed/")) return request.requestHeaders;
 
-  const refererHeader = headerName(request.requestHeaders, "referer");
+  const headers = request.requestHeaders;
+  const normalizedName = "referer".toLowerCase();
+  const refererHeader = Object.keys(headers).find(
+    (candidate) => candidate.toLowerCase() === normalizedName,
+  );
   const referer = refererHeader ? request.requestHeaders[refererHeader] : null;
   if (referer && !referer.startsWith("feedfold://")) return request.requestHeaders;
 

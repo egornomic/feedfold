@@ -17,19 +17,6 @@ function storedValue<T extends string>(storage: Storage, key: string, fallback: 
   return (value as T | null) ?? fallback;
 }
 
-function storedNumber(storage: Storage, key: string, fallback: number): number {
-  const stored = storage.getItem(key);
-  if (stored === null) return fallback;
-  const value = Number(stored);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-function storedBoolean(storage: Storage, key: string, fallback: boolean): boolean {
-  const stored = storage.getItem(key);
-  if (stored === null) return fallback;
-  return stored === "true";
-}
-
 function accountStorageKey(userId: string, setting: string): string {
   return `feedfold-account-${userId}-${setting}`;
 }
@@ -48,13 +35,8 @@ export function clearReaderPreferences(userId: string): void {
   }
 }
 
-function resolveTheme(theme: Theme, prefersLight: boolean): ResolvedTheme {
-  if (theme !== "auto") return theme;
-  return prefersLight ? "light" : "dark";
-}
-
 export function resolveAppearance(theme: Theme, palettes: ColorPalettes, prefersLight: boolean) {
-  const mode = resolveTheme(theme, prefersLight);
+  const mode = theme === "auto" ? (prefersLight ? "light" : "dark") : theme;
   return { mode, palette: palettes[mode] };
 }
 
@@ -100,6 +82,8 @@ interface ReaderPreferencesState {
 }
 
 function storedPreferences(userId: string, storage: Storage) {
+  const storedFontSize = storage.getItem(accountStorageKey(userId, "article-font-size"));
+  const fontSize = storedFontSize === null ? ARTICLE_FONT_DEFAULT : Number(storedFontSize);
   return {
     readingMode: storedValue<ReadingMode>(
       storage,
@@ -121,16 +105,10 @@ function storedPreferences(userId: string, storage: Storage) {
     },
     articleFontSize: Math.min(
       ARTICLE_FONT_MAX,
-      Math.max(
-        ARTICLE_FONT_MIN,
-        storedNumber(storage, accountStorageKey(userId, "article-font-size"), ARTICLE_FONT_DEFAULT),
-      ),
+      Math.max(ARTICLE_FONT_MIN, Number.isFinite(fontSize) ? fontSize : ARTICLE_FONT_DEFAULT),
     ),
-    desktopSidebarCollapsed: storedBoolean(
-      storage,
-      accountStorageKey(userId, "desktop-sidebar-collapsed"),
-      false,
-    ),
+    desktopSidebarCollapsed:
+      storage.getItem(accountStorageKey(userId, "desktop-sidebar-collapsed")) === "true",
   };
 }
 

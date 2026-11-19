@@ -327,16 +327,6 @@ export function AddFeedForm({
     window.requestAnimationFrame(() => addressInputRef.current?.focus());
   };
 
-  const selectSourceType = (nextSourceType: AddFeedSourceType) => {
-    if (nextSourceType !== sourceType) editAddress(nextSourceType);
-  };
-
-  const chooseAnotherSource = () => {
-    setStage({ kind: "source" });
-    setError(null);
-    window.requestAnimationFrame(() => sourceHeadingRef.current?.focus());
-  };
-
   const discover = useCallback(
     async (url: string, requestedSourceType: AddFeedSourceType) => {
       if (previewFocusFrame.current !== null) {
@@ -394,11 +384,6 @@ export function AddFeedForm({
     }
   };
 
-  const selectCandidate = (candidateId: string | null) =>
-    setStage((current) =>
-      current.kind === "web-review" ? { ...current, selectedCandidateId: candidateId } : current,
-    );
-
   const save = async (event: FormEvent) => {
     event.preventDefault();
     const input =
@@ -452,7 +437,10 @@ export function AddFeedForm({
                   data-source-type={option.value}
                   key={option.value}
                   type="button"
-                  onClick={() => selectSourceType(option.value)}
+                  onClick={() => {
+                    const nextSourceType = option.value;
+                    if (nextSourceType !== sourceType) editAddress(nextSourceType);
+                  }}
                 >
                   <span className="add-feed-source-mark" aria-hidden="true">
                     <OptionIcon size={19} />
@@ -588,7 +576,13 @@ export function AddFeedForm({
             selectedCandidateId={stage.selectedCandidateId}
             disabled={saving}
             busyLabel="Adding web feed…"
-            onSelect={selectCandidate}
+            onSelect={(candidateId: string | null) =>
+              setStage((current) =>
+                current.kind === "web-review"
+                  ? { ...current, selectedCandidateId: candidateId }
+                  : current,
+              )
+            }
             onBack={() => editAddress(stage.sourceType)}
             confirmation={
               selectedCandidate ? (
@@ -670,7 +664,15 @@ export function AddFeedForm({
               <strong>{sourceOption.label}</strong>
               <small>{sourceOption.detail}</small>
             </span>
-            <button className="quiet-button" type="button" onClick={chooseAnotherSource}>
+            <button
+              className="quiet-button"
+              type="button"
+              onClick={() => {
+                setStage({ kind: "source" });
+                setError(null);
+                window.requestAnimationFrame(() => sourceHeadingRef.current?.focus());
+              }}
+            >
               Change
             </button>
           </div>

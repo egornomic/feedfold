@@ -171,52 +171,6 @@ export function LoginDialog({
     }
   };
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    void attempt("password", async () =>
-      authenticated(
-        mode === "login"
-          ? await mutateRequest(() => api.login(username, password))
-          : await mutateRequest(() => api.register(username, password, inviteCode)),
-        mode === "register",
-      ),
-    );
-  };
-
-  const switchMode = () => {
-    updateForm({ mode: mode === "login" ? "register" : "login", error: null });
-    setPassword("");
-  };
-
-  const signInWithPasskey = () =>
-    attempt(
-      "passkey",
-      async () => {
-        const { ceremonyId, options } = await mutateRequest(() =>
-          api.passkeyAuthenticationOptions(),
-        );
-        const response = await startAuthentication({ optionsJSON: options });
-        authenticated(await mutateRequest(() => api.passkeyLogin(ceremonyId, response)));
-      },
-      "Passkey sign-in was cancelled or timed out.",
-    );
-
-  const createAccountWithPasskey = () =>
-    attempt(
-      "passkey",
-      async () => {
-        const { registrationId, options } = await mutateRequest(() =>
-          api.passkeySignupOptions(username, inviteCode),
-        );
-        const response = await startRegistration({ optionsJSON: options });
-        authenticated(
-          await mutateRequest(() => api.completePasskeySignup(registrationId, response)),
-          true,
-        );
-      },
-      "Passkey creation was cancelled or timed out.",
-    );
-
   const registering = mode === "register";
   const actionLabel = registering ? "Create account" : "Sign in";
   const progressLabel = registering ? "Creating account" : "Signing in";
@@ -258,7 +212,20 @@ export function LoginDialog({
                   : "Sign in to open your reading queue."}
               </p>
             </div>
-            <form className="login-form" onSubmit={submit}>
+            <form
+              className="login-form"
+              onSubmit={(event: FormEvent) => {
+                event.preventDefault();
+                void attempt("password", async () =>
+                  authenticated(
+                    mode === "login"
+                      ? await mutateRequest(() => api.login(username, password))
+                      : await mutateRequest(() => api.register(username, password, inviteCode)),
+                    mode === "register",
+                  ),
+                );
+              }}
+            >
               {registering && registrationMode === "invite" ? (
                 <label className="login-field" htmlFor="auth-invite">
                   <span>Invite code</span>
@@ -283,7 +250,21 @@ export function LoginDialog({
                   className="primary-button login-button"
                   type="button"
                   disabled={submitting || usingPasskey}
-                  onClick={() => void signInWithPasskey()}
+                  onClick={() =>
+                    void attempt(
+                      "passkey",
+                      async () => {
+                        const { ceremonyId, options } = await mutateRequest(() =>
+                          api.passkeyAuthenticationOptions(),
+                        );
+                        const response = await startAuthentication({ optionsJSON: options });
+                        authenticated(
+                          await mutateRequest(() => api.passkeyLogin(ceremonyId, response)),
+                        );
+                      },
+                      "Passkey sign-in was cancelled or timed out.",
+                    )
+                  }
                 >
                   {usingPasskey ? (
                     <LoaderCircle className="spin" aria-hidden="true" size={16} />
@@ -327,7 +308,24 @@ export function LoginDialog({
                     username.trim().length < USERNAME_MIN_LENGTH ||
                     (registrationMode === "invite" && inviteCode.length !== INVITE_CODE_LENGTH)
                   }
-                  onClick={() => void createAccountWithPasskey()}
+                  onClick={() =>
+                    void attempt(
+                      "passkey",
+                      async () => {
+                        const { registrationId, options } = await mutateRequest(() =>
+                          api.passkeySignupOptions(username, inviteCode),
+                        );
+                        const response = await startRegistration({ optionsJSON: options });
+                        authenticated(
+                          await mutateRequest(() =>
+                            api.completePasskeySignup(registrationId, response),
+                          ),
+                          true,
+                        );
+                      },
+                      "Passkey creation was cancelled or timed out.",
+                    )
+                  }
                 >
                   {usingPasskey ? (
                     <LoaderCircle className="spin" aria-hidden="true" size={16} />
@@ -386,7 +384,14 @@ export function LoginDialog({
             {registering || registrationAvailable ? (
               <div className="auth-switch">
                 <span>{registering ? "Already have an account?" : "Need an account?"}</span>
-                <button type="button" onClick={switchMode} disabled={submitting || usingPasskey}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateForm({ mode: mode === "login" ? "register" : "login", error: null });
+                    setPassword("");
+                  }}
+                  disabled={submitting || usingPasskey}
+                >
                   {registering
                     ? "Sign in"
                     : registrationMode === "invite"

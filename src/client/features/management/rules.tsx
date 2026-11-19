@@ -238,30 +238,6 @@ function RuleRow({
     .map((condition) => `${RULE_FIELD_LABELS[condition.field]} contains “${condition.pattern}”`)
     .join(conditionJoin);
 
-  const toggle = async () => {
-    setBusy(true);
-    try {
-      await mutations.updateRule(rule.id, { enabled: !rule.enabled });
-      showToast(rule.enabled ? `Disabled ${rule.name}` : `Enabled ${rule.name}`);
-    } catch (error) {
-      showToast(`Could not update ${rule.name}: ${errorMessage(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const remove = async () => {
-    if (!window.confirm(`Delete rule “${rule.name}”? This cannot be undone.`)) return;
-    setBusy(true);
-    try {
-      await mutations.deleteRule(rule.id);
-      showToast(`Deleted ${rule.name}`);
-    } catch (error) {
-      showToast(`Could not delete ${rule.name}: ${errorMessage(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <tr className={rule.enabled ? "" : "is-disabled"}>
       <td data-label="Rule">
@@ -273,7 +249,18 @@ function RuleRow({
             aria-label={`Enable ${rule.name}`}
             aria-checked={rule.enabled}
             disabled={busy}
-            onClick={() => void toggle()}
+            onClick={() => {
+              setBusy(true);
+              void mutations
+                .updateRule(rule.id, { enabled: !rule.enabled })
+                .then(() =>
+                  showToast(rule.enabled ? `Disabled ${rule.name}` : `Enabled ${rule.name}`),
+                )
+                .catch((error) =>
+                  showToast(`Could not update ${rule.name}: ${errorMessage(error)}`),
+                )
+                .finally(() => setBusy(false));
+            }}
           >
             <span />
           </button>
@@ -320,7 +307,15 @@ function RuleRow({
           className="danger-action"
           type="button"
           disabled={busy}
-          onClick={() => void remove()}
+          onClick={() => {
+            if (!window.confirm(`Delete rule “${rule.name}”? This cannot be undone.`)) return;
+            setBusy(true);
+            void mutations
+              .deleteRule(rule.id)
+              .then(() => showToast(`Deleted ${rule.name}`))
+              .catch((error) => showToast(`Could not delete ${rule.name}: ${errorMessage(error)}`))
+              .finally(() => setBusy(false));
+          }}
           aria-label={`Delete ${rule.name}`}
         >
           <Trash2 aria-hidden="true" size={15} />

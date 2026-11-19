@@ -3,10 +3,12 @@ import { useState } from "react";
 import type { Article } from "../../../../shared/types";
 import { shouldShowArticleDescription } from "../article/article-content";
 import { articleDate, articleLabel, mediaTypeLabel } from "../article/article-format";
-import { articleThumbnailUrl, warmThumbnails } from "../article/article-image-url";
+import { articleThumbnailUrl } from "../article/article-image-url";
 import { ArticleThumbnailPlaceholder } from "../article/article-thumbnail-placeholder";
 import { LinkifiedText } from "../article/linkified-text";
 import { VirtualArticles } from "./virtual-articles";
+
+const warmedThumbnails = new Set<string>();
 
 function ArticleListThumbnail({ imageUrl }: { imageUrl: string | null }) {
   const [failed, setFailed] = useState(false);
@@ -70,11 +72,16 @@ export function ArticleList({
       hasMore={hasMore}
       loadingMore={loadingMore}
       onLoadMore={onLoadMore}
-      onRangeChanged={({ endIndex }) =>
-        warmThumbnails(
-          articles.slice(endIndex + 1, endIndex + 21).map((article) => article.imageUrl),
-        )
-      }
+      onRangeChanged={({ endIndex }) => {
+        // Start downloading thumbnails just beyond the visible rows.
+        for (const { imageUrl } of articles.slice(endIndex + 1, endIndex + 21)) {
+          if (!imageUrl) continue;
+          const url = articleThumbnailUrl(imageUrl);
+          if (warmedThumbnails.has(url)) continue;
+          warmedThumbnails.add(url);
+          new Image().src = url;
+        }
+      }}
     >
       {(article) => (
         <div

@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { InjectOptions } from "fastify";
 import { chromium } from "playwright";
@@ -26,18 +26,6 @@ afterEach(async () => {
 });
 
 type FixtureMode = "initial" | "updated" | "http_error" | "changed";
-
-async function listen(server: Server): Promise<string> {
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  cleanups.push(
-    () =>
-      new Promise<void>((resolve) => {
-        server.closeAllConnections();
-        server.close(() => resolve());
-      }),
-  );
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-}
 
 function updateCard(
   slug: string,
@@ -90,31 +78,6 @@ function fixtureItems(mode: Exclude<FixtureMode, "http_error">): string {
   </section>`;
 }
 
-function fixturePage(mode: Exclude<FixtureMode, "http_error">): string {
-  return `<!doctype html>
-    <html>
-      <head><title>JavaScript updates</title></head>
-      <body>
-        <main><h1>Updates</h1><div id="app"></div></main>
-        <script>
-          setTimeout(() => {
-            document.querySelector("#app").innerHTML = ${JSON.stringify(fixtureItems(mode))};
-          }, 80);
-        </script>
-      </body>
-    </html>`;
-}
-
-function cookieFrom(response: {
-  headers: { "set-cookie"?: string | string[] | number | undefined };
-}): string {
-  const header = response.headers["set-cookie"];
-  const setCookie = typeof header === "number" ? undefined : header;
-  const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";", 1)[0];
-  if (!cookie) throw new Error("Registration did not return a session cookie");
-  return cookie;
-}
-
 describe("authenticated web-feed API", () => {
   it("creates, refreshes, diagnoses, and repairs a JavaScript-rendered web feed", async () => {
     let mode: FixtureMode = "initial";
@@ -139,9 +102,28 @@ describe("authenticated web-feed API", () => {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
       });
-      response.end(fixturePage(mode));
+      response.end(`<!doctype html>
+    <html>
+      <head><title>JavaScript updates</title></head>
+      <body>
+        <main><h1>Updates</h1><div id="app"></div></main>
+        <script>
+          setTimeout(() => {
+            document.querySelector("#app").innerHTML = ${JSON.stringify(fixtureItems(mode))};
+          }, 80);
+        </script>
+      </body>
+    </html>`);
     });
-    const pageUrl = await listen(fixtureServer);
+    await new Promise<void>((resolve) => fixtureServer.listen(0, "127.0.0.1", resolve));
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          fixtureServer.closeAllConnections();
+          fixtureServer.close(() => resolve());
+        }),
+    );
+    const pageUrl = await `http://127.0.0.1:${(fixtureServer.address() as AddressInfo).port}`;
 
     const database = new AppDatabase(":memory:");
     cleanups.push(() => database.close());
@@ -184,7 +166,11 @@ describe("authenticated web-feed API", () => {
         payload: { username, password: `${username}-password` },
       });
       expect(response.statusCode).toBe(201);
-      return cookieFrom(response);
+      const header = response.headers["set-cookie"];
+      const setCookie = typeof header === "number" ? undefined : header;
+      const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";", 1)[0];
+      if (!cookie) throw new Error("Registration did not return a session cookie");
+      return cookie;
     };
     const readerCookie = await register("reader");
     const otherCookie = await register("other-reader");

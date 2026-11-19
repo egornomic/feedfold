@@ -21,20 +21,6 @@ import {
 
 const TRACKING_PIXEL_SIZE = 1;
 
-function hasArticleMath(container: HTMLElement): boolean {
-  const text = container.ownerDocument.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  while (text.nextNode()) {
-    if (
-      /\$\$|\\[([]|\\begin\{/.test(text.currentNode.textContent ?? "") &&
-      !text.currentNode.parentElement?.closest(
-        "script, noscript, style, textarea, pre, code, option, .katex",
-      )
-    )
-      return true;
-  }
-  return false;
-}
-
 function eventElement(target: EventTarget | null): Element | null {
   return target && typeof (target as Element).closest === "function" ? (target as Element) : null;
 }
@@ -64,19 +50,6 @@ function isPreviewableImage(image: HTMLImageElement): boolean {
   return !isDeclaredTrackingPixel && !isLoadedTrackingPixel;
 }
 
-function previewableImages(container: HTMLElement): HTMLImageElement[] {
-  return Array.from(container.querySelectorAll<HTMLImageElement>("img[src]")).filter(
-    isPreviewableImage,
-  );
-}
-
-function imageItem(image: HTMLImageElement): ImageLightboxItem {
-  return {
-    src: image.currentSrc || image.src,
-    alt: imageLabel(image),
-  };
-}
-
 function imageTrigger(image: HTMLImageElement, container: HTMLElement): HTMLElement {
   const link = image.closest<HTMLAnchorElement>("a[href]");
   return link && container.contains(link) ? link : image;
@@ -98,7 +71,18 @@ export const ArticleHtml = memo(function ArticleHtml({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!sanitizedHtml || !container || !hasArticleMath(container)) return;
+    if (!sanitizedHtml || !container) return;
+    const mathText = container.ownerDocument.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return /\$\$|\\[([]|\\begin\{/.test(node.textContent ?? "") &&
+          !node.parentElement?.closest(
+            "script, noscript, style, textarea, pre, code, option, .katex",
+          )
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_SKIP;
+      },
+    });
+    if (!mathText.nextNode()) return;
     let active = true;
     void Promise.all([import("katex/contrib/auto-render"), import("katex/dist/katex.min.css")])
       .then(([{ default: renderMathInElement }]) => {
@@ -189,11 +173,18 @@ export const ArticleHtml = memo(function ArticleHtml({
   const openImage = useCallback((image: HTMLImageElement) => {
     const container = containerRef.current;
     if (!container) return;
-    const imageElements = previewableImages(container);
+    const imageElements = Array.from(
+      container.querySelectorAll<HTMLImageElement>("img[src]"),
+    ).filter(isPreviewableImage);
     const index = imageElements.indexOf(image);
     if (index < 0) return;
     setLightbox({
-      images: imageElements.map(imageItem),
+      images: imageElements.map(
+        (image): ImageLightboxItem => ({
+          src: image.currentSrc || image.src,
+          alt: imageLabel(image),
+        }),
+      ),
       index,
       returnFocus: imageTrigger(image, container),
     });

@@ -14,13 +14,19 @@ function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "feedfold-owner-"));
   paths.push(directory);
   const path = join(directory, "feedfold.db");
-  const run = (...args: string[]) =>
-    execFileSync(process.execPath, ["--import", "tsx", "src/server/manage-accounts.ts", ...args], {
-      env: { ...process.env, DATABASE_PATH: path },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  return { path, run };
+  return {
+    path,
+    run: (...args: string[]) =>
+      execFileSync(
+        process.execPath,
+        ["--import", "tsx", "src/server/manage-accounts.ts", ...args],
+        {
+          env: { ...process.env, DATABASE_PATH: path },
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      ),
+  };
 }
 
 describe("server account management", () => {

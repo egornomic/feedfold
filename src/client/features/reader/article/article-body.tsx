@@ -1,6 +1,6 @@
 import { AlertTriangle, FileText, LoaderCircle, RefreshCw } from "lucide-react";
 import { telegramPostIdentity } from "../../../../shared/telegram";
-import type { Article, ArticleAiTranslation } from "../../../../shared/types";
+import type { Article } from "../../../../shared/types";
 import { withXVideoPlaceholder, xVideoPlaceholderId, xVideoPostIds } from "../../../../shared/x";
 import type { ArticleTranslationViewState } from "./article-ai-state";
 import { articleContentView, shouldShowArticleDescription } from "./article-content";
@@ -29,76 +29,14 @@ export function ArticleBody({
   const translationVisible = translationState.kind === "translated" && translation !== null;
   const contentView = articleContentView(article, fullContentVisible);
   const inlineXVideos = contentView !== "full" && !translationVisible;
-
-  return (
-    <>
-      {article.media ? <ArticleMediaPlayer article={article} /> : null}
-      <div
-        className="article-content-stage"
-        data-translation-ready={translation !== null}
-        data-translation-visible={translationVisible}
-      >
-        <div
-          className="article-content-layer is-original"
-          data-state={translationVisible ? "inactive" : "active"}
-          aria-hidden={translationVisible}
-          inert={translationVisible}
-        >
-          <ArticleText
-            article={article}
-            fullContentVisible={fullContentVisible}
-            showYouTubeDescriptions={showYouTubeDescriptions}
-            onToggleFullContent={onToggleFullContent}
-          />
-        </div>
-        {translation ? (
-          <div
-            className="article-content-layer is-translation"
-            data-state={translationVisible ? "active" : "inactive"}
-            aria-hidden={!translationVisible}
-            inert={!translationVisible}
-          >
-            <ArticleTranslationText translation={translation} />
-          </div>
-        ) : null}
-      </div>
-      {telegramPostIdentity(article.url) ? <TelegramPostMedia article={article} /> : null}
-      {videoPostIds.map((postId) => (
-        <XPostVideo
-          key={postId}
-          article={article}
-          postId={postId}
-          targetId={inlineXVideos ? xVideoPlaceholderId(article.id, postId) : null}
-        />
-      ))}
-    </>
+  const feedText = (
+    <FeedArticleText article={article} showYouTubeDescriptions={showYouTubeDescriptions} />
   );
-}
-
-function ArticleTranslationText({ translation }: { translation: ArticleAiTranslation }) {
-  return (
-    <ArticleHtml className="article-content article-translation" sanitizedHtml={translation.html} />
-  );
-}
-
-function ArticleText({
-  article,
-  fullContentVisible,
-  showYouTubeDescriptions,
-  onToggleFullContent,
-}: {
-  article: Article;
-  fullContentVisible: boolean;
-  showYouTubeDescriptions: boolean;
-  onToggleFullContent: (article: Article) => void;
-}) {
-  const contentView = articleContentView(article, fullContentVisible);
-  if (contentView === "feed" || contentView === "summary" || contentView === "empty") {
-    return <FeedArticleText article={article} showYouTubeDescriptions={showYouTubeDescriptions} />;
-  }
-
-  if (contentView === "loading") {
-    return (
+  let original = feedText;
+  if (contentView === "full" && article.contentHtml) {
+    original = <ArticleHtml sanitizedHtml={article.contentHtml} />;
+  } else if (contentView === "loading") {
+    original = (
       <>
         <div className="article-extraction-state extraction-loading" role="status">
           <LoaderCircle className="spin" aria-hidden="true" size={18} />
@@ -107,15 +45,11 @@ function ArticleText({
             <p>You can keep reading the feed text while feedfold loads the source page.</p>
           </div>
         </div>
-        <FeedArticleText article={article} showYouTubeDescriptions={showYouTubeDescriptions} />
+        {feedText}
       </>
     );
-  }
-  if (contentView === "full" && article.contentHtml) {
-    return <ArticleHtml sanitizedHtml={article.contentHtml} />;
-  }
-  if (contentView === "failed") {
-    return (
+  } else if (contentView === "failed") {
+    original = (
       <>
         <div className="article-extraction-state extraction-failed" role="note">
           <AlertTriangle aria-hidden="true" size={18} />
@@ -134,12 +68,52 @@ function ArticleText({
             </button>
           </div>
         </div>
-        <FeedArticleText article={article} showYouTubeDescriptions={showYouTubeDescriptions} />
+        {feedText}
       </>
     );
   }
 
-  return <FeedArticleText article={article} showYouTubeDescriptions={showYouTubeDescriptions} />;
+  return (
+    <>
+      {article.media ? <ArticleMediaPlayer article={article} /> : null}
+      <div
+        className="article-content-stage"
+        data-translation-ready={translation !== null}
+        data-translation-visible={translationVisible}
+      >
+        <div
+          className="article-content-layer is-original"
+          data-state={translationVisible ? "inactive" : "active"}
+          aria-hidden={translationVisible}
+          inert={translationVisible}
+        >
+          {original}
+        </div>
+        {translation ? (
+          <div
+            className="article-content-layer is-translation"
+            data-state={translationVisible ? "active" : "inactive"}
+            aria-hidden={!translationVisible}
+            inert={!translationVisible}
+          >
+            <ArticleHtml
+              className="article-content article-translation"
+              sanitizedHtml={translation.html}
+            />
+          </div>
+        ) : null}
+      </div>
+      {telegramPostIdentity(article.url) ? <TelegramPostMedia article={article} /> : null}
+      {videoPostIds.map((postId) => (
+        <XPostVideo
+          key={postId}
+          article={article}
+          postId={postId}
+          targetId={inlineXVideos ? xVideoPlaceholderId(article.id, postId) : null}
+        />
+      ))}
+    </>
+  );
 }
 
 function FeedArticleText({

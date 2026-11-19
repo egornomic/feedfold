@@ -6,16 +6,6 @@ export interface TextLink {
   text: string;
 }
 
-function normalizedHttpUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 export function extractHttpLinks(text: string): TextLink[] {
   const links: TextLink[] = [];
   const pattern = /https?:\/\/[^\s<>"']+/giu;
@@ -25,21 +15,24 @@ export function extractHttpLinks(text: string): TextLink[] {
     const start = match.index;
     const rawText = match[0];
     const linkText = rawText.replace(/[.,;!?]+$/u, "");
-    const href = normalizedHttpUrl(linkText);
     const context = text.slice(previousMatchEnd, start).trim();
     const explicitLabel = /(?:^|[.!?]\s+)([\p{L}\p{N}][\p{L}\p{N} _+#&/-]{0,39}):$/u.exec(
       context,
     )?.[1];
 
-    if (href) {
-      const hostname = new URL(href).hostname.replace(/^www\./, "");
-      links.push({
-        href,
-        label: explicitLabel ?? hostname,
-        start,
-        end: start + linkText.length,
-        text: linkText,
-      });
+    try {
+      const url = new URL(linkText);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        links.push({
+          href: url.toString(),
+          label: explicitLabel ?? url.hostname.replace(/^www\./, ""),
+          start,
+          end: start + linkText.length,
+          text: linkText,
+        });
+      }
+    } catch {
+      // Invalid URLs do not become links.
     }
     previousMatchEnd = start + rawText.length;
   }

@@ -127,14 +127,6 @@ function challengeDetected(title: string, bodyText: string): boolean {
   ].some((phrase) => pageText.includes(phrase));
 }
 
-async function detectedChallenge(page: Page): Promise<boolean> {
-  const content = await page.evaluate(() => ({
-    title: document.title,
-    bodyText: (document.body?.innerText ?? "").slice(0, 50_000),
-  }));
-  return challengeDetected(content.title, content.bodyText);
-}
-
 export function webFeedContentRequestError(loaded: LoadedWebFeedPage): WebFeedError | null {
   const failure = loaded.contentRequestFailure;
   if (!failure) return null;
@@ -149,271 +141,6 @@ export function webFeedContentRequestError(loaded: LoadedWebFeedPage): WebFeedEr
     "This page could not finish loading its entries because one request failed. Try again.",
     "network",
   );
-}
-
-async function settleDom(
-  page: Page,
-  quietMs: number,
-  timeoutMs: number,
-  expectedConfig: WebFeedConfig | null,
-  pendingRequestBinding: string,
-): Promise<"ready" | "quiet_missing_selection" | "timeout"> {
-  const minimumWaitMs = Math.min(timeoutMs, Math.max(expectedConfig ? 1_000 : 3_000, quietMs, 250));
-  return page.evaluate(
-    ({ expectedConfig, minimumWaitMs, pendingRequestBinding, quietMs, timeoutMs }) =>
-      new Promise<"ready" | "quiet_missing_selection" | "timeout">((resolve) => {
-        const root = document.documentElement;
-        if (!root) {
-          resolve("ready");
-          return;
-        }
-        const startedAt = performance.now();
-        let lastMutationAt = startedAt;
-        let repeatedItemsCheckedAt = -1;
-        let repeatedItemsReady = false;
-        const observer = new MutationObserver(() => {
-          lastMutationAt = performance.now();
-        });
-        observer.observe(root, { childList: true, subtree: true, characterData: true });
-        const timer = setInterval(
-          async () => {
-            const now = performance.now();
-            const quiet = now - lastMutationAt >= quietMs;
-            const pendingRequestCount = Reflect.get(
-              window,
-              pendingRequestBinding,
-            ) as () => Promise<number>;
-            const pendingRequests = await pendingRequestCount();
-            if (
-              expectedConfig === null &&
-              pendingRequests > 0 &&
-              now - startedAt >= minimumWaitMs &&
-              quiet &&
-              repeatedItemsCheckedAt !== lastMutationAt
-            ) {
-              repeatedItemsCheckedAt = lastMutationAt;
-              for (const parent of document.querySelectorAll("body, body *")) {
-                if (
-                  parent.closest(
-                    'nav, header, footer, aside, [role="navigation"], [role="menu"], [aria-hidden="true"], [hidden]',
-                  )
-                ) {
-                  continue;
-                }
-                const counts = new Map<string, number>();
-                for (const child of parent.children) {
-                  const tag = child.tagName.toLowerCase();
-                  if (!["a", "article", "div", "li", "section", "tr"].includes(tag)) continue;
-                  const link = child.matches("a[href]") ? child : child.querySelector("a[href]");
-                  const rawHref = link?.getAttribute("href");
-                  if (!rawHref) continue;
-                  try {
-                    const url = new URL(rawHref, location.href);
-                    if (url.protocol !== "http:" && url.protocol !== "https:") continue;
-                  } catch {
-                    continue;
-                  }
-                  const count = (counts.get(tag) ?? 0) + 1;
-                  counts.set(tag, count);
-                  if (count >= 2) {
-                    repeatedItemsReady = true;
-                    break;
-                  }
-                }
-                if (repeatedItemsReady) break;
-              }
-            }
-            let expectedSelectionReady = expectedConfig === null;
-            if (expectedConfig) {
-              try {
-                let matches = 0;
-                for (const item of document.querySelectorAll(expectedConfig.selectors.item)) {
-                  const link =
-                    expectedConfig.selectors.link === ":scope"
-                      ? item
-                      : item.querySelector(expectedConfig.selectors.link);
-                  const rawHref = link?.getAttribute("href") ?? link?.getAttribute("data-href");
-                  if (!rawHref) continue;
-                  const url = new URL(rawHref, location.href);
-                  if (url.protocol !== "http:" && url.protocol !== "https:") continue;
-                  matches += 1;
-                  if (matches >= 1) {
-                    expectedSelectionReady = true;
-                    break;
-                  }
-                }
-              } catch {
-                expectedSelectionReady = false;
-              }
-            }
-            if (
-              now - startedAt >= minimumWaitMs &&
-              quiet &&
-              expectedSelectionReady &&
-              (expectedConfig !== null || pendingRequests === 0 || repeatedItemsReady)
-            ) {
-              clearInterval(timer);
-              observer.disconnect();
-              resolve("ready");
-            } else if (now - startedAt >= timeoutMs) {
-              clearInterval(timer);
-              observer.disconnect();
-              resolve(
-                expectedConfig !== null && quiet && pendingRequests === 0
-                  ? "quiet_missing_selection"
-                  : "timeout",
-              );
-            }
-          },
-          Math.min(100, quietMs),
-        );
-      }),
-    { expectedConfig, minimumWaitMs, pendingRequestBinding, quietMs, timeoutMs },
-  );
-}
-
-async function materializeOpenShadowRoots(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const roots: Array<Document | ShadowRoot> = [document];
-    while (roots.length > 0) {
-      const root = roots.pop();
-      if (!root) continue;
-      for (const element of root.querySelectorAll("*")) {
-        if (!element.shadowRoot) continue;
-        roots.push(element.shadowRoot);
-        const container = document.createElement("div");
-        container.setAttribute("data-feedfold-shadow-root", "");
-        for (const child of element.shadowRoot.childNodes) container.append(child.cloneNode(true));
-        element.append(container);
-      }
-    }
-  });
-}
-
-async function inlineComputedStyles(page: Page, byteLimit: number): Promise<void> {
-  await page.evaluate((byteLimit) => {
-    const properties = [
-      "accent-color",
-      "align-content",
-      "align-items",
-      "align-self",
-      "aspect-ratio",
-      "background-color",
-      "border-bottom-color",
-      "border-bottom-left-radius",
-      "border-bottom-right-radius",
-      "border-bottom-style",
-      "border-bottom-width",
-      "border-left-color",
-      "border-left-style",
-      "border-left-width",
-      "border-right-color",
-      "border-right-style",
-      "border-right-width",
-      "border-top-color",
-      "border-top-left-radius",
-      "border-top-right-radius",
-      "border-top-style",
-      "border-top-width",
-      "box-shadow",
-      "box-sizing",
-      "clear",
-      "color",
-      "column-gap",
-      "display",
-      "flex-basis",
-      "flex-direction",
-      "flex-grow",
-      "flex-shrink",
-      "flex-wrap",
-      "float",
-      "font-family",
-      "font-size",
-      "font-style",
-      "font-weight",
-      "gap",
-      "grid-auto-columns",
-      "grid-auto-flow",
-      "grid-auto-rows",
-      "grid-template-columns",
-      "grid-template-rows",
-      "height",
-      "justify-content",
-      "justify-items",
-      "justify-self",
-      "letter-spacing",
-      "line-height",
-      "list-style-position",
-      "list-style-type",
-      "margin-bottom",
-      "margin-left",
-      "margin-right",
-      "margin-top",
-      "max-height",
-      "max-width",
-      "min-height",
-      "min-width",
-      "object-fit",
-      "opacity",
-      "order",
-      "overflow-wrap",
-      "overflow-x",
-      "overflow-y",
-      "padding-bottom",
-      "padding-left",
-      "padding-right",
-      "padding-top",
-      "position",
-      "row-gap",
-      "table-layout",
-      "text-align",
-      "text-decoration-color",
-      "text-decoration-line",
-      "text-decoration-style",
-      "text-indent",
-      "text-overflow",
-      "text-transform",
-      "transform",
-      "transform-origin",
-      "vertical-align",
-      "visibility",
-      "white-space",
-      "width",
-      "word-break",
-      "z-index",
-    ];
-    const elements: Element[] = [];
-    const roots: Array<Document | ShadowRoot> = [document];
-    while (roots.length > 0) {
-      const root = roots.pop();
-      if (!root) continue;
-      for (const element of root.querySelectorAll("*")) {
-        elements.push(element);
-        if (element.shadowRoot) roots.push(element.shadowRoot);
-      }
-    }
-    const captured: Array<{ element: HTMLElement | SVGElement; cssText: string }> = [];
-    let capturedBytes = 0;
-    for (const element of elements) {
-      if (!(element instanceof HTMLElement || element instanceof SVGElement)) continue;
-      if (
-        element.matches("script, noscript, iframe, frame, object, embed, template, style, link")
-      ) {
-        continue;
-      }
-      const computed = getComputedStyle(element);
-      const hidden = computed.display === "none" || computed.visibility === "hidden";
-      const selectedProperties = hidden ? ["display", "visibility"] : properties;
-      const cssText = selectedProperties
-        .map((property) => `${property}:${computed.getPropertyValue(property)};`)
-        .join("");
-      const nextBytes = new TextEncoder().encode(cssText).byteLength;
-      if (capturedBytes + nextBytes > byteLimit) break;
-      capturedBytes += nextBytes;
-      captured.push({ element, cssText });
-    }
-    for (const { element, cssText } of captured) element.style.cssText = cssText;
-  }, byteLimit);
 }
 
 function browserFailure(error: unknown): WebFeedError {
@@ -796,19 +523,138 @@ export class WebFeedBrowserLoader {
           () => true,
           () => false,
         );
-      if (await detectedChallenge(page)) {
+      const challengePage = await page.evaluate(() => ({
+        title: document.title,
+        bodyText: (document.body?.innerText ?? "").slice(0, 50_000),
+      }));
+      if (challengeDetected(challengePage.title, challengePage.bodyText)) {
         throw new WebFeedError(
           "This page requires a CAPTCHA or bot check that feedfold cannot complete. Choose another page.",
           "access_blocked",
           status,
         );
       }
-      const settled = await settleDom(
-        page,
-        this.#settleQuietMs,
-        this.#settleTimeoutMs,
-        expectedConfig,
-        pendingRequestBinding,
+      const quietMs = this.#settleQuietMs;
+      const timeoutMs = this.#settleTimeoutMs;
+      const minimumWaitMs = Math.min(
+        timeoutMs,
+        Math.max(expectedConfig ? 1_000 : 3_000, quietMs, 250),
+      );
+      const settled = await page.evaluate(
+        ({
+          expectedConfig: config,
+          minimumWaitMs,
+          pendingRequestBinding: binding,
+          quietMs,
+          timeoutMs,
+        }) =>
+          new Promise<"ready" | "quiet_missing_selection" | "timeout">((resolve) => {
+            const root = document.documentElement;
+            if (!root) {
+              resolve("ready");
+              return;
+            }
+            const startedAt = performance.now();
+            let lastMutationAt = startedAt;
+            let repeatedItemsCheckedAt = -1;
+            let repeatedItemsReady = false;
+            const observer = new MutationObserver(() => {
+              lastMutationAt = performance.now();
+            });
+            observer.observe(root, { childList: true, subtree: true, characterData: true });
+            const timer = setInterval(
+              async () => {
+                const now = performance.now();
+                const quiet = now - lastMutationAt >= quietMs;
+                const pendingRequestCount = Reflect.get(window, binding) as () => Promise<number>;
+                const pendingRequests = await pendingRequestCount();
+                if (
+                  config === null &&
+                  pendingRequests > 0 &&
+                  now - startedAt >= minimumWaitMs &&
+                  quiet &&
+                  repeatedItemsCheckedAt !== lastMutationAt
+                ) {
+                  repeatedItemsCheckedAt = lastMutationAt;
+                  for (const parent of document.querySelectorAll("body, body *")) {
+                    if (
+                      parent.closest(
+                        'nav, header, footer, aside, [role="navigation"], [role="menu"], [aria-hidden="true"], [hidden]',
+                      )
+                    ) {
+                      continue;
+                    }
+                    const counts = new Map<string, number>();
+                    for (const child of parent.children) {
+                      const tag = child.tagName.toLowerCase();
+                      if (!["a", "article", "div", "li", "section", "tr"].includes(tag)) continue;
+                      const link = child.matches("a[href]")
+                        ? child
+                        : child.querySelector("a[href]");
+                      const rawHref = link?.getAttribute("href");
+                      if (!rawHref) continue;
+                      try {
+                        const url = new URL(rawHref, location.href);
+                        if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+                      } catch {
+                        continue;
+                      }
+                      const count = (counts.get(tag) ?? 0) + 1;
+                      counts.set(tag, count);
+                      if (count >= 2) {
+                        repeatedItemsReady = true;
+                        break;
+                      }
+                    }
+                    if (repeatedItemsReady) break;
+                  }
+                }
+                let expectedSelectionReady = config === null;
+                if (config) {
+                  try {
+                    let matches = 0;
+                    for (const item of document.querySelectorAll(config.selectors.item)) {
+                      const link =
+                        config.selectors.link === ":scope"
+                          ? item
+                          : item.querySelector(config.selectors.link);
+                      const rawHref = link?.getAttribute("href") ?? link?.getAttribute("data-href");
+                      if (!rawHref) continue;
+                      const url = new URL(rawHref, location.href);
+                      if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+                      matches += 1;
+                      if (matches >= 1) {
+                        expectedSelectionReady = true;
+                        break;
+                      }
+                    }
+                  } catch {
+                    expectedSelectionReady = false;
+                  }
+                }
+                if (
+                  now - startedAt >= minimumWaitMs &&
+                  quiet &&
+                  expectedSelectionReady &&
+                  (config !== null || pendingRequests === 0 || repeatedItemsReady)
+                ) {
+                  clearInterval(timer);
+                  observer.disconnect();
+                  resolve("ready");
+                } else if (now - startedAt >= timeoutMs) {
+                  clearInterval(timer);
+                  observer.disconnect();
+                  resolve(
+                    config !== null && quiet && pendingRequests === 0
+                      ? "quiet_missing_selection"
+                      : "timeout",
+                  );
+                }
+              },
+              Math.min(100, quietMs),
+            );
+          }),
+        { expectedConfig, minimumWaitMs, pendingRequestBinding, quietMs, timeoutMs },
       );
       if (settled === "timeout") {
         throw new WebFeedError(
@@ -838,11 +684,146 @@ export class WebFeedBrowserLoader {
           status,
         );
       }
-      await inlineComputedStyles(
-        page,
-        Math.min(MAX_INLINE_STYLE_BYTES, Math.floor(this.#maxDocumentBytes / 2)),
-      );
-      await materializeOpenShadowRoots(page);
+      const byteLimit = Math.min(MAX_INLINE_STYLE_BYTES, Math.floor(this.#maxDocumentBytes / 2));
+      await page.evaluate((byteLimit) => {
+        const properties = [
+          "accent-color",
+          "align-content",
+          "align-items",
+          "align-self",
+          "aspect-ratio",
+          "background-color",
+          "border-bottom-color",
+          "border-bottom-left-radius",
+          "border-bottom-right-radius",
+          "border-bottom-style",
+          "border-bottom-width",
+          "border-left-color",
+          "border-left-style",
+          "border-left-width",
+          "border-right-color",
+          "border-right-style",
+          "border-right-width",
+          "border-top-color",
+          "border-top-left-radius",
+          "border-top-right-radius",
+          "border-top-style",
+          "border-top-width",
+          "box-shadow",
+          "box-sizing",
+          "clear",
+          "color",
+          "column-gap",
+          "display",
+          "flex-basis",
+          "flex-direction",
+          "flex-grow",
+          "flex-shrink",
+          "flex-wrap",
+          "float",
+          "font-family",
+          "font-size",
+          "font-style",
+          "font-weight",
+          "gap",
+          "grid-auto-columns",
+          "grid-auto-flow",
+          "grid-auto-rows",
+          "grid-template-columns",
+          "grid-template-rows",
+          "height",
+          "justify-content",
+          "justify-items",
+          "justify-self",
+          "letter-spacing",
+          "line-height",
+          "list-style-position",
+          "list-style-type",
+          "margin-bottom",
+          "margin-left",
+          "margin-right",
+          "margin-top",
+          "max-height",
+          "max-width",
+          "min-height",
+          "min-width",
+          "object-fit",
+          "opacity",
+          "order",
+          "overflow-wrap",
+          "overflow-x",
+          "overflow-y",
+          "padding-bottom",
+          "padding-left",
+          "padding-right",
+          "padding-top",
+          "position",
+          "row-gap",
+          "table-layout",
+          "text-align",
+          "text-decoration-color",
+          "text-decoration-line",
+          "text-decoration-style",
+          "text-indent",
+          "text-overflow",
+          "text-transform",
+          "transform",
+          "transform-origin",
+          "vertical-align",
+          "visibility",
+          "white-space",
+          "width",
+          "word-break",
+          "z-index",
+        ];
+        const elements: Element[] = [];
+        const roots: Array<Document | ShadowRoot> = [document];
+        while (roots.length > 0) {
+          const root = roots.pop();
+          if (!root) continue;
+          for (const element of root.querySelectorAll("*")) {
+            elements.push(element);
+            if (element.shadowRoot) roots.push(element.shadowRoot);
+          }
+        }
+        const captured: Array<{ element: HTMLElement | SVGElement; cssText: string }> = [];
+        let capturedBytes = 0;
+        for (const element of elements) {
+          if (!(element instanceof HTMLElement || element instanceof SVGElement)) continue;
+          if (
+            element.matches("script, noscript, iframe, frame, object, embed, template, style, link")
+          ) {
+            continue;
+          }
+          const computed = getComputedStyle(element);
+          const hidden = computed.display === "none" || computed.visibility === "hidden";
+          const selectedProperties = hidden ? ["display", "visibility"] : properties;
+          const cssText = selectedProperties
+            .map((property) => `${property}:${computed.getPropertyValue(property)};`)
+            .join("");
+          const nextBytes = new TextEncoder().encode(cssText).byteLength;
+          if (capturedBytes + nextBytes > byteLimit) break;
+          capturedBytes += nextBytes;
+          captured.push({ element, cssText });
+        }
+        for (const { element, cssText } of captured) element.style.cssText = cssText;
+      }, byteLimit);
+      await page.evaluate(() => {
+        const roots: Array<Document | ShadowRoot> = [document];
+        while (roots.length > 0) {
+          const root = roots.pop();
+          if (!root) continue;
+          for (const element of root.querySelectorAll("*")) {
+            if (!element.shadowRoot) continue;
+            roots.push(element.shadowRoot);
+            const container = document.createElement("div");
+            container.setAttribute("data-feedfold-shadow-root", "");
+            for (const child of element.shadowRoot.childNodes)
+              container.append(child.cloneNode(true));
+            element.append(container);
+          }
+        }
+      });
       const elementCount = await page.locator("*").count();
       if (elementCount > this.#maxElements) {
         throw new WebFeedError(

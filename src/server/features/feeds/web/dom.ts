@@ -44,15 +44,6 @@ function truncated(value: string, limit: number): string {
   return value.length <= limit ? value : `${value.slice(0, limit - 1).trimEnd()}…`;
 }
 
-function htmlEscape(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
 function cssString(value: string): string {
   return value
     .replaceAll("\\", "\\\\")
@@ -204,17 +195,6 @@ function fallbackTitle(url: string): string {
   }
 }
 
-function mergeDuplicate(existing: ParsedArticle, incoming: ParsedArticle): void {
-  if (!existing.title && incoming.title) existing.title = incoming.title;
-  if (!existing.author && incoming.author) existing.author = incoming.author;
-  if (!existing.publishedAt && incoming.publishedAt) existing.publishedAt = incoming.publishedAt;
-  if (!existing.summary && incoming.summary) {
-    existing.summary = incoming.summary;
-    existing.feedContentHtml = incoming.feedContentHtml;
-  }
-  if (!existing.imageUrl && incoming.imageUrl) existing.imageUrl = incoming.imageUrl;
-}
-
 export function extractWebFeedSelection(
   document: Document,
   pageUrl: string,
@@ -274,11 +254,28 @@ export function extractWebFeedSelection(
       publishedAt: parsedDate(dateElement),
       summary,
       imageUrl: imageUrl(imageElement, pageUrl),
-      feedContentHtml: summary ? `<p>${htmlEscape(summary)}</p>` : null,
+      feedContentHtml: summary
+        ? `<p>${summary
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;")}</p>`
+        : null,
     };
     const existing = articlesByUrl.get(url);
-    if (existing) mergeDuplicate(existing, article);
-    else articlesByUrl.set(url, article);
+    if (!existing) {
+      articlesByUrl.set(url, article);
+      continue;
+    }
+    if (!existing.title && article.title) existing.title = article.title;
+    if (!existing.author && article.author) existing.author = article.author;
+    if (!existing.publishedAt && article.publishedAt) existing.publishedAt = article.publishedAt;
+    if (!existing.summary && article.summary) {
+      existing.summary = article.summary;
+      existing.feedContentHtml = article.feedContentHtml;
+    }
+    if (!existing.imageUrl && article.imageUrl) existing.imageUrl = article.imageUrl;
   }
   return { articles: [...articlesByUrl.values()], elements: items };
 }
@@ -351,13 +348,6 @@ function sharedClasses(elements: Element[]): string[] {
   return stableClasses(first).filter((name) => rest.every((classes) => classes.has(name)));
 }
 
-function itemSelector(parent: Element, elements: Element[], document: Document): string {
-  const tag = elements[0]?.tagName.toLowerCase() ?? "div";
-  const classes = sharedClasses(elements).slice(0, 4);
-  const classPart = classes.map((name) => `[class~="${cssString(name)}"]`).join("");
-  return `${uniqueSelector(parent, document)} > ${tag}${classPart}`;
-}
-
 function isExcludedRegion(element: Element): boolean {
   let current: Element | null = element;
   while (current) {
@@ -367,18 +357,6 @@ function isExcludedRegion(element: Element): boolean {
     current = current.parentElement;
   }
   return false;
-}
-
-function isPotentialItem(element: Element, pageUrl: string): boolean {
-  if (!REPEATED_ITEM_TAGS.has(element.tagName.toLowerCase())) return false;
-  if (isExcludedRegion(element)) return false;
-  const style = element.getAttribute("style")?.toLowerCase() ?? "";
-  if (style.includes("display:none") || style.includes("visibility:hidden")) return false;
-  const link = element.matches("a[href]") ? element : element.querySelector("a[href]");
-  const href = link?.getAttribute("href");
-  return Boolean(
-    href && normalizedHttpUrl(href, pageUrl) && singleLine(element.textContent).length >= 3,
-  );
 }
 
 function groupLabel(parent: Element, elements: Element[]): string {
@@ -403,30 +381,16 @@ function groupLabel(parent: Element, elements: Element[]): string {
   return "Repeated page entries";
 }
 
-function groupScore(parent: Element, elements: Element[], fields: WebFeedField[]): number {
-  const first = elements[0];
-  const tag = first?.tagName.toLowerCase();
-  let score = Math.min(elements.length, 30) * 2 + fields.length * 6;
-  if (tag === "article") score += 45;
-  else if (tag === "li") score += 20;
-  else if (tag === "tr") score += 12;
-  const semantics = `${parent.className} ${first?.className ?? ""}`;
-  if (/article|post|story|news|job|product|release|result|entry|card/i.test(semantics)) score += 24;
-  if (parent.tagName.toLowerCase() === "body" || parent.tagName.toLowerCase() === "main")
-    score -= 15;
-  if (fields.includes("date")) score += 8;
-  if (fields.includes("summary")) score += 5;
-  if (fields.includes("image")) score += 4;
-  return score;
-}
-
 function rankedCandidate(
   document: Document,
   pageUrl: string,
   parent: Element,
   elements: Element[],
 ): RankedWebFeedCandidate | null {
-  const selector = itemSelector(parent, elements, document);
+  const tag = elements[0]?.tagName.toLowerCase() ?? "div";
+  const classes = sharedClasses(elements).slice(0, 4);
+  const classPart = classes.map((name) => `[class~="${cssString(name)}"]`).join("");
+  const selector = `${uniqueSelector(parent, document)} > ${tag}${classPart}`;
   let selectedItems: Element[];
   try {
     selectedItems = [...document.querySelectorAll(selector)];
@@ -442,7 +406,19 @@ function rankedCandidate(
     selectors,
   };
   const fields = availableFields(extracted.articles);
-  const score = groupScore(parent, elements, fields);
+  const first = elements[0];
+  const firstTag = first?.tagName.toLowerCase();
+  let score = Math.min(elements.length, 30) * 2 + fields.length * 6;
+  if (firstTag === "article") score += 45;
+  else if (firstTag === "li") score += 20;
+  else if (firstTag === "tr") score += 12;
+  const semantics = `${parent.className} ${first?.className ?? ""}`;
+  if (/article|post|story|news|job|product|release|result|entry|card/i.test(semantics)) score += 24;
+  if (parent.tagName.toLowerCase() === "body" || parent.tagName.toLowerCase() === "main")
+    score -= 15;
+  if (fields.includes("date")) score += 8;
+  if (fields.includes("summary")) score += 5;
+  if (fields.includes("image")) score += 4;
   const candidate: WebFeedCandidate = {
     id: candidateId(config),
     label: groupLabel(parent, elements),
@@ -461,48 +437,6 @@ function rankedCandidate(
       .join("\n"),
     score,
   };
-}
-
-function detectCandidates(document: Document, pageUrl: string): RankedWebFeedCandidate[] {
-  const found: RankedWebFeedCandidate[] = [];
-  const parents = document.body
-    ? [document.body, ...document.querySelectorAll("body *")]
-    : [...document.querySelectorAll("*")];
-  for (const parent of parents) {
-    if (isExcludedRegion(parent)) continue;
-    const eligible = [...parent.children].filter((child) => isPotentialItem(child, pageUrl));
-    if (eligible.length < 2) continue;
-    const groups = new Map<string, Element[]>();
-    for (const element of eligible) {
-      const tag = element.tagName.toLowerCase();
-      const exactKey = `${tag}|${stableClasses(element).join(".")}`;
-      const exact = groups.get(exactKey) ?? [];
-      exact.push(element);
-      groups.set(exactKey, exact);
-      const tagKey = `${tag}|*`;
-      const byTag = groups.get(tagKey) ?? [];
-      byTag.push(element);
-      groups.set(tagKey, byTag);
-    }
-    for (const elements of groups.values()) {
-      if (elements.length < 2) continue;
-      const candidate = rankedCandidate(document, pageUrl, parent, elements);
-      if (candidate) found.push(candidate);
-    }
-  }
-  found.sort(
-    (left, right) =>
-      right.score - left.score || right.candidate.itemCount - left.candidate.itemCount,
-  );
-  const unique: RankedWebFeedCandidate[] = [];
-  const seenLinks = new Set<string>();
-  for (const candidate of found) {
-    if (seenLinks.has(candidate.linkKey)) continue;
-    seenLinks.add(candidate.linkKey);
-    unique.push(candidate);
-    if (unique.length === MAX_SELECTABLE_CANDIDATES) break;
-  }
-  return unique;
 }
 
 function candidateFromConfig(
@@ -547,7 +481,55 @@ export function analyzeWebFeedDocument(
   pageUrl: string,
   savedConfig: WebFeedConfig | null = null,
 ): WebFeedDocumentAnalysis {
-  let candidates = detectCandidates(document, pageUrl);
+  const found: RankedWebFeedCandidate[] = [];
+  const parents = document.body
+    ? [document.body, ...document.querySelectorAll("body *")]
+    : [...document.querySelectorAll("*")];
+  for (const parent of parents) {
+    if (isExcludedRegion(parent)) continue;
+    const eligible = [...parent.children].filter((child) => {
+      if (!REPEATED_ITEM_TAGS.has(child.tagName.toLowerCase())) return false;
+      if (isExcludedRegion(child)) return false;
+      const style = child.getAttribute("style")?.toLowerCase() ?? "";
+      if (style.includes("display:none") || style.includes("visibility:hidden")) return false;
+      const link = child.matches("a[href]") ? child : child.querySelector("a[href]");
+      const href = link?.getAttribute("href");
+      return Boolean(
+        href && normalizedHttpUrl(href, pageUrl) && singleLine(child.textContent).length >= 3,
+      );
+    });
+    if (eligible.length < 2) continue;
+    const groups = new Map<string, Element[]>();
+    for (const element of eligible) {
+      const tag = element.tagName.toLowerCase();
+      const exactKey = `${tag}|${stableClasses(element).join(".")}`;
+      const exact = groups.get(exactKey) ?? [];
+      exact.push(element);
+      groups.set(exactKey, exact);
+      const tagKey = `${tag}|*`;
+      const byTag = groups.get(tagKey) ?? [];
+      byTag.push(element);
+      groups.set(tagKey, byTag);
+    }
+    for (const elements of groups.values()) {
+      if (elements.length < 2) continue;
+      const candidate = rankedCandidate(document, pageUrl, parent, elements);
+      if (candidate) found.push(candidate);
+    }
+  }
+  found.sort(
+    (left, right) =>
+      right.score - left.score || right.candidate.itemCount - left.candidate.itemCount,
+  );
+  const unique: RankedWebFeedCandidate[] = [];
+  const seenLinks = new Set<string>();
+  for (const candidate of found) {
+    if (seenLinks.has(candidate.linkKey)) continue;
+    seenLinks.add(candidate.linkKey);
+    unique.push(candidate);
+    if (unique.length === MAX_SELECTABLE_CANDIDATES) break;
+  }
+  let candidates = unique;
   let savedCandidateId: string | null = null;
   if (savedConfig) {
     const saved = candidateFromConfig(document, pageUrl, savedConfig);

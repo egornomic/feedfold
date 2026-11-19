@@ -45,24 +45,29 @@ async function reader(path = ":memory:") {
     title: "Search feed",
     feedUrl: "https://example.test/search.xml",
   });
-  const store = (articles: ParsedArticle[], feedId = feed.id) =>
-    completeFeedRefresh(database.feeds, feedId, {
-      httpStatus: 200,
-      etag: null,
-      lastModified: null,
-      parsed: { title: "Search feed", siteUrl: null, articles },
-    });
-  const search = async (query: ArticleQuery, token = session.token) => {
-    const parameters = new URLSearchParams(
-      Object.entries(query).map(([key, value]) => [key, String(value)]),
-    );
-    const response = await fetch(`${origin}/api/articles?${parameters}`, {
-      headers: { cookie: `feedfold_session=${token}` },
-    });
-    expect(response.status).toBe(200);
-    return response.json() as Promise<ArticlePage>;
+  return {
+    database,
+    userId: session.user.id,
+    stranger,
+    feed,
+    store: (articles: ParsedArticle[], feedId = feed.id) =>
+      completeFeedRefresh(database.feeds, feedId, {
+        httpStatus: 200,
+        etag: null,
+        lastModified: null,
+        parsed: { title: "Search feed", siteUrl: null, articles },
+      }),
+    search: async (query: ArticleQuery, token = session.token) => {
+      const parameters = new URLSearchParams(
+        Object.entries(query).map(([key, value]) => [key, String(value)]),
+      );
+      const response = await fetch(`${origin}/api/articles?${parameters}`, {
+        headers: { cookie: `feedfold_session=${token}` },
+      });
+      expect(response.status).toBe(200);
+      return response.json() as Promise<ArticlePage>;
+    },
   };
-  return { database, userId: session.user.id, stranger, feed, store, search };
 }
 
 function indexIsConsistent(database: AppDatabase) {

@@ -47,36 +47,35 @@ export function readerFixture(path = "/articles/unread", count = 10) {
     { wait: Promise<void>; release: () => void; held: number; beforeRequest: boolean }
   >();
   const failures: Error[] = [];
-  const invoke = async <K extends ApiOperation>(
-    request: ApiRequest<K>,
-  ): Promise<DesktopResponse<ApiOutput<K>>> => {
-    try {
-      const gate = gates.get(request.operation);
-      if (gate?.beforeRequest) {
-        gate.held += 1;
-        await gate.wait;
-      }
-      const value = await application.invoke(request);
-      if (gate && !gate.beforeRequest) {
-        gate.held += 1;
-        await gate.wait;
-      }
-      return { ok: true, value };
-    } catch (error) {
-      if (error instanceof Error) failures.push(error);
-      return {
-        ok: false,
-        error: {
-          message: error instanceof Error ? error.message : String(error),
-          status: error instanceof ApplicationApiError ? error.status : 500,
-          code: error instanceof ApplicationApiError ? error.code : null,
-        },
-      };
-    }
-  };
   const bridge: FeedfoldDesktopBridge = {
     platform: "desktop",
-    invoke,
+    invoke: async <K extends ApiOperation>(
+      request: ApiRequest<K>,
+    ): Promise<DesktopResponse<ApiOutput<K>>> => {
+      try {
+        const gate = gates.get(request.operation);
+        if (gate?.beforeRequest) {
+          gate.held += 1;
+          await gate.wait;
+        }
+        const value = await application.invoke(request);
+        if (gate && !gate.beforeRequest) {
+          gate.held += 1;
+          await gate.wait;
+        }
+        return { ok: true, value };
+      } catch (error) {
+        if (error instanceof Error) failures.push(error);
+        return {
+          ok: false,
+          error: {
+            message: error instanceof Error ? error.message : String(error),
+            status: error instanceof ApplicationApiError ? error.status : 500,
+            code: error instanceof ApplicationApiError ? error.code : null,
+          },
+        };
+      }
+    },
     exportOpml: async () => ({ ok: true, value: undefined }),
     onDataChanged: (listener) => services.refreshService.subscribe(1, listener),
   };

@@ -94,19 +94,6 @@ export function xContentHtml(html: string | null, instanceUrl: string): string |
   }
 }
 
-function normalizeXFeed(parsed: ParsedFeed, instanceUrl: string): ParsedFeed {
-  return {
-    ...parsed,
-    siteUrl: xContentUrl(parsed.siteUrl, instanceUrl),
-    articles: parsed.articles.map((article) => ({
-      ...article,
-      url: xContentUrl(article.url, instanceUrl),
-      imageUrl: xContentUrl(article.imageUrl, instanceUrl),
-      feedContentHtml: xContentHtml(article.feedContentHtml, instanceUrl),
-    })),
-  };
-}
-
 export class XFeedError extends Error {
   constructor(
     message: string,
@@ -154,10 +141,18 @@ export async function fetchXFeed(
         .replaceAll("piped.video/watch?", "www.youtube.com/watch?")
         .replaceAll("piped.video/", "youtu.be/");
       kind = "parse";
-      const parsed = normalizeXFeed(
-        parseAndNormalizeFeed(source, feedUrl),
-        response.url || baseUrl,
-      );
+      const parsedFeed = parseAndNormalizeFeed(source, feedUrl);
+      const instanceUrl = response.url || baseUrl;
+      const parsed = {
+        ...parsedFeed,
+        siteUrl: xContentUrl(parsedFeed.siteUrl, instanceUrl),
+        articles: parsedFeed.articles.map((article) => ({
+          ...article,
+          url: xContentUrl(article.url, instanceUrl),
+          imageUrl: xContentUrl(article.imageUrl, instanceUrl),
+          feedContentHtml: xContentHtml(article.feedContentHtml, instanceUrl),
+        })),
+      };
       if (parsed.articles.some((article) => !xPostId(article.url))) {
         throw new Error("RSS contains a notice instead of X posts");
       }

@@ -32,69 +32,74 @@ async function fixture() {
   setInvitationOwner(database.connection, owner.user.publicId);
   const ownerCookie = `feedfold_session=${owner.token}`;
 
-  const server = async (mode?: RegistrationMode, maxAccounts = 100, attempts = 100) => {
-    const auth = new AuthService(database.auth, 20, {
-      registrationMode: mode ?? "closed",
-      maxAccounts,
-      rateLimits: {
-        registrationPerIp: { attempts, windowMs: 60_000 },
-        registrationGlobal: { attempts, windowMs: 60_000 },
-      },
-    });
-    const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
-    const refreshService = new FeedRefreshService(
-      database.feeds,
-      new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
-      1,
-    );
-    const app = await createApp({
-      ...createApplicationServices({
-        credentialCipher: null,
-        database,
-        extractionQueue,
-        refreshService,
-      }),
-      authService: auth,
-    });
-    const origin = (await app.listen({ host: "127.0.0.1", port: 0 })).replace(
-      "127.0.0.1",
-      "localhost",
-    );
-    cleanups.push(async () => {
-      await app.close();
-      await Promise.all([extractionQueue.stop(), refreshService.stop()]);
-    });
-    const request = async (method: string, route: string, body?: unknown, cookie?: string) => {
-      const response = await fetch(`${origin}${route}`, {
-        method,
-        headers: {
-          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-          ...(cookie ? { cookie } : {}),
+  return {
+    database,
+    path,
+    server: async (mode?: RegistrationMode, maxAccounts = 100, attempts = 100) => {
+      const auth = new AuthService(database.auth, 20, {
+        registrationMode: mode ?? "closed",
+        maxAccounts,
+        rateLimits: {
+          registrationPerIp: { attempts, windowMs: 60_000 },
+          registrationGlobal: { attempts, windowMs: 60_000 },
         },
-        body: body === undefined ? null : JSON.stringify(body),
       });
-      const payload = response.status === 204 ? null : await response.json();
-      return {
-        status: response.status,
-        body: payload,
-        cookie: response.headers.get("set-cookie")?.split(";", 1)[0] ?? "",
-        retryAfter: response.headers.get("retry-after"),
+      const extractionQueue = new ExtractionQueue(database.extractions, 1, 1_000);
+      const refreshService = new FeedRefreshService(
+        database.feeds,
+        new DefaultFeedSourceLoader((task) => database.feeds.runOutbound(task), 1_000),
+        1,
+      );
+      const app = await createApp({
+        ...createApplicationServices({
+          credentialCipher: null,
+          database,
+          extractionQueue,
+          refreshService,
+        }),
+        authService: auth,
+      });
+      const origin = (await app.listen({ host: "127.0.0.1", port: 0 })).replace(
+        "127.0.0.1",
+        "localhost",
+      );
+      cleanups.push(async () => {
+        await app.close();
+        await Promise.all([extractionQueue.stop(), refreshService.stop()]);
+      });
+      const request = async (method: string, route: string, body?: unknown, cookie?: string) => {
+        const response = await fetch(`${origin}${route}`, {
+          method,
+          headers: {
+            ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+            ...(cookie ? { cookie } : {}),
+          },
+          body: body === undefined ? null : JSON.stringify(body),
+        });
+        const payload = response.status === 204 ? null : await response.json();
+        return {
+          status: response.status,
+          body: payload,
+          cookie: response.headers.get("set-cookie")?.split(";", 1)[0] ?? "",
+          retryAfter: response.headers.get("retry-after"),
+        };
       };
-    };
-    return {
-      auth,
-      origin,
-      request,
-      register: (username: string, inviteCode?: string) =>
-        request("POST", "/api/auth/register", { username, password, inviteCode }),
-      create: (cookie = ownerCookie, replaceId?: string) =>
-        request("POST", "/api/auth/invitations", { replaceId }, cookie),
-      list: async (cookie = ownerCookie) =>
-        (await request("GET", "/api/auth/invitations", undefined, cookie))
-          .body as InvitationOverview,
-    };
+      return {
+        auth,
+        origin,
+        request,
+        register: (username: string, inviteCode?: string) =>
+          request("POST", "/api/auth/register", { username, password, inviteCode }),
+        create: (cookie = ownerCookie, replaceId?: string) =>
+          request("POST", "/api/auth/invitations", { replaceId }, cookie),
+        list: async (cookie = ownerCookie) =>
+          (await request("GET", "/api/auth/invitations", undefined, cookie))
+            .body as InvitationOverview,
+      };
+    },
+    ownerCookie,
+    owner,
   };
-  return { database, path, server, ownerCookie, owner };
 }
 
 describe("invitation registration through HTTP", () => {

@@ -7,16 +7,8 @@ import type {
   ArticleAiSummary,
   ArticleAiTranslation,
   ArticleMedia,
-  Feed,
-  FeedErrorKind,
   FeedPollIntervalMinutes,
   FeedSourceKind,
-  Folder,
-  FolderSortDirection,
-  Rule,
-  RuleAction,
-  RuleCondition,
-  RuleConditionOperator,
   WebFeedConfig,
 } from "../../shared/types.js";
 import { InvalidRequestError } from "../errors.js";
@@ -166,77 +158,6 @@ export function parseArticleMedia(value: unknown): ArticleMedia | null {
   return value === null ? null : (JSON.parse(String(value)) as ArticleMedia);
 }
 
-export function mapFolder(row: Row): Folder {
-  return {
-    id: Number(row.id),
-    parentId: row.parentId === null ? null : Number(row.parentId),
-    name: String(row.name),
-    position: Number(row.position),
-    sortDirection: row.sortDirection as FolderSortDirection,
-    unreadCount: Number(row.unreadCount),
-  };
-}
-
-export function mapFeed(row: Row): Feed {
-  return {
-    id: Number(row.id),
-    folderId: row.folderId === null ? null : Number(row.folderId),
-    title: String(row.title),
-    feedUrl: String(row.feedUrl),
-    siteUrl: row.siteUrl === null ? null : String(row.siteUrl),
-    sourceKind: row.sourceKind as FeedSourceKind,
-    lastErrorKind: row.lastErrorKind === null ? null : (row.lastErrorKind as FeedErrorKind),
-    lastMatchCount: row.lastMatchCount === null ? null : Number(row.lastMatchCount),
-    createdAt: String(row.createdAt),
-    pollIntervalMinutes: Number(row.pollIntervalMinutes),
-    unreadCount: Number(row.unreadCount),
-    totalCount: Number(row.totalCount),
-    paused: toBoolean(row.paused),
-    refreshing: toBoolean(row.refreshing),
-    lastPostAt: row.lastPostAt === null ? null : String(row.lastPostAt),
-    lastAttemptAt: row.lastAttemptAt === null ? null : String(row.lastAttemptAt),
-    lastSuccessAt: row.lastSuccessAt === null ? null : String(row.lastSuccessAt),
-    lastHttpStatus: row.lastHttpStatus === null ? null : Number(row.lastHttpStatus),
-    lastError: row.lastError === null ? null : String(row.lastError),
-    nextPollAt: row.nextPollAt === null ? null : String(row.nextPollAt),
-  };
-}
-
-export function mapFeedRecord(row: Row): FeedRecord {
-  const base: FeedRecordBase = {
-    id: Number(row.id),
-    title: String(row.title),
-    feedUrl: String(row.feedUrl),
-    siteUrl: row.siteUrl === null ? null : String(row.siteUrl),
-    etag: row.etag === null ? null : String(row.etag),
-    lastModified: row.lastModified === null ? null : String(row.lastModified),
-    pollIntervalMinutes: Number(row.pollIntervalMinutes) as FeedPollIntervalMinutes,
-  };
-  const sourceKind = row.sourceKind as FeedSourceKind;
-  if (sourceKind === "published") {
-    if (row.webConfigJson !== null) {
-      throw new Error(`Published feed ${base.id} unexpectedly has a web feed configuration`);
-    }
-    return {
-      ...base,
-      sourceKind,
-      webConfig: null,
-      selectionRevision: null,
-      lastMatchCount: null,
-    };
-  }
-  if (sourceKind !== "web" || row.webConfigJson === null) {
-    throw new Error(`Web feed ${base.id} is missing its page selection`);
-  }
-  return {
-    ...base,
-    sourceKind,
-    webConfig: JSON.parse(String(row.webConfigJson)) as WebFeedConfig,
-    selectionRevision: Number(row.selectionRevision),
-    lastMatchCount: Number(row.lastMatchCount),
-  };
-}
-
 export const feedRecordColumns = `feed_sources.id, feed_sources.title,
   feed_sources.feed_url AS feedUrl, feed_sources.site_url AS siteUrl,
   feed_sources.source_kind AS sourceKind,
@@ -324,22 +245,6 @@ export function mapStoredArticleAiTranslation(row: Row): StoredArticleAiTranslat
       outputTokens:
         row.aiTranslationOutputTokens === null ? null : Number(row.aiTranslationOutputTokens),
     },
-  };
-}
-
-export function mapRule(row: Row): Rule {
-  return {
-    id: Number(row.id),
-    name: String(row.name),
-    feedId: row.feedId === null ? null : Number(row.feedId),
-    folderId: row.folderId === null ? null : Number(row.folderId),
-    conditions: JSON.parse(String(row.conditionsJson)) as RuleCondition[],
-    conditionOperator: row.conditionOperator as RuleConditionOperator,
-    action: row.action as RuleAction,
-    enabled: toBoolean(row.enabled),
-    matchedCount: Number(row.matchedCount),
-    createdAt: String(row.createdAt),
-    updatedAt: String(row.updatedAt),
   };
 }
 

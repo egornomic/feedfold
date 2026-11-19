@@ -1,7 +1,11 @@
 import { randomBytes } from "node:crypto";
 import type { RankedWebFeedCandidate } from "./dom.js";
 
-function markCandidateElements(candidates: RankedWebFeedCandidate[]): void {
+export function createWebFeedSnapshot(
+  document: Document,
+  candidates: RankedWebFeedCandidate[],
+  messageToken: string,
+): string {
   for (const { candidate, elements } of candidates) {
     for (const element of elements) {
       const ids = new Set((element.getAttribute("data-feedfold-candidates") ?? "").split(/\s+/));
@@ -10,16 +14,89 @@ function markCandidateElements(candidates: RankedWebFeedCandidate[]): void {
       element.setAttribute("data-feedfold-candidates", [...ids].join(" "));
     }
   }
-}
 
-function safeSnapshotResource(element: Element, attributeName: string): boolean {
-  const value = element.getAttribute(attributeName);
-  if (!value) return false;
-  return /^(?:data|blob):/i.test(value);
-}
+  document
+    .querySelectorAll(
+      "script, noscript, iframe, frame, object, embed, template, video, audio, meta[http-equiv], base",
+    )
+    .forEach((element) => {
+      element.remove();
+    });
+  for (const link of document.querySelectorAll("link")) link.remove();
+  for (const element of document.querySelectorAll("*")) {
+    for (const attribute of [...element.attributes]) {
+      const name = attribute.name.toLowerCase();
+      if (name.startsWith("on") || name === "srcdoc" || name === "autofocus" || name === "nonce") {
+        element.removeAttribute(attribute.name);
+      }
+    }
+    element.removeAttribute("contenteditable");
+    element.removeAttribute("formaction");
+    element.removeAttribute("background");
+    element.removeAttribute("ping");
+    element.removeAttribute("xlink:href");
+    if (element.matches("a, area")) element.removeAttribute("href");
+    if (element.matches("form")) {
+      element.removeAttribute("action");
+      element.removeAttribute("method");
+    }
+    if (element.matches("button, input, select, textarea")) {
+      element.setAttribute("disabled", "");
+      element.setAttribute("tabindex", "-1");
+    }
+    if (element.hasAttribute("src") && !element.matches("img")) element.removeAttribute("src");
+    if (element.hasAttribute("href")) element.removeAttribute("href");
+    for (const attributeName of ["src", "href", "poster"] as const) {
+      const value = element.getAttribute(attributeName);
+      if (value !== null && !/^(?:data|blob):/i.test(value)) {
+        element.removeAttribute(attributeName);
+      }
+    }
+    for (const attributeName of ["srcset", "data-srcset"] as const) {
+      element.removeAttribute(attributeName);
+    }
+    element.removeAttribute("data-src");
+    element.removeAttribute("data-lazy-src");
+    element.removeAttribute("data-original");
+  }
 
-function pickerScript(messageToken: string): string {
-  return `(() => {
+  const head = document.head ?? document.documentElement.prepend(document.createElement("head"));
+  const nonce = randomBytes(18).toString("base64url");
+  const csp = document.createElement("meta");
+  csp.httpEquiv = "Content-Security-Policy";
+  csp.content = [
+    "default-src 'none'",
+    `script-src 'nonce-${nonce}'`,
+    "style-src 'unsafe-inline'",
+    "img-src data: blob:",
+    "font-src data:",
+    "connect-src 'none'",
+    "media-src 'none'",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "form-action 'none'",
+  ].join("; ");
+  head.prepend(csp);
+  const pickerStyle = document.createElement("style");
+  pickerStyle.textContent = `
+    [data-feedfold-candidates] {
+      cursor: pointer !important;
+      touch-action: pan-x pan-y pinch-zoom;
+    }
+    [data-feedfold-candidates]:focus-visible {
+      outline: 3px solid #2563eb !important;
+      outline-offset: 3px !important;
+    }
+    [data-feedfold-highlighted] {
+      outline: 3px solid #2563eb !important;
+      outline-offset: 3px !important;
+      background-color: color-mix(in srgb, #2563eb 12%, transparent) !important;
+    }
+  `;
+  head.append(pickerStyle);
+  const script = document.createElement("script");
+  script.setAttribute("nonce", nonce);
+  script.textContent = `(() => {
   const MESSAGE_TOKEN = ${JSON.stringify(messageToken)};
   const ITEM_SELECTOR = "[data-feedfold-candidates]";
   const INSTRUCTIONS_ID = "feedfold-picker-instructions";
@@ -133,99 +210,6 @@ function pickerScript(messageToken: string): string {
     next?.focus();
   }, true);
 })();`;
-}
-
-function sanitizeSnapshot(document: Document, messageToken: string): string {
-  document
-    .querySelectorAll(
-      "script, noscript, iframe, frame, object, embed, template, video, audio, meta[http-equiv], base",
-    )
-    .forEach((element) => {
-      element.remove();
-    });
-  for (const link of document.querySelectorAll("link")) link.remove();
-  for (const element of document.querySelectorAll("*")) {
-    for (const attribute of [...element.attributes]) {
-      const name = attribute.name.toLowerCase();
-      if (name.startsWith("on") || name === "srcdoc" || name === "autofocus" || name === "nonce") {
-        element.removeAttribute(attribute.name);
-      }
-    }
-    element.removeAttribute("contenteditable");
-    element.removeAttribute("formaction");
-    element.removeAttribute("background");
-    element.removeAttribute("ping");
-    element.removeAttribute("xlink:href");
-    if (element.matches("a, area")) element.removeAttribute("href");
-    if (element.matches("form")) {
-      element.removeAttribute("action");
-      element.removeAttribute("method");
-    }
-    if (element.matches("button, input, select, textarea")) {
-      element.setAttribute("disabled", "");
-      element.setAttribute("tabindex", "-1");
-    }
-    if (element.hasAttribute("src") && !element.matches("img")) element.removeAttribute("src");
-    if (element.hasAttribute("href")) element.removeAttribute("href");
-    for (const attributeName of ["src", "href", "poster"] as const) {
-      if (element.hasAttribute(attributeName) && !safeSnapshotResource(element, attributeName)) {
-        element.removeAttribute(attributeName);
-      }
-    }
-    for (const attributeName of ["srcset", "data-srcset"] as const) {
-      element.removeAttribute(attributeName);
-    }
-    element.removeAttribute("data-src");
-    element.removeAttribute("data-lazy-src");
-    element.removeAttribute("data-original");
-  }
-
-  const head = document.head ?? document.documentElement.prepend(document.createElement("head"));
-  const nonce = randomBytes(18).toString("base64url");
-  const csp = document.createElement("meta");
-  csp.httpEquiv = "Content-Security-Policy";
-  csp.content = [
-    "default-src 'none'",
-    `script-src 'nonce-${nonce}'`,
-    "style-src 'unsafe-inline'",
-    "img-src data: blob:",
-    "font-src data:",
-    "connect-src 'none'",
-    "media-src 'none'",
-    "frame-src 'none'",
-    "object-src 'none'",
-    "form-action 'none'",
-  ].join("; ");
-  head.prepend(csp);
-  const pickerStyle = document.createElement("style");
-  pickerStyle.textContent = `
-    [data-feedfold-candidates] {
-      cursor: pointer !important;
-      touch-action: pan-x pan-y pinch-zoom;
-    }
-    [data-feedfold-candidates]:focus-visible {
-      outline: 3px solid #2563eb !important;
-      outline-offset: 3px !important;
-    }
-    [data-feedfold-highlighted] {
-      outline: 3px solid #2563eb !important;
-      outline-offset: 3px !important;
-      background-color: color-mix(in srgb, #2563eb 12%, transparent) !important;
-    }
-  `;
-  head.append(pickerStyle);
-  const script = document.createElement("script");
-  script.setAttribute("nonce", nonce);
-  script.textContent = pickerScript(messageToken);
   document.body?.append(script);
   return `<!doctype html>\n${document.documentElement.outerHTML}`;
-}
-
-export function createWebFeedSnapshot(
-  document: Document,
-  candidates: RankedWebFeedCandidate[],
-  messageToken: string,
-): string {
-  markCandidateElements(candidates);
-  return sanitizeSnapshot(document, messageToken);
 }

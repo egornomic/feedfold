@@ -72,15 +72,11 @@ export function isBlockedNetworkAddress(address: string): boolean {
   return true;
 }
 
-function normalizedHostname(value: string): string {
-  return value
+export async function resolvePublicAddress(hostnameInput: string): Promise<PinnedAddress> {
+  const hostname = hostnameInput
     .replace(/^\[|\]$/g, "")
     .toLowerCase()
     .replace(/\.$/, "");
-}
-
-export async function resolvePublicAddress(hostnameInput: string): Promise<PinnedAddress> {
-  const hostname = normalizedHostname(hostnameInput);
   if (
     !hostname ||
     hostname === "localhost" ||
@@ -159,21 +155,6 @@ function proxyError(response: ServerResponse): void {
   }
   response.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
   response.end("Public target unavailable");
-}
-
-function proxyAuthority(value: string | undefined): { hostname: string; port: number } {
-  if (!value) throw new PublicNetworkError("The proxy target is missing.", "inaccessible");
-  let url: URL;
-  try {
-    url = new URL(`http://${value}`);
-  } catch {
-    throw new PublicNetworkError("The proxy target is invalid.", "inaccessible");
-  }
-  const port = url.port ? Number(url.port) : 443;
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new PublicNetworkError("The proxy target port is invalid.", "inaccessible");
-  }
-  return { hostname: url.hostname, port };
 }
 
 export type PublicAddressResolver = (hostname: string) => Promise<PinnedAddress>;
@@ -260,8 +241,19 @@ export class PinnedPublicProxy {
     let upstreamSocket: Socket | undefined;
     client.once("error", () => upstreamSocket?.destroy());
     try {
-      const { hostname, port } = proxyAuthority(request.url);
-      const pinned = await this.resolveAddress(hostname);
+      const authority = request.url;
+      if (!authority) throw new PublicNetworkError("The proxy target is missing.", "inaccessible");
+      let target: URL;
+      try {
+        target = new URL(`http://${authority}`);
+      } catch {
+        throw new PublicNetworkError("The proxy target is invalid.", "inaccessible");
+      }
+      const port = target.port ? Number(target.port) : 443;
+      if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+        throw new PublicNetworkError("The proxy target port is invalid.", "inaccessible");
+      }
+      const pinned = await this.resolveAddress(target.hostname);
       const upstream = connectTcp({
         family: pinned.family,
         host: pinned.address,

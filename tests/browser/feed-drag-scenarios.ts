@@ -96,18 +96,29 @@ async function setup(surface: Surface, touch: boolean, duplicateNames = false) {
   const source = () =>
     scope.locator(surface === "sidebar" ? ".feed-nav-item" : ".folder-feed-drag-region");
   await source().scrollIntoViewIfNeeded();
-  const target = (destination: Folder | null) =>
-    destination
-      ? surface === "sidebar"
-        ? scope.locator(`[data-management-folder-id="${destination.id}"]`)
-        : scope.getByRole("group", {
-            name: `${destination === nested ? `${second.name} / ` : ""}${destination.name} folder`,
-            exact: true,
-          })
-      : scope.locator(
-          surface === "sidebar" ? ".sidebar-top-level-drop" : ".folder-management-row.is-top-level",
-        );
-  return { context, page, scope, source, target, feed, first, second, nested };
+  return {
+    context,
+    page,
+    scope,
+    source,
+    target: (destination: Folder | null) =>
+      destination
+        ? surface === "sidebar"
+          ? scope.locator(`[data-management-folder-id="${destination.id}"]`)
+          : scope.getByRole("group", {
+              name: `${destination === nested ? `${second.name} / ` : ""}${destination.name} folder`,
+              exact: true,
+            })
+        : scope.locator(
+            surface === "sidebar"
+              ? ".sidebar-top-level-drop"
+              : ".folder-management-row.is-top-level",
+          ),
+    feed,
+    first,
+    second,
+    nested,
+  };
 }
 
 async function location(context: BrowserContext, feed: Feed) {

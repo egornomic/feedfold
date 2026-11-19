@@ -71,41 +71,6 @@ function resolvedHttpUrl(value: string, baseUrl: string): string | null {
   }
 }
 
-function feedCandidates(source: string, pageUrl: string): string[] {
-  const candidates: string[] = [];
-  const seen = new Set([new URL(pageUrl).toString()]);
-  const add = (value: string | null): void => {
-    if (!value || seen.has(value)) return;
-    seen.add(value);
-    candidates.push(value);
-  };
-  add(githubFeedUrl(pageUrl));
-  const dom = new JSDOM(source, { url: pageUrl });
-  try {
-    for (const link of dom.window.document.querySelectorAll<HTMLLinkElement>(
-      'link[rel~="alternate"][href]',
-    )) {
-      const [type = ""] = link.type.split(";", 1);
-      if (
-        !FEED_MIME_TYPES.has(type.trim().toLowerCase()) &&
-        !isFeedReference(`${link.title} ${link.href}`)
-      )
-        continue;
-      add(resolvedHttpUrl(link.getAttribute("href") ?? "", pageUrl));
-    }
-    for (const link of dom.window.document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
-      const href = link.getAttribute("href") ?? "";
-      if (!isFeedReference(`${link.textContent ?? ""} ${href}`)) continue;
-      add(resolvedHttpUrl(href, pageUrl));
-    }
-  } finally {
-    dom.window.close();
-  }
-  const origin = new URL(pageUrl).origin;
-  for (const path of COMMON_FEED_PATHS) add(new URL(path, origin).toString());
-  return candidates;
-}
-
 async function fetchSource(
   url: string,
   signal: AbortSignal,
@@ -164,24 +129,6 @@ async function fetchSource(
   }
 }
 
-function pageTitle(source: string, pageUrl: string): string {
-  const dom = new JSDOM(source, { url: pageUrl });
-  try {
-    return (
-      dom.window.document.title.trim() || new URL(pageUrl).hostname.replace(/^www\./, "") || pageUrl
-    );
-  } finally {
-    dom.window.close();
-  }
-}
-
-function isHtmlPage(contentType: string | null, source: string): boolean {
-  const type = contentType?.split(";", 1)[0]?.trim().toLowerCase();
-  if (type === "text/html" || type === "application/xhtml+xml") return true;
-  if (type && type !== "text/plain" && type !== "application/octet-stream") return false;
-  return /<!doctype\s+html|<html[\s>]|<body[\s>]/i.test(source);
-}
-
 export async function discoverFeed(
   inputUrl: string,
   timeoutMs = 15_000,
@@ -229,23 +176,69 @@ export async function discoverFeed(
   const direct = parsePreview(page.source, page.url);
   if (direct) return { kind: "published", preview: direct };
 
-  for (const candidate of feedCandidates(page.source, page.url)) {
+  const candidates: string[] = [];
+  const seen = new Set([new URL(page.url).toString()]);
+  const add = (value: string | null): void => {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    candidates.push(value);
+  };
+  add(githubFeedUrl(page.url));
+  const dom = new JSDOM(page.source, { url: page.url });
+  try {
+    for (const link of dom.window.document.querySelectorAll<HTMLLinkElement>(
+      'link[rel~="alternate"][href]',
+    )) {
+      const [type = ""] = link.type.split(";", 1);
+      if (
+        !FEED_MIME_TYPES.has(type.trim().toLowerCase()) &&
+        !isFeedReference(`${link.title} ${link.href}`)
+      )
+        continue;
+      add(resolvedHttpUrl(link.getAttribute("href") ?? "", page.url));
+    }
+    for (const link of dom.window.document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+      const href = link.getAttribute("href") ?? "";
+      if (!isFeedReference(`${link.textContent ?? ""} ${href}`)) continue;
+      add(resolvedHttpUrl(href, page.url));
+    }
+  } finally {
+    dom.window.close();
+  }
+  const origin = new URL(page.url).origin;
+  for (const path of COMMON_FEED_PATHS) add(new URL(path, origin).toString());
+
+  for (const candidate of candidates) {
     const result = await fetchSource(candidate, signal, false, fetcher, runOutbound);
     if (!result) continue;
     const found = parsePreview(result.source, result.url);
     if (found) return { kind: "published", preview: found };
   }
 
-  if (!isHtmlPage(page.contentType, page.source)) {
+  const contentType = page.contentType?.split(";", 1)[0]?.trim().toLowerCase();
+  const isHtml =
+    contentType === "text/html" ||
+    contentType === "application/xhtml+xml" ||
+    ((!contentType || contentType === "text/plain" || contentType === "application/octet-stream") &&
+      /<!doctype\s+html|<html[\s>]|<body[\s>]/i.test(page.source));
+  if (!isHtml) {
     throw new FeedDiscoveryError(
       "This address is not an HTML page, RSS feed, Atom feed, or JSON Feed.",
       "unsupported_content",
     );
   }
 
-  return {
-    kind: "web_page",
-    pageUrl: page.url,
-    title: pageTitle(page.source, page.url),
-  };
+  const htmlPage = new JSDOM(page.source, { url: page.url });
+  try {
+    return {
+      kind: "web_page",
+      pageUrl: page.url,
+      title:
+        htmlPage.window.document.title.trim() ||
+        new URL(page.url).hostname.replace(/^www\./, "") ||
+        page.url,
+    };
+  } finally {
+    htmlPage.window.close();
+  }
 }

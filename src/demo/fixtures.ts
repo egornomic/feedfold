@@ -46,20 +46,16 @@ function before(now: Date, hours: number): string {
   return new Date(now.getTime() - hours * 60 * 60 * 1_000).toISOString();
 }
 
-function slug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 function createFeed(
   id: number,
   title: string,
   createdAt: string,
   options: DemoFeedOptions = {},
 ): Feed {
-  const feedSlug = slug(title);
+  const feedSlug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   return {
     id,
     folderId: options.folderId ?? null,
@@ -81,54 +77,6 @@ function createFeed(
     lastHttpStatus: 200,
     lastError: null,
     nextPollAt: null,
-  };
-}
-
-function createArticle(spec: DemoArticleSpec, feed: Feed, now: Date): Article {
-  const publishedAt =
-    spec.publishedAt === undefined ? before(now, spec.hoursAgo) : spec.publishedAt;
-  const contentHtml =
-    spec.contentHtml ??
-    [
-      `<p>${spec.summary}</p>`,
-      `<h2>${spec.section}</h2>`,
-      ...spec.paragraphs.map((paragraph) => `<p>${paragraph}</p>`),
-    ].join("");
-
-  return {
-    id: spec.id,
-    feedId: feed.id,
-    feedTitle: feed.title,
-    feedSourceKind: feed.sourceKind,
-    folderId: feed.folderId,
-    title: spec.title,
-    url: spec.url ?? null,
-    author: spec.author,
-    publishedAt,
-    discoveredAt: publishedAt,
-    summary: spec.summary,
-    imageUrl: spec.imageUrl ?? null,
-    media: null,
-    feedContentHtml: contentHtml,
-    contentHtml,
-    contentSource: spec.contentHtml === undefined ? "article" : "feed",
-    extractionStatus: "complete",
-    extractionError: null,
-    aiSummary:
-      spec.id === 1
-        ? {
-            text: "A calmer reading habit comes from narrowing inputs, making progress visible, and letting completed items leave the queue.",
-            promptId: null,
-            provider: "openai",
-            model: "demo",
-            sourceKind: "full",
-            generatedAt: new Date(Date.parse(publishedAt) + 6 * 60 * 1_000).toISOString(),
-            usage: { inputTokens: null, outputTokens: null },
-            grounding: null,
-          }
-        : null,
-    isRead: spec.isRead ?? false,
-    isSaved: spec.isSaved ?? false,
   };
 }
 
@@ -461,10 +409,54 @@ export function createDemoData(now = new Date()): DemoData {
       isRead: true,
     },
   ];
-  const articles = articleSpecs.map((spec) => {
+  const articles = articleSpecs.map((spec): Article => {
     const feed = feedsById.get(spec.feedId);
     if (!feed) throw new Error(`Demo feed ${spec.feedId} is missing.`);
-    return createArticle(spec, feed, now);
+    const publishedAt =
+      spec.publishedAt === undefined ? before(now, spec.hoursAgo) : spec.publishedAt;
+    const contentHtml =
+      spec.contentHtml ??
+      [
+        `<p>${spec.summary}</p>`,
+        `<h2>${spec.section}</h2>`,
+        ...spec.paragraphs.map((paragraph) => `<p>${paragraph}</p>`),
+      ].join("");
+
+    return {
+      id: spec.id,
+      feedId: feed.id,
+      feedTitle: feed.title,
+      feedSourceKind: feed.sourceKind,
+      folderId: feed.folderId,
+      title: spec.title,
+      url: spec.url ?? null,
+      author: spec.author,
+      publishedAt,
+      discoveredAt: publishedAt,
+      summary: spec.summary,
+      imageUrl: spec.imageUrl ?? null,
+      media: null,
+      feedContentHtml: contentHtml,
+      contentHtml,
+      contentSource: spec.contentHtml === undefined ? "article" : "feed",
+      extractionStatus: "complete",
+      extractionError: null,
+      aiSummary:
+        spec.id === 1
+          ? {
+              text: "A calmer reading habit comes from narrowing inputs, making progress visible, and letting completed items leave the queue.",
+              promptId: null,
+              provider: "openai",
+              model: "demo",
+              sourceKind: "full",
+              generatedAt: new Date(Date.parse(publishedAt) + 6 * 60 * 1_000).toISOString(),
+              usage: { inputTokens: null, outputTokens: null },
+              grounding: null,
+            }
+          : null,
+      isRead: spec.isRead ?? false,
+      isSaved: spec.isSaved ?? false,
+    };
   });
 
   const settings: AppSettings = {

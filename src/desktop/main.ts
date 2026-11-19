@@ -278,38 +278,6 @@ async function invoke(request: UntrustedApiRequest): Promise<DesktopResponse> {
   }
 }
 
-function registerIpc(): void {
-  ipcMain.handle("feedfold:invoke", async (event, request: unknown) => {
-    if (!trustedIpcSender(event)) {
-      return errorResponse(new ApplicationApiError(403, "This request is not allowed."));
-    }
-    if (!validUntrustedApiRequest(request)) {
-      return errorResponse(new ApplicationApiError(400, "The desktop request is invalid."));
-    }
-    return invoke(request);
-  });
-
-  ipcMain.handle("feedfold:export-opml", async (event) => {
-    if (!trustedIpcSender(event)) {
-      return errorResponse(new ApplicationApiError(403, "This request is not allowed."));
-    }
-    const response = await invoke({ operation: "exportOpml" });
-    if (!response.ok || typeof response.value !== "string") return response;
-    const options = {
-      title: "Export subscriptions",
-      defaultPath: "feedfold-subscriptions.opml",
-      filters: [{ name: "OPML", extensions: ["opml", "xml"] }],
-    };
-    const result = mainWindow
-      ? await dialog.showSaveDialog(mainWindow, options)
-      : await dialog.showSaveDialog(options);
-    if (!result.canceled && result.filePath) {
-      await writeFile(result.filePath, response.value, "utf8");
-    }
-    return { ok: true, value: undefined } satisfies DesktopResponse;
-  });
-}
-
 const contentTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -394,62 +362,6 @@ function safeClientPath(clientRoot: string, pathname: string): string | null {
   return candidate;
 }
 
-async function registerApplicationProtocol(): Promise<void> {
-  const clientRoot = join(app.getAppPath(), "dist", "client");
-  await protocol.handle("feedfold", async (request) => {
-    try {
-      const url = new URL(request.url);
-      if (url.host !== "app") return new Response("Not found", { status: 404 });
-      const resource = await applicationResource(url.pathname, request);
-      if (resource) return resource;
-
-      const requestedPath = safeClientPath(clientRoot, decodeURIComponent(url.pathname));
-      if (!requestedPath) return new Response("Not found", { status: 404 });
-      let path = requestedPath;
-      try {
-        const body = await readFile(path);
-        return new Response(body, {
-          headers: {
-            "Content-Type": contentTypes[extname(path)] ?? "application/octet-stream",
-            "Content-Security-Policy": appCsp,
-            "X-Content-Type-Options": "nosniff",
-          },
-        });
-      } catch {
-        if (extname(path)) return new Response("Not found", { status: 404 });
-        path = join(clientRoot, "index.html");
-        return htmlResponse(await readFile(path, "utf8"), appCsp);
-      }
-    } catch {
-      console.error("feedfold desktop resource request failed");
-      return new Response("Could not load feedfold", { status: 500 });
-    }
-  });
-}
-
-function installMenu(): void {
-  app.setAboutPanelOptions({ applicationName: PRODUCT_NAME });
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
-        label: PRODUCT_NAME,
-        submenu: [
-          { label: `About ${PRODUCT_NAME}`, role: "about" },
-          { type: "separator" },
-          { label: `Hide ${PRODUCT_NAME}`, role: "hide" },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          { label: `Quit ${PRODUCT_NAME}`, role: "quit" },
-        ],
-      },
-      { role: "editMenu" },
-      { role: "viewMenu" },
-      { role: "windowMenu" },
-    ]),
-  );
-}
-
 async function createWindow(): Promise<void> {
   await flushWindowState?.();
   const savedState = await readWindowState();
@@ -527,15 +439,6 @@ async function createWindow(): Promise<void> {
   }
 }
 
-async function start(): Promise<void> {
-  runtime = createDesktopRuntime();
-  runtime.start();
-  registerIpc();
-  await registerApplicationProtocol();
-  installMenu();
-  await createWindow();
-}
-
 const hasInstanceLock = app.requestSingleInstanceLock();
 if (!hasInstanceLock) {
   app.quit();
@@ -567,7 +470,90 @@ if (!hasInstanceLock) {
   });
   app
     .whenReady()
-    .then(start)
+    .then(async () => {
+      runtime = createDesktopRuntime();
+      runtime.start();
+      ipcMain.handle("feedfold:invoke", async (event, request: unknown) => {
+        if (!trustedIpcSender(event)) {
+          return errorResponse(new ApplicationApiError(403, "This request is not allowed."));
+        }
+        if (!validUntrustedApiRequest(request)) {
+          return errorResponse(new ApplicationApiError(400, "The desktop request is invalid."));
+        }
+        return invoke(request);
+      });
+
+      ipcMain.handle("feedfold:export-opml", async (event) => {
+        if (!trustedIpcSender(event)) {
+          return errorResponse(new ApplicationApiError(403, "This request is not allowed."));
+        }
+        const response = await invoke({ operation: "exportOpml" });
+        if (!response.ok || typeof response.value !== "string") return response;
+        const options = {
+          title: "Export subscriptions",
+          defaultPath: "feedfold-subscriptions.opml",
+          filters: [{ name: "OPML", extensions: ["opml", "xml"] }],
+        };
+        const result = mainWindow
+          ? await dialog.showSaveDialog(mainWindow, options)
+          : await dialog.showSaveDialog(options);
+        if (!result.canceled && result.filePath) {
+          await writeFile(result.filePath, response.value, "utf8");
+        }
+        return { ok: true, value: undefined } satisfies DesktopResponse;
+      });
+      const clientRoot = join(app.getAppPath(), "dist", "client");
+      await protocol.handle("feedfold", async (request) => {
+        try {
+          const url = new URL(request.url);
+          if (url.host !== "app") return new Response("Not found", { status: 404 });
+          const resource = await applicationResource(url.pathname, request);
+          if (resource) return resource;
+
+          const requestedPath = safeClientPath(clientRoot, decodeURIComponent(url.pathname));
+          if (!requestedPath) return new Response("Not found", { status: 404 });
+          let path = requestedPath;
+          try {
+            const body = await readFile(path);
+            return new Response(body, {
+              headers: {
+                "Content-Type": contentTypes[extname(path)] ?? "application/octet-stream",
+                "Content-Security-Policy": appCsp,
+                "X-Content-Type-Options": "nosniff",
+              },
+            });
+          } catch {
+            if (extname(path)) return new Response("Not found", { status: 404 });
+            path = join(clientRoot, "index.html");
+            return htmlResponse(await readFile(path, "utf8"), appCsp);
+          }
+        } catch {
+          console.error("feedfold desktop resource request failed");
+          return new Response("Could not load feedfold", { status: 500 });
+        }
+      });
+      app.setAboutPanelOptions({ applicationName: PRODUCT_NAME });
+      Menu.setApplicationMenu(
+        Menu.buildFromTemplate([
+          {
+            label: PRODUCT_NAME,
+            submenu: [
+              { label: `About ${PRODUCT_NAME}`, role: "about" },
+              { type: "separator" },
+              { label: `Hide ${PRODUCT_NAME}`, role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { label: `Quit ${PRODUCT_NAME}`, role: "quit" },
+            ],
+          },
+          { role: "editMenu" },
+          { role: "viewMenu" },
+          { role: "windowMenu" },
+        ]),
+      );
+      await createWindow();
+    })
     .catch((error) => {
       console.error("feedfold desktop startup failed");
       dialog.showErrorBox(

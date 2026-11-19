@@ -51,43 +51,20 @@ function date(value: unknown): string | null {
   return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
-function number(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
+export function plainText(value: string | null): string {
+  if (!value) return "";
+  return sanitizeHtml(
+    value.replace(/<br\b[^>]*>/gi, "\n").replace(/<\/(?:p|div|li|h[1-6]|blockquote|tr)>/gi, "\n\n"),
+    { allowedTags: [], allowedAttributes: {} },
+  )
 
-function decodeTextEntities(value: string): string {
-  return value
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">")
     .replaceAll("&quot;", '"')
     .replaceAll("&#39;", "'")
-    .replaceAll("&amp;", "&");
-}
-
-function structuredPlainText(value: string | null): string {
-  if (!value) return "";
-  const text = sanitizeHtml(
-    value.replace(/<br\b[^>]*>/gi, "\n").replace(/<\/(?:p|div|li|h[1-6]|blockquote|tr)>/gi, "\n\n"),
-    { allowedTags: [], allowedAttributes: {} },
-  )
-    .replace(/[^\S\r\n]+/g, " ")
-    .replace(/ *\n */g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
+    .replaceAll("&amp;", "&")
+    .replace(/\s+/g, " ")
     .trim();
-  return decodeTextEntities(text);
-}
-
-export function plainText(value: string | null): string {
-  return structuredPlainText(value).replace(/\s+/g, " ").trim();
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
 }
 
 function fallbackId(parts: Array<string | null>): string {
@@ -101,53 +78,6 @@ function authorNames(value: unknown): string | null {
   return names.length ? names.join(", ") : null;
 }
 
-function normalizeRss(feed: UnknownRecord, feedUrl: string): ParsedFeed {
-  const title = string(feed.title) ?? feedUrl;
-  const siteUrl = url(feed.link, feedUrl);
-  const titlesArePostText = xFeedUrl(feedUrl) !== null;
-  const articles = records(feed.items).map((item): ParsedArticle => {
-    const dc = record(item.dc);
-    const content = record(item.content);
-    const itemUrl = url(item.link, siteUrl ?? feedUrl);
-    const publishedAt = date(item.pubDate) ?? date(firstString(dc.dates)) ?? date(dc.date);
-    const feedContentHtml =
-      string(content.encoded) ??
-      string(item.description) ??
-      firstString(dc.descriptions) ??
-      string(dc.description);
-    const summaryHtml =
-      string(item.description) ??
-      firstString(dc.descriptions) ??
-      string(dc.description) ??
-      feedContentHtml;
-    const guid = nestedString(item.guid, "value");
-    const itemTitle = titlesArePostText ? "" : (string(item.title) ?? "");
-    const rawAuthors = Array.isArray(item.authors) ? item.authors : [];
-    const authors = rawAuthors
-      .map((author) => (typeof author === "string" ? string(author) : nestedString(author, "name")))
-      .filter((author): author is string => author !== null);
-    const author = authors.join(", ") || firstString(dc.creators) || string(dc.creator);
-    return {
-      externalId: guid ?? itemUrl ?? fallbackId([itemTitle, publishedAt, summaryHtml]),
-      title: itemTitle,
-      url: itemUrl,
-      author,
-      publishedAt,
-      summary: plainText(summaryHtml).slice(0, 1_000),
-      imageUrl: firstSafeImageUrl(feedContentHtml, itemUrl ?? siteUrl ?? feedUrl),
-      feedContentHtml,
-    };
-  });
-  return {
-    title,
-    siteUrl,
-    articles,
-    ...(typeof feed.ttl === "number" ? { ttl: feed.ttl } : {}),
-    ...(Array.isArray(feed.skipHours) ? { skipHours: feed.skipHours as number[] } : {}),
-    ...(Array.isArray(feed.skipDays) ? { skipDays: feed.skipDays as string[] } : {}),
-  };
-}
-
 function preferredAtomLink(links: unknown, baseUrl: string): string | null {
   const candidates = records(links);
   const preferred =
@@ -157,105 +87,6 @@ function preferredAtomLink(links: unknown, baseUrl: string): string | null {
     candidates.find((link) => !string(link.rel) || string(link.rel) === "alternate") ??
     candidates[0];
   return preferred ? url(preferred.href, baseUrl) : null;
-}
-
-function normalizeAtom(feed: UnknownRecord, feedUrl: string): ParsedFeed {
-  const title = string(feed.title) ?? feedUrl;
-  const siteUrl = preferredAtomLink(feed.links, feedUrl);
-  const feedAuthors = authorNames(feed.authors);
-  const articles = records(feed.entries).map((entry): ParsedArticle => {
-    const itemUrl = preferredAtomLink(entry.links, siteUrl ?? feedUrl);
-    const publishedAt = date(entry.published) ?? date(entry.updated);
-    const mediaGroup = record(record(entry.media).group);
-    const mediaDescription = nestedString(mediaGroup.description, "value");
-    const feedContentHtml = string(entry.content) ?? string(entry.summary);
-    const summaryHtml = string(entry.summary) ?? mediaDescription ?? feedContentHtml;
-    const itemTitle = string(entry.title) ?? nestedString(mediaGroup.title, "value") ?? "";
-    const thumbnail = records(mediaGroup.thumbnails)[0];
-    const community = record(mediaGroup.community);
-    const media = youtubeMediaFromUrl(itemUrl, {
-      videoId: nestedString(entry.yt, "videoId"),
-      thumbnailUrl: thumbnail ? url(thumbnail.url, itemUrl ?? siteUrl ?? feedUrl) : null,
-      viewCount: number(record(community.statistics).views),
-    });
-    return {
-      externalId: string(entry.id) ?? itemUrl ?? fallbackId([itemTitle, publishedAt, summaryHtml]),
-      title: itemTitle,
-      url: itemUrl,
-      author: authorNames(entry.authors) ?? feedAuthors,
-      publishedAt,
-      summary: plainText(summaryHtml).slice(0, 1_000),
-      imageUrl:
-        media?.thumbnailUrl ?? firstSafeImageUrl(feedContentHtml, itemUrl ?? siteUrl ?? feedUrl),
-      media,
-      feedContentHtml,
-    };
-  });
-  return { title, siteUrl, articles };
-}
-
-function normalizeJson(feed: UnknownRecord, feedUrl: string): ParsedFeed {
-  const title = string(feed.title) ?? feedUrl;
-  const siteUrl = url(feed.home_page_url, feedUrl);
-  const feedAuthors = authorNames(feed.authors);
-  const articles = records(feed.items).map((item): ParsedArticle => {
-    const itemUrl = url(item.url, siteUrl ?? feedUrl) ?? url(item.external_url, siteUrl ?? feedUrl);
-    const publishedAt = date(item.date_published) ?? date(item.date_modified);
-    const contentText = string(item.content_text);
-    const contentHtml = string(item.content_html);
-    const feedContentHtml =
-      contentHtml ??
-      (contentText ? `<p>${escapeHtml(contentText).replaceAll("\n", "<br>")}</p>` : null);
-    const summary = string(item.summary) ?? contentText ?? contentHtml;
-    const itemTitle = string(item.title) ?? "";
-    return {
-      externalId: string(item.id) ?? itemUrl ?? fallbackId([itemTitle, publishedAt, summary]),
-      title: itemTitle,
-      url: itemUrl,
-      author: authorNames(item.authors) ?? feedAuthors,
-      publishedAt,
-      summary: plainText(summary).slice(0, 1_000),
-      imageUrl: firstSafeImageUrl(feedContentHtml, itemUrl ?? siteUrl ?? feedUrl),
-      feedContentHtml,
-    };
-  });
-  return { title, siteUrl, articles };
-}
-
-function normalizeRdf(feed: UnknownRecord, feedUrl: string): ParsedFeed {
-  const title = string(feed.title) ?? feedUrl;
-  const siteUrl = url(feed.link, feedUrl);
-  const articles = records(feed.items).map((item): ParsedArticle => {
-    const dc = record(item.dc);
-    const content = record(item.content);
-    const itemUrl = url(item.link, siteUrl ?? feedUrl);
-    const feedContentHtml =
-      string(content.encoded) ??
-      string(item.description) ??
-      firstString(dc.descriptions) ??
-      string(dc.description);
-    const summaryHtml =
-      string(item.description) ??
-      firstString(dc.descriptions) ??
-      string(dc.description) ??
-      feedContentHtml;
-    const publishedAt = date(firstString(dc.dates)) ?? date(dc.date);
-    const itemTitle = string(item.title) ?? "";
-    return {
-      externalId:
-        nestedString(item.rdf, "about") ??
-        itemUrl ??
-        fallbackId([itemTitle, publishedAt, summaryHtml]),
-      title: itemTitle,
-      url: itemUrl,
-      author: firstString(dc.creators) ?? string(dc.creator),
-      publishedAt,
-      summary: plainText(summaryHtml).slice(0, 1_000),
-      imageUrl: firstSafeImageUrl(feedContentHtml, itemUrl ?? siteUrl ?? feedUrl),
-      feedContentHtml,
-    };
-  });
-  return { title, siteUrl, articles };
 }
 
 export function parseAndNormalizeWordPressPosts(
@@ -292,7 +123,80 @@ export function parseAndNormalizeWordPressPosts(
 export function parseAndNormalizeFeed(source: string, feedUrl: string): ParsedFeed {
   const parsed = parseFeed(source);
   const feed = record(parsed.feed);
-  if (parsed.format === "rss") {
+  if (parsed.format === "atom") {
+    const title = string(feed.title) ?? feedUrl;
+    const siteUrl = preferredAtomLink(feed.links, feedUrl);
+    const feedAuthors = authorNames(feed.authors);
+    const articles = records(feed.entries).map((entry): ParsedArticle => {
+      const itemUrl = preferredAtomLink(entry.links, siteUrl ?? feedUrl);
+      const publishedAt = date(entry.published) ?? date(entry.updated);
+      const mediaGroup = record(record(entry.media).group);
+      const mediaDescription = nestedString(mediaGroup.description, "value");
+      const feedContentHtml = string(entry.content) ?? string(entry.summary);
+      const summaryHtml = string(entry.summary) ?? mediaDescription ?? feedContentHtml;
+      const itemTitle = string(entry.title) ?? nestedString(mediaGroup.title, "value") ?? "";
+      const thumbnail = records(mediaGroup.thumbnails)[0];
+      const community = record(mediaGroup.community);
+      const views = record(community.statistics).views;
+      const media = youtubeMediaFromUrl(itemUrl, {
+        videoId: nestedString(entry.yt, "videoId"),
+        thumbnailUrl: thumbnail ? url(thumbnail.url, itemUrl ?? siteUrl ?? feedUrl) : null,
+        viewCount: typeof views === "number" && Number.isFinite(views) ? views : null,
+      });
+      return {
+        externalId:
+          string(entry.id) ?? itemUrl ?? fallbackId([itemTitle, publishedAt, summaryHtml]),
+        title: itemTitle,
+        url: itemUrl,
+        author: authorNames(entry.authors) ?? feedAuthors,
+        publishedAt,
+        summary: plainText(summaryHtml).slice(0, 1_000),
+        imageUrl:
+          media?.thumbnailUrl ?? firstSafeImageUrl(feedContentHtml, itemUrl ?? siteUrl ?? feedUrl),
+        media,
+        feedContentHtml,
+      };
+    });
+    return { title, siteUrl, articles };
+  }
+  if (parsed.format === "json") {
+    const title = string(feed.title) ?? feedUrl;
+    const siteUrl = url(feed.home_page_url, feedUrl);
+    const feedAuthors = authorNames(feed.authors);
+    const articles = records(feed.items).map((item): ParsedArticle => {
+      const itemUrl =
+        url(item.url, siteUrl ?? feedUrl) ?? url(item.external_url, siteUrl ?? feedUrl);
+      const publishedAt = date(item.date_published) ?? date(item.date_modified);
+      const contentText = string(item.content_text);
+      const contentHtml = string(item.content_html);
+      const feedContentHtml =
+        contentHtml ??
+        (contentText
+          ? `<p>${contentText
+              .replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;")
+              .replaceAll('"', "&quot;")
+              .replaceAll("'", "&#39;")
+              .replaceAll("\n", "<br>")}</p>`
+          : null);
+      const summary = string(item.summary) ?? contentText ?? contentHtml;
+      const itemTitle = string(item.title) ?? "";
+      return {
+        externalId: string(item.id) ?? itemUrl ?? fallbackId([itemTitle, publishedAt, summary]),
+        title: itemTitle,
+        url: itemUrl,
+        author: authorNames(item.authors) ?? feedAuthors,
+        publishedAt,
+        summary: plainText(summary).slice(0, 1_000),
+        imageUrl: firstSafeImageUrl(feedContentHtml, itemUrl ?? siteUrl ?? feedUrl),
+        feedContentHtml,
+      };
+    });
+    return { title, siteUrl, articles };
+  }
+  const isRss = parsed.format === "rss";
+  if (isRss) {
     // Feedsmith 2.9.6 drops singleton hour/day lists. Recover those channel fields
     // with the existing XML parser; repeated values still come from feedsmith.
     if (/<skip(?:Hours|Days)\b/.test(source)) {
@@ -312,9 +216,57 @@ export function parseAndNormalizeFeed(source: string, feedUrl: string): ParsedFe
         feed.skipDays ??= values("skipDays", "day");
       }
     }
-    return normalizeRss(feed, feedUrl);
   }
-  if (parsed.format === "atom") return normalizeAtom(feed, feedUrl);
-  if (parsed.format === "json") return normalizeJson(feed, feedUrl);
-  return normalizeRdf(feed, feedUrl);
+  const title = string(feed.title) ?? feedUrl;
+  const siteUrl = url(feed.link, feedUrl);
+  const titlesArePostText = isRss && xFeedUrl(feedUrl) !== null;
+  const articles = records(feed.items).map((item): ParsedArticle => {
+    const dc = record(item.dc);
+    const content = record(item.content);
+    const itemUrl = url(item.link, siteUrl ?? feedUrl);
+    const feedContentHtml =
+      string(content.encoded) ??
+      string(item.description) ??
+      firstString(dc.descriptions) ??
+      string(dc.description);
+    const summaryHtml =
+      string(item.description) ??
+      firstString(dc.descriptions) ??
+      string(dc.description) ??
+      feedContentHtml;
+    const publishedAt =
+      (isRss ? date(item.pubDate) : null) ?? date(firstString(dc.dates)) ?? date(dc.date);
+    const itemTitle = titlesArePostText ? "" : (string(item.title) ?? "");
+    const authors = isRss && Array.isArray(item.authors) ? item.authors : [];
+    const author =
+      authors
+        .map((author) =>
+          typeof author === "string" ? string(author) : nestedString(author, "name"),
+        )
+        .filter((name) => name !== null)
+        .join(", ") ||
+      firstString(dc.creators) ||
+      string(dc.creator);
+    return {
+      externalId:
+        (isRss ? nestedString(item.guid, "value") : nestedString(item.rdf, "about")) ??
+        itemUrl ??
+        fallbackId([itemTitle, publishedAt, summaryHtml]),
+      title: itemTitle,
+      url: itemUrl,
+      author,
+      publishedAt,
+      summary: plainText(summaryHtml).slice(0, 1_000),
+      imageUrl: firstSafeImageUrl(feedContentHtml, itemUrl ?? siteUrl ?? feedUrl),
+      feedContentHtml,
+    };
+  });
+  return {
+    title,
+    siteUrl,
+    articles,
+    ...(isRss && typeof feed.ttl === "number" ? { ttl: feed.ttl } : {}),
+    ...(isRss && Array.isArray(feed.skipHours) ? { skipHours: feed.skipHours as number[] } : {}),
+    ...(isRss && Array.isArray(feed.skipDays) ? { skipDays: feed.skipDays as string[] } : {}),
+  };
 }

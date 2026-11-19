@@ -13,14 +13,6 @@ export interface OpmlImportOutcome extends ImportResult {
   feedIds: number[];
 }
 
-function validateFeedUrl(value: string): string {
-  const parsed = new URL(value);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("The feed URL must begin with http:// or https://.");
-  }
-  return xFeedUrl(parsed.toString(), nitterBaseUrls()) ?? parsed.toString();
-}
-
 export class OpmlService {
   constructor(
     private readonly feeds: FeedService,
@@ -45,7 +37,12 @@ export class OpmlService {
         if (outline.xmlUrl) {
           const title = outline.title?.trim() || outline.text.trim() || outline.xmlUrl;
           try {
-            const feedUrl = validateFeedUrl(outline.xmlUrl);
+            const value = outline.xmlUrl;
+            const parsed = new URL(value);
+            if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+              throw new Error("The feed URL must begin with http:// or https://.");
+            }
+            const feedUrl = xFeedUrl(parsed.toString(), nitterBaseUrls()) ?? parsed.toString();
             if (existingUrls.has(feedUrl)) {
               result.duplicates += 1;
             } else {

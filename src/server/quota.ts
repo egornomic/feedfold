@@ -35,16 +35,6 @@ export class QuotaExceededError extends Error {
   }
 }
 
-function today(now: Date): string {
-  return now.toISOString().slice(0, 10);
-}
-
-function byteLimitLabel(bytes: number): string {
-  return bytes >= 1_048_576 && bytes % 1_048_576 === 0
-    ? `${bytes / 1_048_576} MiB`
-    : `${bytes.toLocaleString("en-US")} bytes`;
-}
-
 export class QuotaService {
   constructor(
     private readonly sqlite: Sqlite.Database,
@@ -93,7 +83,7 @@ export class QuotaService {
   private consumeDaily(resource: DailyResource, scope: string): void {
     const limit = this.dailyLimit(resource);
     if (limit === null) return;
-    const day = today(this.now());
+    const day = this.now().toISOString().slice(0, 10);
     this.sqlite.transaction(() => {
       this.sqlite.prepare("DELETE FROM quota_daily_usage WHERE day < date(?, '-2 days')").run(day);
       const used = Number(
@@ -228,7 +218,11 @@ export class QuotaService {
     const byteLimit = this.policy.quotas.opmlUploadBytes;
     if (byteLimit !== null && bytes > byteLimit) {
       throw new QuotaExceededError(
-        `This OPML file is larger than the ${byteLimitLabel(byteLimit)} upload limit.`,
+        `This OPML file is larger than the ${
+          byteLimit >= 1_048_576 && byteLimit % 1_048_576 === 0
+            ? `${byteLimit / 1_048_576} MiB`
+            : `${byteLimit.toLocaleString("en-US")} bytes`
+        } upload limit.`,
       );
     }
     const feedLimit = this.policy.quotas.opmlFeedsPerImport;

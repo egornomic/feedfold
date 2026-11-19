@@ -26,21 +26,6 @@ function parseCommand(args: string[]): AccountCommand {
   throw new Error(USAGE);
 }
 
-function listAccounts(connection: Sqlite.Database): void {
-  console.table(
-    connection
-      .prepare(
-        "SELECT public_id AS id, username, unlimited_invites AS owner FROM users WHERE enabled = 1",
-      )
-      .all(),
-  );
-}
-
-function selectOwner(connection: Sqlite.Database, publicId: string): void {
-  setInvitationOwner(connection, publicId);
-  console.log("The selected account is now the invite owner.");
-}
-
 async function createOwner(
   connection: Sqlite.Database,
   databasePath: string,
@@ -80,11 +65,13 @@ async function createOwner(
   }
 }
 
-async function main(): Promise<void> {
+try {
   const command = parseCommand(process.argv.slice(2));
   const databasePath = resolve(process.env.DATABASE_PATH ?? "./data/feedfold.db");
   mkdirSync(dirname(databasePath), { recursive: true });
-  const connection = new Sqlite(databasePath, { fileMustExist: command.name !== "create-owner" });
+  const connection = new Sqlite(databasePath, {
+    fileMustExist: command.name !== "create-owner",
+  });
   connection.pragma("busy_timeout = 5000");
   connection.pragma("foreign_keys = ON");
   try {
@@ -93,10 +80,17 @@ async function main(): Promise<void> {
     }
     switch (command.name) {
       case "list":
-        listAccounts(connection);
+        console.table(
+          connection
+            .prepare(
+              "SELECT public_id AS id, username, unlimited_invites AS owner FROM users WHERE enabled = 1",
+            )
+            .all(),
+        );
         break;
       case "set-owner":
-        selectOwner(connection, command.publicId);
+        setInvitationOwner(connection, command.publicId);
+        console.log("The selected account is now the invite owner.");
         break;
       case "create-owner":
         await createOwner(connection, databasePath, command.username);
@@ -105,10 +99,6 @@ async function main(): Promise<void> {
   } finally {
     connection.close();
   }
-}
-
-try {
-  await main();
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Account management failed.");
   process.exitCode = 1;

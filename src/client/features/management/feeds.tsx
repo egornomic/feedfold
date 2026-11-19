@@ -61,14 +61,6 @@ type FeedsPageTab = "subscriptions" | "folders";
 
 const feedTitleSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-function feedFaviconUrl(value: string): string {
-  return new URL("/favicon.ico", value).toString();
-}
-
-function formatCompactRefreshInterval(minutes: number): string {
-  return minutes < 60 ? `${minutes}m` : `${minutes / 60}h`;
-}
-
 function AnchoredPopover({
   label,
   triggerClassName,
@@ -193,12 +185,6 @@ function FeedsPageContent({
     if (tab === activeTab) return;
     setFiltersOpen(false);
     setActiveTab(tab);
-  };
-
-  const clearFeedView = () => {
-    setSearchQuery("");
-    setFeedTypeFilter("all");
-    setFeedStatusFilter("all");
   };
 
   const toggleLocation = (target: FeedDropTarget) => {
@@ -407,7 +393,15 @@ function FeedsPageContent({
                 <ListFilter aria-hidden="true" size={22} />
                 <h3>No matching feeds</h3>
                 <p>Try another search or reset the current filters.</p>
-                <button className="secondary-button" type="button" onClick={clearFeedView}>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFeedTypeFilter("all");
+                    setFeedStatusFilter("all");
+                  }}
+                >
                   Reset view
                 </button>
               </div>
@@ -503,7 +497,8 @@ function FeedsPageContent({
   );
 }
 
-function feedFailureLabel(feed: Feed): string {
+function feedStatusLabel(feed: Feed, status: VisibleFeedStatus): string {
+  if (status !== "needs_attention") return FEED_STATUS_LABELS[status];
   if (feed.lastErrorKind === "selection_broken") return "Page changed";
   if (feed.lastErrorKind === "javascript_timeout") return "JavaScript timed out";
   if (feed.lastErrorKind === "inaccessible") return "Page inaccessible";
@@ -512,10 +507,6 @@ function feedFailureLabel(feed: Feed): string {
   if (feed.lastErrorKind === "timeout") return "Loading timed out";
   if (feed.lastHttpStatus) return `HTTP ${feed.lastHttpStatus}`;
   return "Refresh failed";
-}
-
-function feedStatusLabel(feed: Feed, status: VisibleFeedStatus): string {
-  return status === "needs_attention" ? feedFailureLabel(feed) : FEED_STATUS_LABELS[status];
 }
 
 function FeedSourceIcon({
@@ -529,7 +520,7 @@ function FeedSourceIcon({
   status: VisibleFeedStatus;
   statusLabel: string;
 }) {
-  const faviconUrl = feedFaviconUrl(sourceUrl);
+  const faviconUrl = new URL("/favicon.ico", sourceUrl).toString();
   const [failedFavicon, setFailedFavicon] = useState<string | null>(null);
   const firstGrapheme = feedTitleSegmenter.segment(feed.title.trim())[Symbol.iterator]().next()
     .value?.segment;
@@ -569,6 +560,7 @@ function FeedRow({
   onRefresh: () => void;
   onAction: (action: FeedManagementAction) => void;
 }) {
+  const pollInterval = feed.pollIntervalMinutes;
   const status = visibleFeedStatus(feed);
   const sourceUrl = feed.siteUrl ?? feed.feedUrl;
   const statusLabel = feedStatusLabel(feed, status);
@@ -630,7 +622,7 @@ function FeedRow({
           </span>
           <span aria-hidden="true">
             <span className="feed-mobile-meta-label">every </span>
-            {formatCompactRefreshInterval(feed.pollIntervalMinutes)}
+            {pollInterval < 60 ? `${pollInterval}m` : `${pollInterval / 60}h`}
           </span>
         </span>
         <time

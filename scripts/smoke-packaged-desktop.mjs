@@ -45,14 +45,14 @@ await new Promise((resolve, reject) => {
 const address = server.address();
 if (!address || typeof address === "string") throw new Error("The smoke server did not start.");
 
-async function runPackagedApp(userDataPath) {
+try {
   await new Promise((resolve, reject) => {
     const env = {
       ...process.env,
       FEEDFOLD_DESKTOP_SMOKE: "1",
       FEEDFOLD_DESKTOP_SMOKE_ALLOW_PRIVATE_NETWORKS: "1",
       FEEDFOLD_DESKTOP_SMOKE_WEB_FEED_URL: `http://127.0.0.1:${address.port}/`,
-      FEEDFOLD_DESKTOP_USER_DATA: userDataPath,
+      FEEDFOLD_DESKTOP_USER_DATA: userData,
     };
     const child = spawn(application, development ? ["scripts/run-desktop.mjs"] : [], {
       env,
@@ -73,10 +73,6 @@ async function runPackagedApp(userDataPath) {
       else reject(new Error(`The packaged app exited with status ${code ?? "unknown"}.`));
     });
   });
-}
-
-try {
-  await runPackagedApp(userData);
 } finally {
   await new Promise((resolve) => server.close(resolve));
   await rm(smokeDirectory, { recursive: true, force: true });

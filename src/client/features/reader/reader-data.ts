@@ -14,7 +14,6 @@ import {
   counterMutationKey,
   invalidateReader,
   readerKeys,
-  rulesQuery,
 } from "../../api/query.js";
 
 export type ReaderDataMutations = Pick<
@@ -42,7 +41,11 @@ export function useReaderData() {
     refetchInterval: (query) =>
       query.state.data?.feeds.some((feed) => feed.refreshing) ? 1_000 : false,
   });
-  const rules = useQuery({ ...rulesQuery(), enabled: !changingCounters });
+  const rules = useQuery({
+    queryKey: readerKeys.rules,
+    queryFn: ({ signal }) => api.rules(signal),
+    enabled: !changingCounters,
+  });
 
   useEffect(
     () =>

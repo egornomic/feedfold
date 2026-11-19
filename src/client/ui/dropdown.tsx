@@ -35,20 +35,6 @@ interface DropdownComboboxProps {
   ariaDescribedBy?: string;
 }
 
-function groupOptions(options: readonly DropdownOption[]) {
-  const groups: { label?: string; options: DropdownOption[] }[] = [];
-  for (const option of options) {
-    const previous = groups.at(-1);
-    if (previous && previous.label === option.group) previous.options.push(option);
-    else
-      groups.push({
-        ...(option.group === undefined ? {} : { label: option.group }),
-        options: [option],
-      });
-  }
-  return groups;
-}
-
 export function DropdownSelect({
   id,
   value,
@@ -62,6 +48,17 @@ export function DropdownSelect({
   ariaDescribedBy,
   initialFocus = false,
 }: DropdownSelectProps) {
+  const groups: { label?: string; options: DropdownOption[] }[] = [];
+  for (const option of options) {
+    const previous = groups.at(-1);
+    if (previous && previous.label === option.group) previous.options.push(option);
+    else
+      groups.push({
+        ...(option.group === undefined ? {} : { label: option.group }),
+        options: [option],
+      });
+  }
+
   return (
     <div className={`dropdown-select${className ? ` ${className}` : ""}`}>
       <Select.Root
@@ -99,7 +96,7 @@ export function DropdownSelect({
           >
             <Select.Popup className="overlay-menu dropdown-select-menu dropdown-menu-surface">
               <Select.List>
-                {groupOptions(options).map((group) => (
+                {groups.map((group) => (
                   <Select.Group
                     key={group.label ?? group.options[0]?.value}
                     className="dropdown-select-group"

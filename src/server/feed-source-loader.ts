@@ -78,10 +78,6 @@ function wordpressPostsUrl(feedUrl: string): string | null {
   return url.toString();
 }
 
-function message(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).slice(0, 500);
-}
-
 function failureDetails(
   error: unknown,
   sourceKind: FeedRecord["sourceKind"],
@@ -222,7 +218,11 @@ export class DefaultFeedSourceLoader implements FeedSourceLoader {
     } catch (error) {
       if (error instanceof FeedRequestDeferred) throw error;
       const failure = failureDetails(error, feed.sourceKind, httpStatus);
-      throw new FeedSourceError(message(error), failure, { cause: error });
+      throw new FeedSourceError(
+        (error instanceof Error ? error.message : String(error)).slice(0, 500),
+        failure,
+        { cause: error },
+      );
     }
   }
 

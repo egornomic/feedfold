@@ -4,13 +4,6 @@ const X_TIMELINE_TABS = new Set(["media", "search", "with_replies"]);
 const STATUS_ID = /^\d{1,30}$/;
 const ANCHOR = /<a\b[^>]*\bhref=(['"])(.*?)\1[^>]*>[\s\S]*?<\/a>/gi;
 
-function decodedAttribute(value: string): string {
-  return value
-    .replace(/&amp;/gi, "&")
-    .replace(/&#0*39;/gi, "'")
-    .replace(/&quot;/gi, '"');
-}
-
 export function xFeedUrl(value: string, instanceUrls: readonly string[] = []): string | null {
   if (!URL.canParse(value)) return null;
   const url = new URL(value);
@@ -37,7 +30,12 @@ export function xPostId(value: string | null | undefined): string | null {
   if (!value) return null;
   let url: URL;
   try {
-    url = new URL(decodedAttribute(value));
+    url = new URL(
+      value
+        .replace(/&amp;/gi, "&")
+        .replace(/&#0*39;/gi, "'")
+        .replace(/&quot;/gi, '"'),
+    );
   } catch {
     return null;
   }

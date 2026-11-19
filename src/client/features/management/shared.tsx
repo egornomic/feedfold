@@ -1,11 +1,5 @@
 import { Download, LoaderCircle, Menu, Upload } from "lucide-react";
-import {
-  type ChangeEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
-  useRef,
-  useState,
-} from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { api, errorMessage } from "../../api/api";
 import { useInterfaceState } from "../../app/session-state";
 import { Menu as BaseMenu } from "../../ui/menu";
@@ -102,23 +96,6 @@ export function ImportOpmlButton({
   const inputRef = useRef<HTMLInputElement>(null);
   const Button = menuItem ? MenuButton : "button";
 
-  const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setBusy(true);
-    try {
-      const result = await mutations.importOpml(file);
-      const notes = [`${result.imported} imported`, `${result.duplicates} duplicates`];
-      if (result.failed.length > 0) notes.push(`${result.failed.length} failed`);
-      showToast(`OPML imported: ${notes.join(", ")}`);
-    } catch (error) {
-      showToast(`Could not import OPML: ${errorMessage(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <>
       <input
@@ -126,7 +103,21 @@ export function ImportOpmlButton({
         hidden
         type="file"
         accept=".opml,.xml,text/xml,application/xml"
-        onChange={(event) => void importFile(event)}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          void mutations
+            .importOpml(file)
+            .then((result) => {
+              const notes = [`${result.imported} imported`, `${result.duplicates} duplicates`];
+              if (result.failed.length > 0) notes.push(`${result.failed.length} failed`);
+              showToast(`OPML imported: ${notes.join(", ")}`);
+            })
+            .catch((error) => showToast(`Could not import OPML: ${errorMessage(error)}`))
+            .finally(() => setBusy(false));
+        }}
       />
       <Button
         className="secondary-button"
@@ -148,22 +139,18 @@ export function ImportOpmlButton({
 export function ExportOpmlLink({ menuItem = false }: { menuItem?: boolean } = {}) {
   const Button = menuItem ? MenuButton : "button";
   const [busy, setBusy] = useState(false);
-  const exportOpml = async () => {
-    setBusy(true);
-    try {
-      await api.exportOpml();
-    } catch (error) {
-      window.alert(`Could not export OPML: ${errorMessage(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
     <Button
       className="secondary-button"
       type="button"
       disabled={busy}
-      onClick={() => void exportOpml()}
+      onClick={() => {
+        setBusy(true);
+        void api
+          .exportOpml()
+          .catch((error) => window.alert(`Could not export OPML: ${errorMessage(error)}`))
+          .finally(() => setBusy(false));
+      }}
     >
       {busy ? (
         <LoaderCircle className="spin" aria-hidden="true" size={16} />

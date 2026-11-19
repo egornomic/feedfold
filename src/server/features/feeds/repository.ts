@@ -3,6 +3,7 @@ import type {
   Feed,
   FeedErrorKind,
   FeedPollIntervalMinutes,
+  FeedSourceKind,
   WebFeedConfig,
 } from "../../../shared/types.js";
 import { xFeedUrl } from "../../../shared/x.js";
@@ -14,11 +15,10 @@ import {
   type FeedRecord,
   feedPollIntervalSql,
   feedRecordColumns,
-  mapFeed,
-  mapFeedRecord,
   now,
   type ParsedFeed,
   type Row,
+  toBoolean,
   visibleClause,
   WEB_FEED_POLL_INTERVAL_MINUTES,
 } from "../shared.js";
@@ -94,7 +94,30 @@ export class FeedRepository {
          ORDER BY feeds.title COLLATE NOCASE`,
       )
       .all(...(feedId === undefined ? [userId] : [userId, feedId])) as Row[];
-    return rows.map(mapFeed);
+    return rows.map(
+      (row): Feed => ({
+        id: Number(row.id),
+        folderId: row.folderId === null ? null : Number(row.folderId),
+        title: String(row.title),
+        feedUrl: String(row.feedUrl),
+        siteUrl: row.siteUrl === null ? null : String(row.siteUrl),
+        sourceKind: row.sourceKind as FeedSourceKind,
+        lastErrorKind: row.lastErrorKind === null ? null : (row.lastErrorKind as FeedErrorKind),
+        lastMatchCount: row.lastMatchCount === null ? null : Number(row.lastMatchCount),
+        createdAt: String(row.createdAt),
+        pollIntervalMinutes: Number(row.pollIntervalMinutes),
+        unreadCount: Number(row.unreadCount),
+        totalCount: Number(row.totalCount),
+        paused: toBoolean(row.paused),
+        refreshing: toBoolean(row.refreshing),
+        lastPostAt: row.lastPostAt === null ? null : String(row.lastPostAt),
+        lastAttemptAt: row.lastAttemptAt === null ? null : String(row.lastAttemptAt),
+        lastSuccessAt: row.lastSuccessAt === null ? null : String(row.lastSuccessAt),
+        lastHttpStatus: row.lastHttpStatus === null ? null : Number(row.lastHttpStatus),
+        lastError: row.lastError === null ? null : String(row.lastError),
+        nextPollAt: row.nextPollAt === null ? null : String(row.nextPollAt),
+      }),
+    );
   }
 
   getFeed(userId: number, id: number): Feed | null {
@@ -280,7 +303,40 @@ export class FeedRepository {
          )`,
       )
       .all(...values) as Row[];
-    return rows.map(mapFeedRecord);
+    return rows.map((row): FeedRecord => {
+      const base = {
+        id: Number(row.id),
+        title: String(row.title),
+        feedUrl: String(row.feedUrl),
+        siteUrl: row.siteUrl === null ? null : String(row.siteUrl),
+        etag: row.etag === null ? null : String(row.etag),
+        lastModified: row.lastModified === null ? null : String(row.lastModified),
+        pollIntervalMinutes: Number(row.pollIntervalMinutes) as FeedPollIntervalMinutes,
+      };
+      const sourceKind = row.sourceKind as FeedSourceKind;
+      if (sourceKind === "published") {
+        if (row.webConfigJson !== null) {
+          throw new Error(`Published feed ${base.id} unexpectedly has a web feed configuration`);
+        }
+        return {
+          ...base,
+          sourceKind,
+          webConfig: null,
+          selectionRevision: null,
+          lastMatchCount: null,
+        };
+      }
+      if (sourceKind !== "web" || row.webConfigJson === null) {
+        throw new Error(`Web feed ${base.id} is missing its page selection`);
+      }
+      return {
+        ...base,
+        sourceKind,
+        webConfig: JSON.parse(String(row.webConfigJson)) as WebFeedConfig,
+        selectionRevision: Number(row.selectionRevision),
+        lastMatchCount: Number(row.lastMatchCount),
+      };
+    });
   }
 
   getUserRefreshFeedIds(userId: number, requestedIds?: number[]): number[] {

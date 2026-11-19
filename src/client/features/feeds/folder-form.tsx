@@ -1,5 +1,5 @@
 import { Check, LoaderCircle } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
 import { folderBranchIds } from "../../../shared/folder-tree";
 import type { Folder, FolderSortDirection } from "../../../shared/types";
 import { errorMessage } from "../../api/api";
@@ -36,28 +36,24 @@ export function FolderForm({
   const unavailableParentIds = initial ? folderBranchIds(initial.id, folders) : new Set<number>();
   const availableParents = folders.filter((folder) => !unavailableParentIds.has(folder.id));
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setSaving(true);
-    try {
-      const folder = initial
-        ? await mutations.updateFolder(initial.id, { name: name.trim(), parentId, sortDirection })
-        : await mutations.createFolder({ name: name.trim(), parentId, sortDirection });
-      await onSaved(folder);
-    } catch (error) {
-      showToast(`Could not save the folder: ${errorMessage(error)}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <form
       className={`compact-form${motionState ? " add-folder-form" : ""}`}
       data-motion-state={motionState}
       inert={motionState === "closed" ? true : undefined}
       aria-busy={saving}
-      onSubmit={(event) => void submit(event)}
+      onSubmit={(event) => {
+        event.preventDefault();
+        setSaving(true);
+        const input = { name: name.trim(), parentId, sortDirection };
+        const save = initial
+          ? mutations.updateFolder(initial.id, input)
+          : mutations.createFolder(input);
+        void save
+          .then(onSaved)
+          .catch((error) => showToast(`Could not save the folder: ${errorMessage(error)}`))
+          .finally(() => setSaving(false));
+      }}
     >
       <label className="field">
         <span>Folder name</span>

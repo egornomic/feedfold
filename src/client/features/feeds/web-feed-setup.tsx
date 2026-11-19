@@ -32,28 +32,6 @@ function candidateExample(candidate: WebFeedCandidate): string {
   return article?.title || article?.summary || "Untitled entry";
 }
 
-function compactWebFeedLayout(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia(COMPACT_WEB_FEED_QUERY).matches
-  );
-}
-
-function useCompactWebFeedLayout(): boolean {
-  const [compact, setCompact] = useState(compactWebFeedLayout);
-
-  useEffect(() => {
-    const media = window.matchMedia(COMPACT_WEB_FEED_QUERY);
-    const update = () => setCompact(media.matches);
-    media.addEventListener("change", update);
-    update();
-    return () => media.removeEventListener("change", update);
-  }, []);
-
-  return compact;
-}
-
 export interface WebFeedSetupProps {
   analysis: WebFeedAnalysis;
   selectedCandidateId: string | null;
@@ -134,7 +112,20 @@ export function WebFeedSetup({
   onSelect,
   onBack,
 }: WebFeedSetupProps) {
-  const compact = useCompactWebFeedLayout();
+  const [compact, setCompact] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(COMPACT_WEB_FEED_QUERY).matches,
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(COMPACT_WEB_FEED_QUERY);
+    const update = () => setCompact(media.matches);
+    media.addEventListener("change", update);
+    update();
+    return () => media.removeEventListener("change", update);
+  }, []);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -185,15 +176,6 @@ export function WebFeedSetup({
   const matchAnnouncement = selectedCandidate
     ? `${selectedCandidate.itemCount} matching ${selectedCandidate.itemCount === 1 ? "item is" : "items are"} highlighted.`
     : "No group is selected.";
-  const reviewSelectedEntries = () => {
-    const heading = reviewHeadingRef.current;
-    if (!heading) return;
-    heading.focus({ preventScroll: true });
-    heading.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-      block: "start",
-    });
-  };
   const compactGroups = (
     <>
       {suggestedCandidates.length > 0 ? (
@@ -376,7 +358,17 @@ export function WebFeedSetup({
                   className="primary-button"
                   type="button"
                   disabled={disabled}
-                  onClick={reviewSelectedEntries}
+                  onClick={() => {
+                    const heading = reviewHeadingRef.current;
+                    if (!heading) return;
+                    heading.focus({ preventScroll: true });
+                    heading.scrollIntoView({
+                      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                        ? "auto"
+                        : "smooth",
+                      block: "start",
+                    });
+                  }}
                 >
                   Review selected entries
                   <ArrowDown aria-hidden="true" size={15} />

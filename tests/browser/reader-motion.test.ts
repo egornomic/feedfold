@@ -34,27 +34,31 @@ async function openTouchReader(
       touchPoints: type === "touchEnd" || type === "touchCancel" ? [] : [{ x, y, id: 1 }],
     });
   };
-  const swipe = async (from: number, to: number, cancelled = false) => {
-    await touch("touchStart", from);
-    for (let step = 1; step <= 6; step++) {
-      await touch("touchMove", from + ((to - from) * step) / 6);
-      await page.waitForTimeout(16);
-    }
-    await touch(cancelled ? "touchCancel" : "touchEnd");
+  return {
+    page,
+    touchContext,
+    session,
+    touch,
+    swipe: async (from: number, to: number, cancelled = false) => {
+      await touch("touchStart", from);
+      for (let step = 1; step <= 6; step++) {
+        await touch("touchMove", from + ((to - from) * step) / 6);
+        await page.waitForTimeout(16);
+      }
+      await touch(cancelled ? "touchCancel" : "touchEnd");
+    },
+    title: () => page.locator(".article-swipe-layer.is-active .article-header h2").textContent(),
+    settled: async () => {
+      await expect.poll(() => page.locator(".article-swipe-layer").count()).toBe(1);
+      await expect
+        .poll(() =>
+          page
+            .locator(".article-swipe-layer.is-active")
+            .evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41),
+        )
+        .toBe(0);
+    },
   };
-  const title = () =>
-    page.locator(".article-swipe-layer.is-active .article-header h2").textContent();
-  const settled = async () => {
-    await expect.poll(() => page.locator(".article-swipe-layer").count()).toBe(1);
-    await expect
-      .poll(() =>
-        page
-          .locator(".article-swipe-layer.is-active")
-          .evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41),
-      )
-      .toBe(0);
-  };
-  return { page, touchContext, session, touch, swipe, title, settled };
 }
 
 async function nativeVideoControlBox(session: CDPSession, pseudo: string) {

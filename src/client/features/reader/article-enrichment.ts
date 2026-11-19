@@ -32,7 +32,6 @@ import {
   startSummary,
 } from "./article/article-ai-state";
 import { articleTranslationSourceKind, fullContentToggleAction } from "./article/article-content";
-import { warmArticleImages } from "./article/article-image-url";
 import type { ArticleQueueController } from "./article-queue";
 import type { ReaderData } from "./reader-data";
 import { articleSettingsInvalidation, invalidateArticleSummaries } from "./reader-state";
@@ -143,7 +142,19 @@ export function useArticleEnrichment({
       try {
         const fullArticle = await client.fetchQuery(articleQuery(article.id));
         if (fullContentVisibleIdsRef.current.has(article.id)) return;
-        warmArticleImages(fullArticle.feedContentHtml);
+        const html = fullArticle.feedContentHtml;
+        if (html?.includes("<img")) {
+          // Load images with the text. Keep lazy images deferred until the reader scrolls to them.
+          const parsed = new DOMParser().parseFromString(html, "text/html");
+          for (const source of parsed.querySelectorAll<HTMLImageElement>(
+            "img:not([loading='lazy' i])",
+          )) {
+            const image = new Image();
+            image.sizes = source.sizes;
+            image.srcset = source.srcset;
+            image.src = source.src;
+          }
+        }
         // Media inserted after the text appears pushes it down, so fetch its details with the text.
         for (const postId of xVideoPostIds(fullArticle.url, fullArticle.feedContentHtml))
           void client.prefetchQuery(xArticleMediaQuery(fullArticle.id, postId));

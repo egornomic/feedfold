@@ -57,12 +57,6 @@ export function articleSummaryNeedsWebSearch(task: string): boolean {
   );
 }
 
-function truncateSource(source: string): string {
-  if (source.length <= MAX_SOURCE_CHARACTERS) return source;
-  const omitted = source.length - MAX_SOURCE_CHARACTERS;
-  return `${source.slice(0, SOURCE_HEAD_CHARACTERS)}\n\n[${omitted.toLocaleString("en-US")} characters omitted from the middle of the article]\n\n${source.slice(-SOURCE_TAIL_CHARACTERS)}`;
-}
-
 export function prepareArticleSummary(article: AiArticleRecord): PreparedArticleSummary {
   const sources: Array<[AiArticleSourceKind, string]> = [
     ["full", plainText(article.contentHtml)],
@@ -78,13 +72,18 @@ export function prepareArticleSummary(article: AiArticleRecord): PreparedArticle
     );
   }
   const [sourceKind, source] = selected;
+  const omitted = source.length - MAX_SOURCE_CHARACTERS;
+  const text =
+    omitted > 0
+      ? `${source.slice(0, SOURCE_HEAD_CHARACTERS)}\n\n[${omitted.toLocaleString("en-US")} characters omitted from the middle of the article]\n\n${source.slice(-SOURCE_TAIL_CHARACTERS)}`
+      : source;
   const metadata = [
     `Title: ${article.title}`,
     article.author ? `Author: ${article.author}` : null,
   ].filter((value): value is string => value !== null);
   return {
     sourceKind,
-    input: `${metadata.join("\n")}\n\nArticle text:\n${truncateSource(source)}`,
+    input: `${metadata.join("\n")}\n\nArticle text:\n${text}`,
   };
 }
 

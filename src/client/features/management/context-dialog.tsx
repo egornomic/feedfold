@@ -51,28 +51,6 @@ const RuleForm = lazy(async () => ({
   default: (await import("../rules/rule-form")).RuleForm,
 }));
 
-function firstFocusable(selectors: string[]): HTMLElement | null {
-  for (const selector of selectors) {
-    for (const candidate of document.querySelectorAll<HTMLElement>(selector)) {
-      const bounds = candidate.getBoundingClientRect();
-      if (
-        candidate.isConnected &&
-        !candidate.closest("[inert]") &&
-        bounds.width > 0 &&
-        bounds.height > 0 &&
-        bounds.right > 0 &&
-        bounds.bottom > 0 &&
-        bounds.left < window.innerWidth &&
-        bounds.top < window.innerHeight &&
-        (!(candidate instanceof HTMLButtonElement) || !candidate.disabled)
-      ) {
-        return candidate;
-      }
-    }
-  }
-  return null;
-}
-
 function DialogHeading({
   icon,
   title,
@@ -131,7 +109,6 @@ function FeedSettingsPanel({
   });
   const details = detailsQuery.data ?? feed;
   const loading = detailsQuery.isPending;
-  const setDetails = (updated: Feed) => client.setQueryData(["reader", "feed", feed.id], updated);
   const [busy, setBusy] = useState<"pause" | "refresh" | null>(null);
   const [actionError, setError] = useState<string | null>(null);
   const error = actionError ?? (detailsQuery.error ? errorMessage(detailsQuery.error) : null);
@@ -141,7 +118,7 @@ function FeedSettingsPanel({
     setError(null);
     try {
       const updated = await mutations.updateFeed(details.id, { paused: !details.paused });
-      setDetails(updated);
+      client.setQueryData(["reader", "feed", feed.id], updated);
       showToast(updated.paused ? `Paused ${updated.title}` : `Resumed ${updated.title}`);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -347,11 +324,6 @@ function WebFeedSelectionPanel({
     void loadPage();
   }, [loadPage]);
 
-  const selectCandidate = (candidateId: string | null) =>
-    setState((current) =>
-      current.phase === "choosing" ? { ...current, selectedCandidateId: candidateId } : current,
-    );
-
   const saveSelection = async () => {
     if (state.phase !== "choosing") return;
     const { analysis, selectedCandidateId } = state;
@@ -400,7 +372,13 @@ function WebFeedSelectionPanel({
               analysis={analysis}
               selectedCandidateId={selectedCandidateId}
               disabled={saving}
-              onSelect={selectCandidate}
+              onSelect={(candidateId: string | null) =>
+                setState((current) =>
+                  current.phase === "choosing"
+                    ? { ...current, selectedCandidateId: candidateId }
+                    : current,
+                )
+              }
             />
           </>
         ) : null}
@@ -798,15 +776,36 @@ function ContextManagementDialog({
       const folderId =
         "folderId" in request ? request.folderId : "parentId" in request ? request.parentId : null;
       const folderSelector = folderId === null ? null : `[data-management-folder-id="${folderId}"]`;
-      const target =
-        (original?.isConnected ? original : null) ??
-        firstFocusable([
-          ...(feedSelector ? [feedSelector] : []),
-          ...(folderSelector ? [folderSelector] : []),
-          ".menu-button",
-          "[data-management-focus-fallback]",
-        ]);
-      target?.focus({ preventScroll: true });
+      if (original?.isConnected) {
+        original.focus({ preventScroll: true });
+        return;
+      }
+      const selectors = [
+        feedSelector,
+        folderSelector,
+        ".menu-button",
+        "[data-management-focus-fallback]",
+      ];
+      for (const selector of selectors) {
+        if (!selector) continue;
+        for (const candidate of document.querySelectorAll<HTMLElement>(selector)) {
+          const bounds = candidate.getBoundingClientRect();
+          if (
+            candidate.isConnected &&
+            !candidate.closest("[inert]") &&
+            bounds.width > 0 &&
+            bounds.height > 0 &&
+            bounds.right > 0 &&
+            bounds.bottom > 0 &&
+            bounds.left < window.innerWidth &&
+            bounds.top < window.innerHeight &&
+            (!(candidate instanceof HTMLButtonElement) || !candidate.disabled)
+          ) {
+            candidate.focus({ preventScroll: true });
+            return;
+          }
+        }
+      }
     });
   }, [onClose, request]);
 

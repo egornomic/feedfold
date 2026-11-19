@@ -1,25 +1,22 @@
 import { generateOpml } from "feedsmith";
-import type { FeedInput, FeedUpdateInput, FolderInput, RuleInput } from "../shared/api/inputs.js";
+import type { FeedUpdateInput } from "../shared/api/inputs.js";
 import type { ApiInput, ApiOperation, ApiOutput } from "../shared/api/operations.js";
 import { articleMatchesRule } from "../shared/article-rules.js";
-import { articleMatchesSearch } from "../shared/article-search.js";
+import {
+  articleSearchColumns,
+  articleSearchText,
+  normalizeSearchText,
+} from "../shared/article-search.js";
 import { folderBranchIds, validFolderParent } from "../shared/folder-tree.js";
 import type {
-  AiArticleSourceKind,
-  AiFeature,
   AiProvider,
   AiSettings,
-  AppSettings,
   Article,
   ArticleAiSummary,
-  ArticleAiTranslation,
   ArticlePage,
   ArticleQuery,
   Feed,
-  FeedDiscoveryResult,
   Folder,
-  ImportResult,
-  RefreshResult,
   Rule,
   SessionUser,
   WebFeedAnalysis,
@@ -189,37 +186,6 @@ export class DemoStore {
     return { updated };
   }
 
-  refresh(feedIds?: number[]): RefreshResult {
-    const activeFeeds = this.data.feeds.filter((feed) => !feed.paused);
-    return {
-      requested: feedIds
-        ? activeFeeds.filter((feed) => feedIds.includes(feed.id)).length
-        : activeFeeds.length,
-      refreshingFeedIds: [],
-    };
-  }
-
-  discoverFeed(url: string): FeedDiscoveryResult {
-    const title = titleFromUrl(url);
-    return {
-      kind: "published",
-      preview: {
-        feedUrl: url,
-        title,
-        siteUrl: url,
-        totalArticles: 3,
-        articles: this.data.articles.slice(0, 3).map((article) => ({
-          title: article.title,
-          url: article.url,
-          author: article.author,
-          publishedAt: article.publishedAt,
-          summary: article.summary,
-          imageUrl: article.imageUrl,
-        })),
-      },
-    };
-  }
-
   analyzeWebPage(url: string, selectedCandidateId: string | null = null): WebFeedAnalysis {
     const candidateId = "demo-articles";
     return {
@@ -261,35 +227,6 @@ export class DemoStore {
     };
   }
 
-  createFeed(input: FeedInput): Feed {
-    const now = new Date().toISOString();
-    const title = input.title?.trim() || titleFromUrl(input.siteUrl ?? input.feedUrl);
-    const feed: Feed = {
-      id: idAfter(this.data.feeds),
-      folderId: input.folderId ?? null,
-      title,
-      feedUrl: input.feedUrl,
-      siteUrl: input.siteUrl ?? null,
-      sourceKind: input.sourceKind,
-      lastErrorKind: null,
-      lastMatchCount: input.sourceKind === "web" ? 3 : null,
-      createdAt: now,
-      pollIntervalMinutes: this.data.settings.pollIntervalMinutes,
-      unreadCount: 0,
-      totalCount: 0,
-      paused: input.sourceKind === "published" && (input.paused ?? false),
-      refreshing: false,
-      lastPostAt: null,
-      lastAttemptAt: now,
-      lastSuccessAt: now,
-      lastHttpStatus: 200,
-      lastError: null,
-      nextPollAt: null,
-    };
-    this.data.feeds.push(feed);
-    return clone(feed);
-  }
-
   feed(id: number): Feed {
     return clone(this.requireFeed(id));
   }
@@ -329,157 +266,14 @@ export class DemoStore {
     );
   }
 
-  createFolder(input: FolderInput): Folder {
-    const parentId = input.parentId ?? null;
-    if (parentId !== null) this.requireFolder(parentId);
-    const siblings = this.data.folders.filter((folder) => folder.parentId === parentId);
-    const folder: Folder = {
-      id: idAfter(this.data.folders),
-      parentId,
-      name: input.name,
-      position: input.position ?? Math.max(-1, ...siblings.map((sibling) => sibling.position)) + 1,
-      sortDirection: input.sortDirection ?? "newest",
-      unreadCount: 0,
-    };
-    this.data.folders.push(folder);
-    return clone(folder);
-  }
-
-  updateFolder(id: number, input: Partial<FolderInput>): Folder {
-    const folder = this.requireFolder(id);
-    if (input.parentId !== undefined) {
-      if (input.parentId !== null) this.requireFolder(input.parentId);
-      if (!validFolderParent(id, input.parentId, this.data.folders)) {
-        throw new Error("Choose a parent outside this folder.");
-      }
-    }
-    const previousParentId = folder.parentId;
-    Object.assign(folder, input);
-    if (folder.parentId !== previousParentId) this.applyReadRules();
-    return clone(folder);
-  }
-
-  deleteFolder(id: number): void {
-    const folder = this.requireFolder(id);
-    const parentId = folder.parentId;
-    this.data.folders.splice(
-      0,
-      this.data.folders.length,
-      ...this.data.folders.filter((candidate) => candidate.id !== id),
-    );
-    for (const child of this.data.folders) {
-      if (child.parentId === id) child.parentId = parentId;
-    }
-    for (const feed of this.data.feeds) {
-      if (feed.folderId === id) this.updateFeed(feed.id, { folderId: parentId });
-    }
-    for (const rule of this.data.rules) {
-      if (rule.folderId === id) rule.folderId = parentId;
-    }
-    this.applyReadRules();
-  }
-
-  rules(): Rule[] {
-    return this.data.rules.map((rule) => this.ruleWithCount(rule));
-  }
-
-  createRule(input: RuleInput): Rule {
-    const now = new Date().toISOString();
-    const rule: Rule = {
-      id: idAfter(this.data.rules),
-      ...input,
-      feedId: input.feedId ?? null,
-      folderId: input.folderId ?? null,
-      enabled: input.enabled ?? true,
-      matchedCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.data.rules.push(rule);
-    this.applyReadRule(rule, this.data.articles);
-    return this.ruleWithCount(rule);
-  }
-
-  updateRule(id: number, input: Partial<RuleInput>): Rule {
-    const rule = this.requireRule(id);
-    Object.assign(rule, input, { updatedAt: new Date().toISOString() });
-    this.applyReadRule(rule, this.data.articles);
-    return this.ruleWithCount(rule);
-  }
-
-  deleteRule(id: number): void {
-    const index = this.data.rules.findIndex((rule) => rule.id === id);
-    if (index < 0) throw new Error("The demo rule no longer exists.");
-    this.data.rules.splice(index, 1);
-  }
-
-  updateSettings(input: Partial<AppSettings>): AppSettings {
-    Object.assign(this.data.settings, input);
-    return clone(this.data.settings);
-  }
-
   private aiSettings(): AiSettings {
     return clone(this.data.aiSettings);
-  }
-
-  updateAiFeature(feature: AiFeature, input: { provider: AiProvider; model?: string }): AiSettings {
-    if (feature === "article_summary") {
-      const provider = this.data.aiSettings.providers.find(
-        (option) => option.id === input.provider,
-      );
-      this.data.aiSettings.features.articleSummary = {
-        provider: input.provider,
-        model: input.model ?? provider?.defaultModel ?? "demo",
-      };
-    }
-    return this.aiSettings();
   }
 
   setProviderConfigured(providerId: AiProvider, configured: boolean): AiSettings {
     const provider = this.data.aiSettings.providers.find((option) => option.id === providerId);
     if (provider) provider.configured = configured;
     return this.aiSettings();
-  }
-
-  summarizeArticle(id: number, promptId: string | null): ArticleAiSummary {
-    const article = this.requireArticle(id);
-    const text =
-      promptId === "key-ideas"
-        ? [
-            `- **Protect attention:** ${article.summary}`,
-            "- **Prefer clear boundaries:** focused systems are easier to understand and maintain.",
-            "- **Design for continuity:** the next useful action should feel natural, not demanding.",
-          ].join("\n")
-        : `${article.summary} The article argues for focused tools, legible choices, and systems that give attention back to the reader.`;
-    const summary: ArticleAiSummary = {
-      text,
-      promptId,
-      provider: "openai",
-      model: "demo",
-      sourceKind: "full",
-      generatedAt: new Date().toISOString(),
-      usage: { inputTokens: null, outputTokens: null },
-      grounding: null,
-    };
-    article.aiSummary = summary;
-    return clone(summary);
-  }
-
-  translateArticle(id: number, sourceKind: AiArticleSourceKind): ArticleAiTranslation {
-    const article = this.requireArticle(id);
-    return {
-      html: `<p><strong>${article.title}</strong></p><p>Cette démonstration conserve la structure de l’article tout en présentant une traduction concise de son idée principale.</p>`,
-      language: this.data.settings.translationLanguage,
-      provider: "openai",
-      model: "demo",
-      sourceKind,
-      generatedAt: new Date().toISOString(),
-      usage: { inputTokens: null, outputTokens: null },
-    };
-  }
-
-  importOpml(_opml: string): ImportResult {
-    return { imported: 0, duplicates: 0, failed: [] };
   }
 
   exportOpml(): string {
@@ -538,14 +332,101 @@ export class DemoStore {
     loadFullContent: ({ id }) => this.article(id),
     telegramArticleMedia: () => ({ items: [] }),
     xArticleMedia: () => ({ sourceUrl: "", posterUrl: null, aspectRatio: null }),
-    summarizeArticle: ({ id, promptId }) => this.summarizeArticle(id, promptId),
-    translateArticle: ({ id, sourceKind }) => this.translateArticle(id, sourceKind),
+    summarizeArticle: ({ id, promptId }) => {
+      const article = this.requireArticle(id);
+      const text =
+        promptId === "key-ideas"
+          ? [
+              `- **Protect attention:** ${article.summary}`,
+              "- **Prefer clear boundaries:** focused systems are easier to understand and maintain.",
+              "- **Design for continuity:** the next useful action should feel natural, not demanding.",
+            ].join("\n")
+          : `${article.summary} The article argues for focused tools, legible choices, and systems that give attention back to the reader.`;
+      const summary: ArticleAiSummary = {
+        text,
+        promptId,
+        provider: "openai",
+        model: "demo",
+        sourceKind: "full",
+        generatedAt: new Date().toISOString(),
+        usage: { inputTokens: null, outputTokens: null },
+        grounding: null,
+      };
+      article.aiSummary = summary;
+      return clone(summary);
+    },
+    translateArticle: ({ id, sourceKind }) => {
+      const article = this.requireArticle(id);
+      return {
+        html: `<p><strong>${article.title}</strong></p><p>Cette démonstration conserve la structure de l’article tout en présentant une traduction concise de son idée principale.</p>`,
+        language: this.data.settings.translationLanguage,
+        provider: "openai",
+        model: "demo",
+        sourceKind,
+        generatedAt: new Date().toISOString(),
+        usage: { inputTokens: null, outputTokens: null },
+      };
+    },
     updateArticleState: ({ id, state }) => this.updateArticleState(id, state),
     markRead: (request) => this.markRead(request),
-    refresh: ({ feedIds }) => this.refresh(feedIds),
-    discoverFeed: ({ url }) => this.discoverFeed(url),
+    refresh: ({ feedIds }) => {
+      const activeFeeds = this.data.feeds.filter((feed) => !feed.paused);
+      return {
+        requested: feedIds
+          ? activeFeeds.filter((feed) => feedIds.includes(feed.id)).length
+          : activeFeeds.length,
+        refreshingFeedIds: [],
+      };
+    },
+    discoverFeed: ({ url }) => {
+      const title = titleFromUrl(url);
+      return {
+        kind: "published",
+        preview: {
+          feedUrl: url,
+          title,
+          siteUrl: url,
+          totalArticles: 3,
+          articles: this.data.articles.slice(0, 3).map((article) => ({
+            title: article.title,
+            url: article.url,
+            author: article.author,
+            publishedAt: article.publishedAt,
+            summary: article.summary,
+            imageUrl: article.imageUrl,
+          })),
+        },
+      };
+    },
     analyzeWebPage: ({ url }) => this.analyzeWebPage(url),
-    createFeed: (input) => this.createFeed(input),
+    createFeed: (input) => {
+      const now = new Date().toISOString();
+      const title = input.title?.trim() || titleFromUrl(input.siteUrl ?? input.feedUrl);
+      const feed: Feed = {
+        id: idAfter(this.data.feeds),
+        folderId: input.folderId ?? null,
+        title,
+        feedUrl: input.feedUrl,
+        siteUrl: input.siteUrl ?? null,
+        sourceKind: input.sourceKind,
+        lastErrorKind: null,
+        lastMatchCount: input.sourceKind === "web" ? 3 : null,
+        createdAt: now,
+        pollIntervalMinutes: this.data.settings.pollIntervalMinutes,
+        unreadCount: 0,
+        totalCount: 0,
+        paused: input.sourceKind === "published" && (input.paused ?? false),
+        refreshing: false,
+        lastPostAt: null,
+        lastAttemptAt: now,
+        lastSuccessAt: now,
+        lastHttpStatus: 200,
+        lastError: null,
+        nextPollAt: null,
+      };
+      this.data.feeds.push(feed);
+      return clone(feed);
+    },
     feed: ({ id }) => this.feed(id),
     updateFeed: ({ id, input }) => this.updateFeed(id, input),
     deleteFeed: ({ id }) => this.deleteFeed(id),
@@ -554,23 +435,112 @@ export class DemoStore {
       return this.analyzeWebPage(feed.siteUrl ?? feed.feedUrl, "demo-articles");
     },
     updateWebFeedSelection: ({ id }) => this.feed(id),
-    createFolder: (input) => this.createFolder(input),
-    updateFolder: ({ id, input }) => this.updateFolder(id, input),
-    deleteFolder: ({ id }) => this.deleteFolder(id),
-    rules: () => ({ rules: this.rules() }),
-    createRule: (input) => this.createRule(input),
-    updateRule: ({ id, input }) => this.updateRule(id, input),
-    deleteRule: ({ id }) => this.deleteRule(id),
-    updateSettings: (input) => this.updateSettings(input),
-    updateAiFeature: ({ feature, input }) => this.updateAiFeature(feature, input),
+    createFolder: (input) => {
+      const parentId = input.parentId ?? null;
+      if (parentId !== null) this.requireFolder(parentId);
+      const siblings = this.data.folders.filter((folder) => folder.parentId === parentId);
+      const folder: Folder = {
+        id: idAfter(this.data.folders),
+        parentId,
+        name: input.name,
+        position:
+          input.position ?? Math.max(-1, ...siblings.map((sibling) => sibling.position)) + 1,
+        sortDirection: input.sortDirection ?? "newest",
+        unreadCount: 0,
+      };
+      this.data.folders.push(folder);
+      return clone(folder);
+    },
+    updateFolder: ({ id, input }) => {
+      const folder = this.requireFolder(id);
+      if (input.parentId !== undefined) {
+        if (input.parentId !== null) this.requireFolder(input.parentId);
+        if (!validFolderParent(id, input.parentId, this.data.folders)) {
+          throw new Error("Choose a parent outside this folder.");
+        }
+      }
+      const previousParentId = folder.parentId;
+      Object.assign(folder, input);
+      if (folder.parentId !== previousParentId) this.applyReadRules();
+      return clone(folder);
+    },
+    deleteFolder: ({ id }) => {
+      const folder = this.requireFolder(id);
+      const parentId = folder.parentId;
+      this.data.folders.splice(
+        0,
+        this.data.folders.length,
+        ...this.data.folders.filter((candidate) => candidate.id !== id),
+      );
+      for (const child of this.data.folders) {
+        if (child.parentId === id) child.parentId = parentId;
+      }
+      for (const feed of this.data.feeds) {
+        if (feed.folderId === id) this.updateFeed(feed.id, { folderId: parentId });
+      }
+      for (const rule of this.data.rules) {
+        if (rule.folderId === id) rule.folderId = parentId;
+      }
+      this.applyReadRules();
+    },
+    rules: () => ({ rules: this.data.rules.map((rule) => this.ruleWithCount(rule)) }),
+    createRule: (input) => {
+      const now = new Date().toISOString();
+      const rule: Rule = {
+        id: idAfter(this.data.rules),
+        ...input,
+        feedId: input.feedId ?? null,
+        folderId: input.folderId ?? null,
+        enabled: input.enabled ?? true,
+        matchedCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.data.rules.push(rule);
+      this.applyReadRule(rule, this.data.articles);
+      return this.ruleWithCount(rule);
+    },
+    updateRule: ({ id, input }) => {
+      const rule = this.data.rules.find((candidate) => candidate.id === id);
+      if (!rule) throw new Error("The demo rule no longer exists.");
+      Object.assign(rule, input, { updatedAt: new Date().toISOString() });
+      this.applyReadRule(rule, this.data.articles);
+      return this.ruleWithCount(rule);
+    },
+    deleteRule: ({ id }) => {
+      const index = this.data.rules.findIndex((rule) => rule.id === id);
+      if (index < 0) throw new Error("The demo rule no longer exists.");
+      this.data.rules.splice(index, 1);
+    },
+    updateSettings: (input) => {
+      Object.assign(this.data.settings, input);
+      return clone(this.data.settings);
+    },
+    updateAiFeature: ({ feature, input }) => {
+      if (feature === "article_summary") {
+        const provider = this.data.aiSettings.providers.find(
+          (option) => option.id === input.provider,
+        );
+        this.data.aiSettings.features.articleSummary = {
+          provider: input.provider,
+          model: input.model ?? provider?.defaultModel ?? "demo",
+        };
+      }
+      return this.aiSettings();
+    },
     saveAiProviderKey: ({ provider }) => this.setProviderConfigured(provider, true),
     deleteAiProviderKey: ({ provider }) => this.setProviderConfigured(provider, false),
-    importOpml: ({ opml }) => this.importOpml(opml),
+    importOpml: () => ({ imported: 0, duplicates: 0, failed: [] }),
     exportOpml: () => this.exportOpml(),
   };
 
   private filteredArticles(query: ArticleQuery): Article[] {
     const folderIds = query.folderId === undefined ? null : this.folderBranchIds(query.folderId);
+    // A NUL ends SQLite's LIKE pattern before the trailing wildcard, requiring a suffix match.
+    const fold = (text: string) =>
+      (text.split("\0", 1)[0] ?? "").replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+    const pattern = query.search ? fold(normalizeSearchText(query.search)) : null;
+    const suffixSearch = query.search?.includes("\0");
     return this.data.articles.filter((article) => {
       if (query.state !== "saved" && article.feedId === null) return false;
       if (query.feedId !== undefined && article.feedId !== query.feedId) return false;
@@ -578,11 +548,32 @@ export class DemoStore {
         return false;
       }
       if (article.id === query.anchorId) return true;
-      if (query.state !== "saved" && !this.articleVisible(article)) return false;
+      if (query.state !== "saved") {
+        const rules = this.data.rules.filter(
+          (rule) => rule.enabled && this.ruleInScope(rule, article),
+        );
+        if (rules.some((rule) => rule.action === "hide" && articleMatchesRule(article, rule))) {
+          return false;
+        }
+        const keepRules = rules.filter((rule) => rule.action === "keep");
+        if (keepRules.length && !keepRules.some((rule) => articleMatchesRule(article, rule)))
+          return false;
+      }
       if (query.state === "unread" && article.isRead) return false;
       if (query.state === "read" && !article.isRead) return false;
       if (query.state === "saved" && !article.isSaved) return false;
-      return !query.search || articleMatchesSearch(article, query.search);
+      if (pattern === null) return true;
+      const values: Record<(typeof articleSearchColumns)[number], string> = {
+        title: article.title,
+        author: article.author ?? "",
+        summary: article.summary,
+        feed_text: articleSearchText(article.feedContentHtml),
+        content_text: articleSearchText(article.contentHtml),
+      };
+      return articleSearchColumns.some((column) => {
+        const value = fold(values[column]);
+        return suffixSearch ? value.endsWith(pattern) : value.includes(pattern);
+      });
     });
   }
 
@@ -593,16 +584,6 @@ export class DemoStore {
       rule.folderId === null ||
       (article.folderId !== null && this.folderBranchIds(rule.folderId).has(article.folderId))
     );
-  }
-
-  private articleVisible(article: Article): boolean {
-    if (article.feedId === null) return false;
-    const rules = this.data.rules.filter((rule) => rule.enabled && this.ruleInScope(rule, article));
-    if (rules.some((rule) => rule.action === "hide" && articleMatchesRule(article, rule))) {
-      return false;
-    }
-    const keepRules = rules.filter((rule) => rule.action === "keep");
-    return keepRules.length === 0 || keepRules.some((rule) => articleMatchesRule(article, rule));
   }
 
   private ruleWithCount(rule: Rule): Rule {
@@ -646,11 +627,5 @@ export class DemoStore {
     const folder = this.data.folders.find((candidate) => candidate.id === id);
     if (!folder) throw new Error("The demo folder no longer exists.");
     return folder;
-  }
-
-  private requireRule(id: number): Rule {
-    const rule = this.data.rules.find((candidate) => candidate.id === id);
-    if (!rule) throw new Error("The demo rule no longer exists.");
-    return rule;
   }
 }
