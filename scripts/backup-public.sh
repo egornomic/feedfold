@@ -7,33 +7,47 @@ flock --shared 9
 exec 8>/run/lock/feedfold-backup.lock
 flock 8
 mkdir -p /srv/feedfold/backups
-# The daily job removes copies a day before the seven-day limit.
+# Enforce the age limit even if this run cannot create a new snapshot.
 find /srv/feedfold/backups -maxdepth 1 -name 'feedfold-*.db.gz' -mmin +8639 -delete
+staging=$(mktemp -d /srv/feedfold/backups/.staging-XXXXXX)
+trap 'rm -rf -- "$staging"' EXIT
+trap 'exit 1' HUP INT TERM
 volume=$(docker volume inspect feedfold_feedfold-data --format '{{.Mountpoint}}')
-backup="/srv/feedfold/backups/feedfold-$(date -u +%Y%m%dT%H%M%S%NZ).db"
-sqlite3 "$volume/feedfold.db" ".backup '$backup'"
-sqlite3 "$backup" < /srv/feedfold/app/scripts/sanitize-youtube-backup.sql > /dev/null
-if [[ $(sqlite3 "$backup" 'PRAGMA integrity_check;') != ok ]]; then
+database="$staging/feedfold.db"
+sqlite3 -batch -bail -cmd '.timeout 10000' "$volume/feedfold.db" ".backup '$database'"
+sqlite3 -batch -bail "$database" < /srv/feedfold/app/scripts/sanitize-youtube-backup.sql > /dev/null
+checks=$(sqlite3 -batch -bail "$database" 'PRAGMA integrity_check; PRAGMA foreign_key_check;')
+if [[ $checks != ok ]]; then
   echo 'Database backup failed its integrity check.' >&2
   exit 1
 fi
-gzip "$backup"
-# Retain two complete backups alongside the live database on the 50 GB droplet.
+gzip "$database"
+backup="/srv/feedfold/backups/feedfold-$(date -u +%Y%m%dT%H%M%S%NZ).db.gz"
+mv -- "$database.gz" "$backup"
+
+# The timer and export can run on the same day. Keep one snapshot per day.
 mapfile -t backups < <(find /srv/feedfold/backups -maxdepth 1 -name 'feedfold-*.db.gz' | sort -r)
-for old_backup in "${backups[@]:2}"; do
-  rm -- "$old_backup"
+last_day=
+kept=0
+for snapshot in "${backups[@]}"; do
+  day=${snapshot##*/feedfold-}
+  day=${day%%T*}
+  if [[ $day != "$last_day" ]] && (( kept < 2 )); then
+    last_day=$day
+    kept=$((kept + 1))
+  else
+    rm -- "$snapshot"
+  fi
 done
 
 if [[ ${1:-} == export ]]; then
-  recovery=$(mktemp -d /srv/feedfold/recovery-XXXXXX)
-  trap 'rm -rf -- "$recovery"' EXIT
-  cp /srv/feedfold/revision "$recovery/revision"
-  revision=$(cat "$recovery/revision")
+  cp /srv/feedfold/revision "$staging/revision"
+  revision=$(cat "$staging/revision")
   image="feedfold:$revision"
-  docker image inspect --format '{{.Id}}' "$image" > "$recovery/image-id"
-  docker save "$image" | gzip -1 > "$recovery/image.tar.gz"
-  cp "$backup.gz" "$recovery/feedfold.db.gz"
-  cp /etc/feedfold/feedfold.env "$recovery/feedfold.env"
-  tar -cf - -C "$recovery" feedfold.db.gz feedfold.env revision image-id image.tar.gz \
+  docker image inspect --format '{{.Id}}' "$image" > "$staging/image-id"
+  docker save "$image" | gzip -1 > "$staging/image.tar.gz"
+  ln -- "$backup" "$staging/feedfold.db.gz"
+  cp /etc/feedfold/feedfold.env "$staging/feedfold.env"
+  tar -cf - -C "$staging" feedfold.db.gz feedfold.env revision image-id image.tar.gz \
     | age --recipients-file /etc/feedfold/backup-recipient.txt
 fi
