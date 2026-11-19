@@ -1,140 +1,174 @@
 import type Sqlite from "better-sqlite3";
 import type {
-  AiArticleSourceKind,
-  AiFeature,
-  AiFeatureSetting,
-  AiProvider,
-  AiUsage,
+    AiArticleSourceKind,
+    AiFeature,
+    AiFeatureSetting,
+    AiProvider,
+    AiUsage,
 } from "../../../shared/types.js";
 import {
-  type AiArticleRecord,
-  mapStoredArticleAiSummary,
-  mapStoredArticleAiTranslation,
-  now,
-  parseArticleMedia,
-  type Row,
-  type StoredArticleAiSummary,
-  type StoredArticleAiTranslation,
+    type AiArticleRecord,
+    mapStoredArticleAiSummary,
+    mapStoredArticleAiTranslation,
+    now,
+    parseArticleMedia,
+    type Row,
+    type StoredArticleAiSummary,
+    type StoredArticleAiTranslation,
 } from "../shared.js";
 
 export class AiRepository {
-  constructor(private readonly sqlite: Sqlite.Database) {}
+    constructor(private readonly sqlite: Sqlite.Database) {}
 
-  getAiFeatureSetting(userId: number, feature: AiFeature): AiFeatureSetting | null {
-    const row = this.sqlite
-      .prepare(
-        `SELECT provider, model
+    getAiFeatureSetting(
+        userId: number,
+        feature: AiFeature,
+    ): AiFeatureSetting | null {
+        const row = this.sqlite
+            .prepare(
+                `SELECT provider, model
          FROM ai_feature_settings
          WHERE user_id = ? AND feature = ?`,
-      )
-      .get(userId, feature) as Row | undefined;
-    if (!row) return null;
-    return { provider: row.provider as AiProvider, model: String(row.model) };
-  }
+            )
+            .get(userId, feature) as Row | undefined;
+        if (!row) {
+            return null;
+        }
+        return {
+            provider: row.provider as AiProvider,
+            model: String(row.model),
+        };
+    }
 
-  setAiFeatureSetting(
-    userId: number,
-    feature: AiFeature,
-    setting: AiFeatureSetting,
-  ): AiFeatureSetting {
-    this.sqlite
-      .prepare(
-        `INSERT INTO ai_feature_settings (user_id, feature, provider, model, updated_at)
+    setAiFeatureSetting(
+        userId: number,
+        feature: AiFeature,
+        setting: AiFeatureSetting,
+    ): AiFeatureSetting {
+        this.sqlite
+            .prepare(
+                `INSERT INTO ai_feature_settings (user_id, feature, provider, model, updated_at)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(user_id, feature) DO UPDATE SET
            provider = excluded.provider,
            model = excluded.model,
            updated_at = excluded.updated_at`,
-      )
-      .run(userId, feature, setting.provider, setting.model, now());
-    return this.getAiFeatureSetting(userId, feature) as AiFeatureSetting;
-  }
+            )
+            .run(userId, feature, setting.provider, setting.model, now());
+        return this.getAiFeatureSetting(userId, feature) as AiFeatureSetting;
+    }
 
-  listConfiguredAiProviders(userId: number, deviceId = "desktop"): AiProvider[] {
-    return (
-      this.sqlite
-        .prepare(
-          "SELECT provider FROM ai_credentials WHERE user_id = ? AND device_id = ? ORDER BY provider",
-        )
-        .all(userId, deviceId) as Array<{ provider: AiProvider }>
-    ).map((row) => row.provider);
-  }
+    listConfiguredAiProviders(
+        userId: number,
+        deviceId = "desktop",
+    ): AiProvider[] {
+        return (
+            this.sqlite
+                .prepare(
+                    "SELECT provider FROM ai_credentials WHERE user_id = " +
+                        "? AND device_id = ? ORDER BY provider",
+                )
+                .all(userId, deviceId) as Array<{ provider: AiProvider }>
+        ).map((row) => row.provider);
+    }
 
-  getEncryptedAiCredential(
-    userId: number,
-    provider: AiProvider,
-    deviceId = "desktop",
-  ): string | null {
-    const row = this.sqlite
-      .prepare(
-        `SELECT encrypted_api_key AS encryptedApiKey
+    getEncryptedAiCredential(
+        userId: number,
+        provider: AiProvider,
+        deviceId = "desktop",
+    ): string | null {
+        const row = this.sqlite
+            .prepare(
+                `SELECT encrypted_api_key AS encryptedApiKey
          FROM ai_credentials WHERE user_id = ? AND provider = ? AND device_id = ?`,
-      )
-      .get(userId, provider, deviceId) as { encryptedApiKey: string } | undefined;
-    return row?.encryptedApiKey ?? null;
-  }
+            )
+            .get(userId, provider, deviceId) as
+            | { encryptedApiKey: string }
+            | undefined;
+        return row?.encryptedApiKey ?? null;
+    }
 
-  setEncryptedAiCredential(
-    userId: number,
-    provider: AiProvider,
-    encryptedApiKey: string,
-    deviceId = "desktop",
-  ): void {
-    const timestamp = now();
-    this.sqlite
-      .prepare(
-        `INSERT INTO ai_credentials (
+    setEncryptedAiCredential(
+        userId: number,
+        provider: AiProvider,
+        encryptedApiKey: string,
+        deviceId = "desktop",
+    ): void {
+        const timestamp = now();
+        this.sqlite
+            .prepare(
+                `INSERT INTO ai_credentials (
            user_id, provider, encrypted_api_key, device_id, created_at, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(user_id, device_id, provider) DO UPDATE SET
            encrypted_api_key = excluded.encrypted_api_key,
            updated_at = excluded.updated_at`,
-      )
-      .run(userId, provider, encryptedApiKey, deviceId, timestamp, timestamp);
-  }
+            )
+            .run(
+                userId,
+                provider,
+                encryptedApiKey,
+                deviceId,
+                timestamp,
+                timestamp,
+            );
+    }
 
-  deleteAiCredential(userId: number, provider: AiProvider, deviceId = "desktop"): void {
-    this.sqlite
-      .prepare("DELETE FROM ai_credentials WHERE user_id = ? AND provider = ? AND device_id = ?")
-      .run(userId, provider, deviceId);
-  }
+    deleteAiCredential(
+        userId: number,
+        provider: AiProvider,
+        deviceId = "desktop",
+    ): void {
+        this.sqlite
+            .prepare(
+                "DELETE FROM ai_credentials WHERE user_id = ? AND provider = ? AND device_id = ?",
+            )
+            .run(userId, provider, deviceId);
+    }
 
-  deleteDeviceAiCredentials(userId: number, deviceId: string): void {
-    this.sqlite
-      .prepare("DELETE FROM ai_credentials WHERE user_id = ? AND device_id = ?")
-      .run(userId, deviceId);
-  }
+    deleteDeviceAiCredentials(userId: number, deviceId: string): void {
+        this.sqlite
+            .prepare(
+                "DELETE FROM ai_credentials WHERE user_id = ? AND device_id = ?",
+            )
+            .run(userId, deviceId);
+    }
 
-  deleteDefaultArticleSummaries(userId: number): void {
-    this.sqlite
-      .prepare(
-        `DELETE FROM article_ai_summaries
+    deleteDefaultArticleSummaries(userId: number): void {
+        this.sqlite
+            .prepare(
+                `DELETE FROM article_ai_summaries
          WHERE prompt_id IS NULL AND user_id = ?`,
-      )
-      .run(userId);
-  }
+            )
+            .run(userId);
+    }
 
-  deleteCustomPromptArticleSummaries(userId: number, promptIds: Iterable<string>): void {
-    const deleteSummaries = this.sqlite.prepare(
-      `DELETE FROM article_ai_summaries
+    deleteCustomPromptArticleSummaries(
+        userId: number,
+        promptIds: Iterable<string>,
+    ): void {
+        const deleteSummaries = this.sqlite.prepare(
+            `DELETE FROM article_ai_summaries
        WHERE prompt_id = ? AND user_id = ?`,
-    );
-    for (const promptId of promptIds) deleteSummaries.run(promptId, userId);
-  }
+        );
+        for (const promptId of promptIds) {
+            deleteSummaries.run(promptId, userId);
+        }
+    }
 
-  deleteArticleTranslations(userId: number): void {
-    this.sqlite
-      .prepare(
-        `DELETE FROM article_ai_translations
+    deleteArticleTranslations(userId: number): void {
+        this.sqlite
+            .prepare(
+                `DELETE FROM article_ai_translations
          WHERE user_id = ?`,
-      )
-      .run(userId);
-  }
+            )
+            .run(userId);
+    }
 
-  getArticleForAi(userId: number, id: number): AiArticleRecord | null {
-    const row = this.sqlite
-      .prepare(
-        `SELECT articles.id,
+    getArticleForAi(userId: number, id: number): AiArticleRecord | null {
+        const row = this.sqlite
+            .prepare(
+                `SELECT articles.id,
                 articles.content_revision AS revision,
                 articles.title,
                 articles.url,
@@ -163,27 +197,36 @@ export class AiRepository {
              SELECT 1 FROM account_articles
              WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
-      )
-      .get(userId, id, userId) as Row | undefined;
-    if (!row) return null;
-    return {
-      id: Number(row.id),
-      revision: Number(row.revision),
-      title: String(row.title),
-      url: row.url === null ? null : String(row.url),
-      author: row.author === null ? null : String(row.author),
-      media: parseArticleMedia(row.mediaJson),
-      contentHtml: row.contentHtml === null ? null : String(row.contentHtml),
-      feedContentHtml: row.feedContentHtml === null ? null : String(row.feedContentHtml),
-      excerpt: String(row.excerpt),
-      currentSummary: mapStoredArticleAiSummary(row),
-    };
-  }
+            )
+            .get(userId, id, userId) as Row | undefined;
+        if (!row) {
+            return null;
+        }
+        return {
+            id: Number(row.id),
+            revision: Number(row.revision),
+            title: String(row.title),
+            url: row.url === null ? null : String(row.url),
+            author: row.author === null ? null : String(row.author),
+            media: parseArticleMedia(row.mediaJson),
+            contentHtml:
+                row.contentHtml === null ? null : String(row.contentHtml),
+            feedContentHtml:
+                row.feedContentHtml === null
+                    ? null
+                    : String(row.feedContentHtml),
+            excerpt: String(row.excerpt),
+            currentSummary: mapStoredArticleAiSummary(row),
+        };
+    }
 
-  getArticleAiSummary(userId: number, id: number): StoredArticleAiSummary | null {
-    const row = this.sqlite
-      .prepare(
-        `SELECT article_ai_summaries.source_revision AS aiSummarySourceRevision,
+    getArticleAiSummary(
+        userId: number,
+        id: number,
+    ): StoredArticleAiSummary | null {
+        const row = this.sqlite
+            .prepare(
+                `SELECT article_ai_summaries.source_revision AS aiSummarySourceRevision,
                 article_ai_summaries.prompt_version AS aiSummaryPromptVersion,
                 article_ai_summaries.prompt_id AS aiSummaryPromptId,
                 article_ai_summaries.source_kind AS aiSummarySourceKind,
@@ -202,41 +245,44 @@ export class AiRepository {
              SELECT 1 FROM account_articles
              WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
-      )
-      .get(id, userId, userId) as Row | undefined;
-    return row ? mapStoredArticleAiSummary(row) : null;
-  }
+            )
+            .get(id, userId, userId) as Row | undefined;
+        return row ? mapStoredArticleAiSummary(row) : null;
+    }
 
-  saveArticleAiSummary(
-    userId: number,
-    id: number,
-    sourceRevision: number,
-    input: {
-      promptVersion: number;
-      promptId: string | null;
-      sourceKind: AiArticleSourceKind;
-      provider: AiProvider;
-      model: string;
-      text: string;
-      usage: AiUsage;
-    },
-  ): StoredArticleAiSummary | null {
-    const save = this.sqlite.transaction(() => {
-      const current = this.sqlite
-        .prepare(
-          `SELECT articles.content_revision AS revision
+    saveArticleAiSummary(
+        userId: number,
+        id: number,
+        sourceRevision: number,
+        input: {
+            promptVersion: number;
+            promptId: string | null;
+            sourceKind: AiArticleSourceKind;
+            provider: AiProvider;
+            model: string;
+            text: string;
+            usage: AiUsage;
+        },
+    ): StoredArticleAiSummary | null {
+        const save = this.sqlite.transaction(() => {
+            const current = this.sqlite
+                .prepare(
+                    `SELECT articles.content_revision AS revision
            FROM articles
            WHERE articles.id = ? AND EXISTS (
              SELECT 1 FROM account_articles
              WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
-        )
-        .get(id, userId) as { revision: number } | undefined;
-      if (!current || current.revision !== sourceRevision) return null;
-      this.sqlite
-        .prepare(
-          `INSERT INTO article_ai_summaries (
-             user_id, article_id, source_revision, prompt_version, prompt_id, source_kind, provider, model,
+                )
+                .get(id, userId) as { revision: number } | undefined;
+            if (!current || current.revision !== sourceRevision) {
+                return null;
+            }
+            this.sqlite
+                .prepare(
+                    `INSERT INTO article_ai_summaries (
+             user_id, article_id, source_revision, prompt_version, prompt_id,
+             source_kind, provider, model,
              summary_text, input_tokens, output_tokens, generated_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(user_id, article_id) DO UPDATE SET
@@ -250,35 +296,35 @@ export class AiRepository {
              input_tokens = excluded.input_tokens,
              output_tokens = excluded.output_tokens,
              generated_at = excluded.generated_at`,
-        )
-        .run(
-          userId,
-          id,
-          sourceRevision,
-          input.promptVersion,
-          input.promptId,
-          input.sourceKind,
-          input.provider,
-          input.model,
-          input.text,
-          input.usage.inputTokens,
-          input.usage.outputTokens,
-          now(),
-        );
-      return this.getArticleAiSummary(userId, id);
-    });
-    return save();
-  }
+                )
+                .run(
+                    userId,
+                    id,
+                    sourceRevision,
+                    input.promptVersion,
+                    input.promptId,
+                    input.sourceKind,
+                    input.provider,
+                    input.model,
+                    input.text,
+                    input.usage.inputTokens,
+                    input.usage.outputTokens,
+                    now(),
+                );
+            return this.getArticleAiSummary(userId, id);
+        });
+        return save();
+    }
 
-  getArticleAiTranslation(
-    userId: number,
-    id: number,
-    language: string,
-    sourceKind: AiArticleSourceKind,
-  ): StoredArticleAiTranslation | null {
-    const row = this.sqlite
-      .prepare(
-        `SELECT article_ai_translations.source_revision AS aiTranslationSourceRevision,
+    getArticleAiTranslation(
+        userId: number,
+        id: number,
+        language: string,
+        sourceKind: AiArticleSourceKind,
+    ): StoredArticleAiTranslation | null {
+        const row = this.sqlite
+            .prepare(
+                `SELECT article_ai_translations.source_revision AS aiTranslationSourceRevision,
                 article_ai_translations.prompt_version AS aiTranslationPromptVersion,
                 article_ai_translations.target_language AS aiTranslationLanguage,
                 article_ai_translations.source_kind AS aiTranslationSourceKind,
@@ -299,40 +345,42 @@ export class AiRepository {
              SELECT 1 FROM account_articles
              WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
-      )
-      .get(id, userId, language, sourceKind, userId) as Row | undefined;
-    return row ? mapStoredArticleAiTranslation(row) : null;
-  }
+            )
+            .get(id, userId, language, sourceKind, userId) as Row | undefined;
+        return row ? mapStoredArticleAiTranslation(row) : null;
+    }
 
-  saveArticleAiTranslation(
-    userId: number,
-    id: number,
-    sourceRevision: number,
-    input: {
-      promptVersion: number;
-      language: string;
-      sourceKind: AiArticleSourceKind;
-      provider: AiProvider;
-      model: string;
-      html: string;
-      usage: AiUsage;
-    },
-  ): StoredArticleAiTranslation | null {
-    const save = this.sqlite.transaction(() => {
-      const current = this.sqlite
-        .prepare(
-          `SELECT articles.content_revision AS revision
+    saveArticleAiTranslation(
+        userId: number,
+        id: number,
+        sourceRevision: number,
+        input: {
+            promptVersion: number;
+            language: string;
+            sourceKind: AiArticleSourceKind;
+            provider: AiProvider;
+            model: string;
+            html: string;
+            usage: AiUsage;
+        },
+    ): StoredArticleAiTranslation | null {
+        const save = this.sqlite.transaction(() => {
+            const current = this.sqlite
+                .prepare(
+                    `SELECT articles.content_revision AS revision
            FROM articles
            WHERE articles.id = ? AND EXISTS (
              SELECT 1 FROM account_articles
              WHERE account_articles.article_id = articles.id AND account_articles.user_id = ?
            )`,
-        )
-        .get(id, userId) as { revision: number } | undefined;
-      if (!current || current.revision !== sourceRevision) return null;
-      this.sqlite
-        .prepare(
-          `INSERT INTO article_ai_translations (
+                )
+                .get(id, userId) as { revision: number } | undefined;
+            if (!current || current.revision !== sourceRevision) {
+                return null;
+            }
+            this.sqlite
+                .prepare(
+                    `INSERT INTO article_ai_translations (
              user_id, article_id, target_language, source_kind, source_revision, prompt_version,
              provider, model, translation_html, input_tokens, output_tokens, generated_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -345,23 +393,28 @@ export class AiRepository {
              input_tokens = excluded.input_tokens,
              output_tokens = excluded.output_tokens,
              generated_at = excluded.generated_at`,
-        )
-        .run(
-          userId,
-          id,
-          input.language,
-          input.sourceKind,
-          sourceRevision,
-          input.promptVersion,
-          input.provider,
-          input.model,
-          input.html,
-          input.usage.inputTokens,
-          input.usage.outputTokens,
-          now(),
-        );
-      return this.getArticleAiTranslation(userId, id, input.language, input.sourceKind);
-    });
-    return save();
-  }
+                )
+                .run(
+                    userId,
+                    id,
+                    input.language,
+                    input.sourceKind,
+                    sourceRevision,
+                    input.promptVersion,
+                    input.provider,
+                    input.model,
+                    input.html,
+                    input.usage.inputTokens,
+                    input.usage.outputTokens,
+                    now(),
+                );
+            return this.getArticleAiTranslation(
+                userId,
+                id,
+                input.language,
+                input.sourceKind,
+            );
+        });
+        return save();
+    }
 }

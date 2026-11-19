@@ -78,7 +78,7 @@ it("shares navigation, preferences, and panel controls across the reader and man
       "dismissed folder dialog",
       () => document.querySelector('[role="dialog"]') === null,
     );
-    expect(fixture.database.folders.listFolders(1)).toEqual([]);
+    expect(fixture.database.bootstrap.getBootstrap(1).folders).toEqual([]);
   } finally {
     await fixture.close();
   }

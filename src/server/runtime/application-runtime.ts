@@ -4,121 +4,141 @@ import { AppDatabase } from "../database.js";
 import type { CredentialCipherLike } from "../features/ai/credential-cipher.js";
 import { AiService } from "../features/ai/service.js";
 import { ExtractionQueue } from "../features/extraction/queue.js";
-import { WebFeedService, type WebFeedServiceOptions } from "../features/feeds/web/service.js";
+import {
+    WebFeedService,
+    type WebFeedServiceOptions,
+} from "../features/feeds/web/service.js";
 import { FeedRefreshService } from "../features/refresh/service.js";
 import { DefaultFeedSourceLoader } from "../feed-source-loader.js";
 import { closePublicNetwork } from "../public-network.js";
-import { DEFAULT_SERVER_POLICY, type ServicePolicy } from "../service-policy.js";
+import {
+    DEFAULT_SERVER_POLICY,
+    type ServicePolicy,
+} from "../service-policy.js";
 import { TelegramMediaService } from "../telegram-media.js";
 import { XMediaService } from "../x-media.js";
-import { type RuntimeConfiguration, runtimeConfiguration } from "./configuration.js";
+import {
+    type RuntimeConfiguration,
+    runtimeConfiguration,
+} from "./configuration.js";
 
 export interface ApplicationServicesOptions {
-  database: AppDatabase;
-  credentialCipher: CredentialCipherLike | null;
-  configuration?: RuntimeConfiguration;
-  webFeed?: Omit<WebFeedServiceOptions, "quotas" | "timeoutMs">;
-  extractionQueue?: ExtractionQueue;
-  refreshService?: FeedRefreshService;
-  webFeedService?: WebFeedService;
-  aiService?: AiService;
-  telegramMediaService?: TelegramMediaService;
-  xMediaService?: XMediaService;
-  feedDiscoveryTimeoutMs?: number;
+    database: AppDatabase;
+    credentialCipher: CredentialCipherLike | null;
+    configuration?: RuntimeConfiguration;
+    webFeed?: Omit<WebFeedServiceOptions, "quotas" | "timeoutMs">;
+    extractionQueue?: ExtractionQueue;
+    refreshService?: FeedRefreshService;
+    webFeedService?: WebFeedService;
+    aiService?: AiService;
+    telegramMediaService?: TelegramMediaService;
+    xMediaService?: XMediaService;
+    feedDiscoveryTimeoutMs?: number;
 }
 
 /** Builds services for an existing database; the caller owns their lifetime. */
 export function createApplicationServices({
-  database,
-  credentialCipher,
-  configuration = runtimeConfiguration({}),
-  extractionQueue = new ExtractionQueue(
-    database.extractions,
-    2,
-    configuration.articleFetchTimeoutMs,
-  ),
-  webFeed,
-  webFeedService = new WebFeedService({
-    ...webFeed,
-    timeoutMs: configuration.webFeedLoadTimeoutMs,
-    quotas: database.quotas,
-  }),
-  refreshService = new FeedRefreshService(
-    database.feeds,
-    new DefaultFeedSourceLoader(
-      (task) => database.feeds.runOutbound(task),
-      configuration.feedFetchTimeoutMs,
-      webFeedService,
-    ),
-    3,
-  ),
-  aiService = new AiService(database, {
-    credentialCipher,
-    requestTimeoutMs: configuration.aiRequestTimeoutMs,
-  }),
-  feedDiscoveryTimeoutMs = configuration.feedFetchTimeoutMs,
-  telegramMediaService = new TelegramMediaService(
-    feedDiscoveryTimeoutMs,
-    undefined,
-    database.quotas,
-  ),
-  xMediaService = new XMediaService(feedDiscoveryTimeoutMs, undefined, database.quotas),
-}: ApplicationServicesOptions) {
-  return {
     database,
-    extractionQueue,
-    webFeedService,
-    refreshService,
-    aiService,
-    telegramMediaService,
-    xMediaService,
-    feedDiscoveryTimeoutMs,
-  };
+    credentialCipher,
+    configuration = runtimeConfiguration({}),
+    extractionQueue = new ExtractionQueue(
+        database.extractions,
+        2,
+        configuration.articleFetchTimeoutMs,
+    ),
+    webFeed,
+    webFeedService = new WebFeedService({
+        ...webFeed,
+        timeoutMs: configuration.webFeedLoadTimeoutMs,
+        quotas: database.quotas,
+    }),
+    refreshService = new FeedRefreshService(
+        database.feeds,
+        new DefaultFeedSourceLoader(
+            (task) => database.feeds.runOutbound(task),
+            configuration.feedFetchTimeoutMs,
+            webFeedService,
+        ),
+        3,
+    ),
+    aiService = new AiService(database, {
+        credentialCipher,
+        requestTimeoutMs: configuration.aiRequestTimeoutMs,
+    }),
+    feedDiscoveryTimeoutMs = configuration.feedFetchTimeoutMs,
+    telegramMediaService = new TelegramMediaService(
+        feedDiscoveryTimeoutMs,
+        undefined,
+        database.quotas,
+    ),
+    xMediaService = new XMediaService(
+        feedDiscoveryTimeoutMs,
+        undefined,
+        database.quotas,
+    ),
+}: ApplicationServicesOptions) {
+    return {
+        database,
+        extractionQueue,
+        webFeedService,
+        refreshService,
+        aiService,
+        telegramMediaService,
+        xMediaService,
+        feedDiscoveryTimeoutMs,
+    };
 }
 
 export interface ApplicationRuntimeOptions {
-  databasePath: string;
-  configuration: RuntimeConfiguration;
-  credentialCipher: CredentialCipherLike | null;
-  servicePolicy?: ServicePolicy;
-  webFeed?: Omit<WebFeedServiceOptions, "quotas" | "timeoutMs">;
+    databasePath: string;
+    configuration: RuntimeConfiguration;
+    credentialCipher: CredentialCipherLike | null;
+    servicePolicy?: ServicePolicy;
+    webFeed?: Omit<WebFeedServiceOptions, "quotas" | "timeoutMs">;
 }
 
 /** Owns the application services and their process lifetime in either host. */
 export function createApplicationRuntime({
-  databasePath,
-  configuration,
-  credentialCipher,
-  servicePolicy = DEFAULT_SERVER_POLICY,
-  webFeed,
-}: ApplicationRuntimeOptions) {
-  mkdirSync(dirname(databasePath), { recursive: true });
-  const database = new AppDatabase(databasePath, configuration.pollIntervalMinutes, servicePolicy);
-  const services = createApplicationServices({
-    database,
+    databasePath,
     configuration,
     credentialCipher,
-    ...(webFeed === undefined ? {} : { webFeed }),
-  });
-  const { extractionQueue, refreshService, webFeedService } = services;
-  let retentionTimer: ReturnType<typeof setInterval> | undefined;
+    servicePolicy = DEFAULT_SERVER_POLICY,
+    webFeed,
+}: ApplicationRuntimeOptions) {
+    mkdirSync(dirname(databasePath), { recursive: true });
+    const database = new AppDatabase(
+        databasePath,
+        configuration.pollIntervalMinutes,
+        servicePolicy,
+    );
+    const services = createApplicationServices({
+        database,
+        configuration,
+        credentialCipher,
+        ...(webFeed === undefined ? {} : { webFeed }),
+    });
+    const { extractionQueue, refreshService, webFeedService } = services;
+    let retentionTimer: ReturnType<typeof setInterval> | undefined;
 
-  return {
-    services,
-    start(): void {
-      database.auth.pruneInvitationHistory();
-      database.feeds.deleteOrphanSources();
-      retentionTimer = setInterval(() => database.auth.pruneInvitationHistory(), 60 * 60 * 1_000);
-      retentionTimer.unref();
-      extractionQueue.start();
-      refreshService.start();
-    },
-    async close(): Promise<void> {
-      clearInterval(retentionTimer);
-      await Promise.all([refreshService.stop(), extractionQueue.stop()]);
-      await webFeedService.close();
-      await closePublicNetwork();
-      database.close();
-    },
-  };
+    return {
+        services,
+        start(): void {
+            database.auth.pruneInvitationHistory();
+            database.feeds.deleteOrphanSources();
+            retentionTimer = setInterval(
+                () => database.auth.pruneInvitationHistory(),
+                60 * 60 * 1_000,
+            );
+            retentionTimer.unref();
+            extractionQueue.start();
+            refreshService.start();
+        },
+        async close(): Promise<void> {
+            clearInterval(retentionTimer);
+            await Promise.all([refreshService.stop(), extractionQueue.stop()]);
+            await webFeedService.close();
+            await closePublicNetwork();
+            database.close();
+        },
+    };
 }

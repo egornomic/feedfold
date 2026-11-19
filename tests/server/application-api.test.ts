@@ -136,7 +136,7 @@ describe("local application API", () => {
     const application = new ApplicationApi(services);
     const observedNames: string[][] = [];
     services.refreshService.subscribe(1, () => {
-      observedNames.push(database.folders.listFolders(1).map(({ name }) => name));
+      observedNames.push(database.bootstrap.getBootstrap(1).folders.map(({ name }) => name));
     });
     const folder = (await application.invoke({
       operation: "createFolder",

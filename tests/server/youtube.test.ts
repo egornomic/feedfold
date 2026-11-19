@@ -162,7 +162,7 @@ describe("YouTube subscription sync", () => {
       const state = authorization.searchParams.get("state") as string;
       expect(service.consumeState(1, session.token, state).filterShorts).toBe(filterShorts);
       expect(database.rules.listRules(1)).toHaveLength(0);
-      expect(database.folders.listFolders(1)).toHaveLength(0);
+      expect(database.bootstrap.getBootstrap(1).folders).toHaveLength(0);
     },
   );
 
@@ -394,7 +394,7 @@ describe("YouTube data retention", () => {
   it("preserves a pre-existing Shorts rule that the user created", () => {
     const { database, service } = setup();
     service.reconcile(1, [first]);
-    const folder = database.folders.listFolders(1)[0];
+    const folder = database.bootstrap.getBootstrap(1).folders[0];
     if (!folder) throw new Error("Missing YouTube folder");
     const personal = database.rules.createRule(1, {
       name: "My Shorts filter",

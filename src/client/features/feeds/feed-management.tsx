@@ -1,129 +1,177 @@
 import {
-  Edit3,
-  Folder,
-  FolderPlus,
-  ListFilter,
-  MousePointer2,
-  Rss,
-  Settings,
-  Trash2,
+    Edit3,
+    Folder,
+    FolderPlus,
+    ListFilter,
+    MousePointer2,
+    Rss,
+    Settings,
+    Trash2,
 } from "lucide-react";
 import type { Feed, FeedSourceKind } from "../../../shared/types";
 import { MenuItem } from "../../ui/menu";
 import { type AnimationOrigin, triggerCenter } from "../../ui/motion";
 
 export type FeedManagementAction =
-  | "settings"
-  | "selection"
-  | "rename"
-  | "move"
-  | "rule"
-  | "unsubscribe";
+    | "settings"
+    | "selection"
+    | "rename"
+    | "move"
+    | "rule"
+    | "unsubscribe";
 
-export type FolderManagementAction = "settings" | "add-feed" | "add-folder" | "rule" | "delete";
+export type FolderManagementAction =
+    | "settings"
+    | "add-feed"
+    | "add-folder"
+    | "rule"
+    | "delete";
 
 export type FeedActionHandler<T> = (
-  feed: T,
-  action: FeedManagementAction,
-  origin: AnimationOrigin,
+    feed: T,
+    action: FeedManagementAction,
+    origin: AnimationOrigin,
 ) => void;
 export type FolderActionHandler<T> = (
-  folder: T,
-  action: FolderManagementAction,
-  origin: AnimationOrigin,
+    folder: T,
+    action: FolderManagementAction,
+    origin: AnimationOrigin,
 ) => void;
 
 export type ManagementRequest = (
-  | { kind: "feed-settings"; feedId: number }
-  | { kind: "web-feed-selection"; feedId: number }
-  | { kind: "rename-feed"; feedId: number }
-  | { kind: "move-feed"; feedId: number }
-  | { kind: "create-feed-rule"; feedId: number }
-  | { kind: "unsubscribe-feed"; feedId: number }
-  | { kind: "create-folder" }
-  | { kind: "folder-settings"; folderId: number }
-  | { kind: "delete-folder"; folderId: number }
-  | { kind: "add-feed-to-folder"; folderId: number }
-  | { kind: "add-folder"; parentId: number }
-  | { kind: "create-folder-rule"; folderId: number }
+    | { kind: "feed-settings"; feedId: number }
+    | { kind: "web-feed-selection"; feedId: number }
+    | { kind: "rename-feed"; feedId: number }
+    | { kind: "move-feed"; feedId: number }
+    | { kind: "create-feed-rule"; feedId: number }
+    | { kind: "unsubscribe-feed"; feedId: number }
+    | { kind: "create-folder" }
+    | { kind: "folder-settings"; folderId: number }
+    | { kind: "delete-folder"; folderId: number }
+    | { kind: "add-feed-to-folder"; folderId: number }
+    | { kind: "add-folder"; parentId: number }
+    | { kind: "create-folder-rule"; folderId: number }
 ) & { origin?: AnimationOrigin };
 
 export function FeedActionMenuItems({
-  feed,
-  sourceKind,
-  onAction,
+    feed,
+    sourceKind,
+    onAction,
 }: {
-  feed?: Feed;
-  sourceKind?: FeedSourceKind;
-  onAction: (action: FeedManagementAction, origin: AnimationOrigin) => void;
+    feed?: Feed;
+    sourceKind?: FeedSourceKind;
+    onAction: (action: FeedManagementAction, origin: AnimationOrigin) => void;
 }) {
-  return (
-    <>
-      <MenuItem onClick={(event) => onAction("settings", triggerCenter(event.currentTarget))}>
-        <Settings aria-hidden="true" size={15} />
-        Feed settings
-      </MenuItem>
-      {(feed?.sourceKind ?? sourceKind) === "web" ? (
-        <MenuItem onClick={(event) => onAction("selection", triggerCenter(event.currentTarget))}>
-          <MousePointer2 aria-hidden="true" size={15} />
-          Edit page selection
-        </MenuItem>
-      ) : null}
-      <MenuItem onClick={(event) => onAction("rename", triggerCenter(event.currentTarget))}>
-        <Edit3 aria-hidden="true" size={15} />
-        Rename feed
-      </MenuItem>
-      <MenuItem onClick={(event) => onAction("move", triggerCenter(event.currentTarget))}>
-        <Folder aria-hidden="true" size={15} />
-        Move to folder
-      </MenuItem>
-      <MenuItem onClick={(event) => onAction("rule", triggerCenter(event.currentTarget))}>
-        <ListFilter aria-hidden="true" size={15} />
-        Create rule
-      </MenuItem>
-      <hr className="context-menu-separator" />
-      <MenuItem
-        className="danger-menu-item"
-        onClick={(event) => onAction("unsubscribe", triggerCenter(event.currentTarget))}
-      >
-        <Trash2 aria-hidden="true" size={15} />
-        Unsubscribe from feed
-      </MenuItem>
-    </>
-  );
+    return (
+        <>
+            <MenuItem
+                onClick={(event) =>
+                    onAction("settings", triggerCenter(event.currentTarget))
+                }
+            >
+                <Settings aria-hidden="true" size={15} />
+                Feed settings
+            </MenuItem>
+            {(feed?.sourceKind ?? sourceKind) === "web" ? (
+                <MenuItem
+                    onClick={(event) =>
+                        onAction(
+                            "selection",
+                            triggerCenter(event.currentTarget),
+                        )
+                    }
+                >
+                    <MousePointer2 aria-hidden="true" size={15} />
+                    Edit page selection
+                </MenuItem>
+            ) : null}
+            <MenuItem
+                onClick={(event) =>
+                    onAction("rename", triggerCenter(event.currentTarget))
+                }
+            >
+                <Edit3 aria-hidden="true" size={15} />
+                Rename feed
+            </MenuItem>
+            <MenuItem
+                onClick={(event) =>
+                    onAction("move", triggerCenter(event.currentTarget))
+                }
+            >
+                <Folder aria-hidden="true" size={15} />
+                Move to folder
+            </MenuItem>
+            <MenuItem
+                onClick={(event) =>
+                    onAction("rule", triggerCenter(event.currentTarget))
+                }
+            >
+                <ListFilter aria-hidden="true" size={15} />
+                Create rule
+            </MenuItem>
+            <hr className="context-menu-separator" />
+            <MenuItem
+                className="danger-menu-item"
+                onClick={(event) =>
+                    onAction("unsubscribe", triggerCenter(event.currentTarget))
+                }
+            >
+                <Trash2 aria-hidden="true" size={15} />
+                Unsubscribe from feed
+            </MenuItem>
+        </>
+    );
 }
 
 export function FolderActionMenuItems({
-  onAction,
+    onAction,
 }: {
-  onAction: (action: FolderManagementAction, origin: AnimationOrigin) => void;
+    onAction: (action: FolderManagementAction, origin: AnimationOrigin) => void;
 }) {
-  return (
-    <>
-      <MenuItem onClick={(event) => onAction("settings", triggerCenter(event.currentTarget))}>
-        <Settings aria-hidden="true" size={15} />
-        Folder settings
-      </MenuItem>
-      <MenuItem onClick={(event) => onAction("add-feed", triggerCenter(event.currentTarget))}>
-        <Rss aria-hidden="true" size={15} />
-        Add feed to folder
-      </MenuItem>
-      <MenuItem onClick={(event) => onAction("add-folder", triggerCenter(event.currentTarget))}>
-        <FolderPlus aria-hidden="true" size={15} />
-        Add subfolder
-      </MenuItem>
-      <MenuItem onClick={(event) => onAction("rule", triggerCenter(event.currentTarget))}>
-        <ListFilter aria-hidden="true" size={15} />
-        Create rule
-      </MenuItem>
-      <hr className="context-menu-separator" />
-      <MenuItem
-        className="danger-menu-item"
-        onClick={(event) => onAction("delete", triggerCenter(event.currentTarget))}
-      >
-        <Trash2 aria-hidden="true" size={15} />
-        Delete folder
-      </MenuItem>
-    </>
-  );
+    return (
+        <>
+            <MenuItem
+                onClick={(event) =>
+                    onAction("settings", triggerCenter(event.currentTarget))
+                }
+            >
+                <Settings aria-hidden="true" size={15} />
+                Folder settings
+            </MenuItem>
+            <MenuItem
+                onClick={(event) =>
+                    onAction("add-feed", triggerCenter(event.currentTarget))
+                }
+            >
+                <Rss aria-hidden="true" size={15} />
+                Add feed to folder
+            </MenuItem>
+            <MenuItem
+                onClick={(event) =>
+                    onAction("add-folder", triggerCenter(event.currentTarget))
+                }
+            >
+                <FolderPlus aria-hidden="true" size={15} />
+                Add subfolder
+            </MenuItem>
+            <MenuItem
+                onClick={(event) =>
+                    onAction("rule", triggerCenter(event.currentTarget))
+                }
+            >
+                <ListFilter aria-hidden="true" size={15} />
+                Create rule
+            </MenuItem>
+            <hr className="context-menu-separator" />
+            <MenuItem
+                className="danger-menu-item"
+                onClick={(event) =>
+                    onAction("delete", triggerCenter(event.currentTarget))
+                }
+            >
+                <Trash2 aria-hidden="true" size={15} />
+                Delete folder
+            </MenuItem>
+        </>
+    );
 }

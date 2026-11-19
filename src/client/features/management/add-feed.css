@@ -1,48 +1,48 @@
 .youtube-sync-suggestion {
-  column-gap: 16px;
-  padding: 20px;
+    column-gap: 16px;
+    padding: 20px;
 }
 
 .youtube-sync-suggestion-actions {
-  display: flex;
-  grid-column: 2;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+    display: flex;
+    grid-column: 2;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
 }
 
 @media (max-width: 620px) {
-  .youtube-sync-suggestion-actions {
-    grid-column: 1 / -1;
-  }
+    .youtube-sync-suggestion-actions {
+        grid-column: 1 / -1;
+    }
 
-  .youtube-sync-suggestion-actions > button {
-    flex: 1 1 auto;
-  }
+    .youtube-sync-suggestion-actions > button {
+        flex: 1 1 auto;
+    }
 
-  .add-feed-page .page-header {
-    min-height: 64px;
-    flex-wrap: nowrap;
-  }
+    .add-feed-page .page-header {
+        min-height: 64px;
+        flex-wrap: nowrap;
+    }
 
-  .add-feed-page .page-header-actions {
-    width: auto;
-    flex: 0 0 auto;
-  }
+    .add-feed-page .page-header-actions {
+        width: auto;
+        flex: 0 0 auto;
+    }
 
-  .add-feed-page .page-header-actions .secondary-button {
-    width: var(--control-size);
-    min-height: var(--control-size);
-    flex: 0 0 auto;
-    padding: 0;
-  }
+    .add-feed-page .page-header-actions .secondary-button {
+        width: var(--control-size);
+        min-height: var(--control-size);
+        flex: 0 0 auto;
+        padding: 0;
+    }
 
-  .add-feed-page .page-header-actions .secondary-button svg {
-    display: block;
-  }
+    .add-feed-page .page-header-actions .secondary-button svg {
+        display: block;
+    }
 
-  .add-feed-back-label {
-    display: none;
-  }
+    .add-feed-back-label {
+        display: none;
+    }
 }

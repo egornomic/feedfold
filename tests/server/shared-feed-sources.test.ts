@@ -12,31 +12,27 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-function sharedArticleFeed() {
-  return {
-    title: "Shared feed",
-    siteUrl: null,
-    articles: [
-      {
-        externalId: "shared",
-        title: "Shared article",
-        url: "https://publisher.example.test/shared",
-        author: null,
-        publishedAt: null,
-        summary: "",
-        imageUrl: null,
-        feedContentHtml: null,
-      },
-    ],
-  };
-}
-
 function publishSharedArticle(database: AppDatabase, feedId: number): void {
   completeFeedRefresh(database.feeds, feedId, {
     httpStatus: 200,
     etag: null,
     lastModified: null,
-    parsed: sharedArticleFeed(),
+    parsed: {
+      title: "Shared feed",
+      siteUrl: null,
+      articles: [
+        {
+          externalId: "shared",
+          title: "Shared article",
+          url: "https://publisher.example.test/shared",
+          author: null,
+          publishedAt: null,
+          summary: "",
+          imageUrl: null,
+          feedContentHtml: null,
+        },
+      ],
+    },
   });
 }
 

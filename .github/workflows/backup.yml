@@ -27,7 +27,8 @@ jobs:
           printf '%s\n' "$BACKUP_KEY" > ~/.ssh/feedfold
           printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/feedfold ~/.ssh/known_hosts
-          ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" > feedfold-recovery.tar.age
+          ssh -T -i ~/.ssh/feedfold -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              "root@$DEPLOY_HOST" > feedfold-recovery.tar.age
           test -s feedfold-recovery.tar.age
 
       - name: Retain encrypted backup

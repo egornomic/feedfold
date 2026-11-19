@@ -4,15 +4,20 @@ import { resourceId } from "../../shared/api/inputs.js";
 
 export type UserId = (request: FastifyRequest) => number;
 
-export function browserDeviceId(request: FastifyRequest, required = false): string {
-  const value = request.headers["x-feedfold-device"];
-  return value === undefined && !required ? "unregistered" : z.uuid().parse(value);
+export function browserDeviceId(
+    request: FastifyRequest,
+    required = false,
+): string {
+    const value = request.headers["x-feedfold-device"];
+    return value === undefined && !required
+        ? "unregistered"
+        : z.uuid().parse(value);
 }
 
 export const idParams = z.object({ id: z.coerce.number().pipe(resourceId) });
 
 export function missing(reply: FastifyReply, resource: string): FastifyReply {
-  return reply.code(404).send({ error: `${resource} was not found.` });
+    return reply.code(404).send({ error: `${resource} was not found.` });
 }
 
 /**
@@ -22,9 +27,9 @@ export function missing(reply: FastifyReply, resource: string): FastifyReply {
 export type RouteAccess = "public" | "account" | "recent-auth";
 
 declare module "fastify" {
-  interface FastifyContextConfig {
-    access?: RouteAccess;
-  }
+    interface FastifyContextConfig {
+        access?: RouteAccess;
+    }
 }
 
 export const publicRoute = { config: { access: "public" } } as const;

@@ -34,11 +34,15 @@ function setup(concurrency: number, maxPending?: number) {
     await refresh.stop();
     database.close();
   });
-  const feed = (name: string) =>
-    database.feeds.createFeed(TEST_USER_ID, { feedUrl: `https://example.test/${name}.xml` });
-  const loadedUrls = () => loads.map(({ feedUrl }) => feedUrl);
-  const flush = () => new Promise((resolve) => setImmediate(resolve));
-  return { database, refresh, loads, feed, loadedUrls, flush };
+  return {
+    database,
+    refresh,
+    loads,
+    feed: (name: string) =>
+      database.feeds.createFeed(TEST_USER_ID, { feedUrl: `https://example.test/${name}.xml` }),
+    loadedUrls: () => loads.map(({ feedUrl }) => feedUrl),
+    flush: () => new Promise((resolve) => setImmediate(resolve)),
+  };
 }
 
 describe("feed refresh queue", () => {

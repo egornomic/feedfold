@@ -185,62 +185,6 @@ async function liveOpenAiProvider(): Promise<{
   return { providers: createAiProviders({ openai: baseUrl }), requests };
 }
 
-async function liveAnthropicProvider(): Promise<{
-  providers: ReturnType<typeof createAiProviders>;
-  requests: Array<Record<string, unknown>>;
-}> {
-  const text = "The product was released in July 2026.";
-  const { baseUrl, requests } = await liveProviderEndpoint((body) => {
-    const messages = Array.isArray(body.messages) ? body.messages : [];
-    if (messages.length === 1) {
-      return {
-        stop_reason: "pause_turn",
-        content: [
-          {
-            type: "server_tool_use",
-            id: "srvtoolu_test",
-            name: "web_search",
-            input: { query: "product July 2026 release" },
-          },
-          {
-            type: "web_search_tool_result",
-            tool_use_id: "srvtoolu_test",
-            content: [
-              {
-                type: "web_search_result",
-                url: "https://search.example.test/release",
-                title: "Release announcement",
-                encrypted_content: "encrypted-result",
-              },
-            ],
-          },
-        ],
-        usage: { input_tokens: 20, output_tokens: 1 },
-      };
-    }
-    return {
-      stop_reason: "end_turn",
-      content: [
-        {
-          type: "text",
-          text,
-          citations: [
-            {
-              type: "web_search_result_location",
-              url: "https://search.example.test/release",
-              title: "Release announcement",
-              encrypted_index: "encrypted-index",
-              cited_text: "The product was released in July 2026.",
-            },
-          ],
-        },
-      ],
-      usage: { input_tokens: 35, output_tokens: 9 },
-    };
-  });
-  return { providers: createAiProviders({ anthropic: baseUrl }), requests };
-}
-
 async function liveGeminiProvider(): Promise<{
   providers: ReturnType<typeof createAiProviders>;
   requests: Array<Record<string, unknown>>;
@@ -653,7 +597,56 @@ describe("AI article summaries", () => {
   it("uses native Anthropic web search and continues paused fact-checks", async () => {
     const { database, readerId } = await databaseWithUsers();
     const { articleId } = addArticle(database, readerId);
-    const { providers, requests } = await liveAnthropicProvider();
+    const text = "The product was released in July 2026.";
+    const { baseUrl, requests } = await liveProviderEndpoint((body) => {
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+      if (messages.length === 1) {
+        return {
+          stop_reason: "pause_turn",
+          content: [
+            {
+              type: "server_tool_use",
+              id: "srvtoolu_test",
+              name: "web_search",
+              input: { query: "product July 2026 release" },
+            },
+            {
+              type: "web_search_tool_result",
+              tool_use_id: "srvtoolu_test",
+              content: [
+                {
+                  type: "web_search_result",
+                  url: "https://search.example.test/release",
+                  title: "Release announcement",
+                  encrypted_content: "encrypted-result",
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 20, output_tokens: 1 },
+        };
+      }
+      return {
+        stop_reason: "end_turn",
+        content: [
+          {
+            type: "text",
+            text,
+            citations: [
+              {
+                type: "web_search_result_location",
+                url: "https://search.example.test/release",
+                title: "Release announcement",
+                encrypted_index: "encrypted-index",
+                cited_text: "The product was released in July 2026.",
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 35, output_tokens: 9 },
+      };
+    });
+    const providers = createAiProviders({ anthropic: baseUrl });
     const service = new AiService(database, { credentialCipher: null, providers });
     const credential: AiRequestCredential | undefined = {
       provider: "anthropic",

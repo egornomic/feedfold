@@ -1,108 +1,108 @@
 .shortcut-reference {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
 }
 
 .shortcut-reference dl {
-  margin: 0;
+    margin: 0;
 }
 .shortcut-reference dt,
 .shortcut-reference dd {
-  margin: 0;
+    margin: 0;
 }
 .shortcut-reference dd {
-  color: var(--text-secondary);
-  font-size: var(--type-supporting);
+    color: var(--text-secondary);
+    font-size: var(--type-supporting);
 }
 .shortcut-groups h3 {
-  margin: 0 0 7px;
-  font-size: var(--type-ui-title);
+    margin: 0 0 7px;
+    font-size: var(--type-ui-title);
 }
 .shortcut-reference.is-compact {
-  margin: 0 16px 16px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--paper-canvas);
-  background-blend-mode: var(--paper-blend);
+    margin: 0 16px 16px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--paper-canvas);
+    background-blend-mode: var(--paper-blend);
 }
 
 .shortcut-dialog {
-  width: min(680px, calc(100vw - 28px));
-  max-height: min(720px, calc(100dvh - 28px));
-  padding: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--paper-raised);
-  background-blend-mode: var(--paper-blend);
-  color: var(--text);
-  box-shadow: 0 8px 8px oklch(0 0 0 / 0.34);
+    width: min(680px, calc(100vw - 28px));
+    max-height: min(720px, calc(100dvh - 28px));
+    padding: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--paper-raised);
+    background-blend-mode: var(--paper-blend);
+    color: var(--text);
+    box-shadow: 0 8px 8px oklch(0 0 0 / 0.34);
 }
 .dialog-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 15px 17px;
-  border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 17px;
+    border-bottom: 1px solid var(--border);
 }
 .dialog-heading > div {
-  display: flex;
-  align-items: center;
-  gap: 9px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
 }
 .shortcut-reference dl > div {
-  display: grid;
-  min-height: 34px;
-  grid-template-columns: 74px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
+    display: grid;
+    min-height: 34px;
+    grid-template-columns: 74px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
 }
 .dialog-heading h2 {
-  margin: 0;
-  font-size: var(--type-dialog-title);
-  line-height: var(--leading-heading);
+    margin: 0;
+    font-size: var(--type-dialog-title);
+    line-height: var(--leading-heading);
 }
 
 .shortcut-dialog > .shortcut-reference {
-  padding: 18px;
+    padding: 18px;
 }
 .shortcuts-disabled {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 16px 18px 0;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--warning-surface);
-  color: var(--warning);
-  font-size: var(--type-supporting);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 16px 18px 0;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--warning-surface);
+    color: var(--warning);
+    font-size: var(--type-supporting);
 }
 .dialog-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 13px 17px;
-  border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px 17px;
+    border-top: 1px solid var(--border);
 }
 .dialog-footer p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--type-label);
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--type-label);
 }
 
 @media (max-width: 900px) {
-  .shortcut-reference {
-    grid-template-columns: minmax(0, 1fr);
-  }
+    .shortcut-reference {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 @container settings (max-width: 760px) {
-  .shortcut-reference {
-    grid-template-columns: minmax(0, 1fr);
-  }
+    .shortcut-reference {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }

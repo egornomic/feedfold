@@ -1,317 +1,404 @@
+import assert from "node:assert/strict";
 import type Sqlite from "better-sqlite3";
-import { articleMatchesRule, type RuleArticle } from "../../../shared/article-rules.js";
+import {
+    articleMatchesRule,
+    type RuleArticle,
+} from "../../../shared/article-rules.js";
 import type {
-  Rule,
-  RuleAction,
-  RuleCondition,
-  RuleConditionOperator,
+    Rule,
+    RuleAction,
+    RuleCondition,
+    RuleConditionOperator,
 } from "../../../shared/types.js";
 import { InvalidRequestError } from "../../errors.js";
-import { mapRule, now, parseArticleMedia, type Row } from "../shared.js";
+import { now, parseArticleMedia, type Row, toBoolean } from "../shared.js";
 
 export class RuleRepository {
-  constructor(private readonly sqlite: Sqlite.Database) {}
+    constructor(private readonly sqlite: Sqlite.Database) {}
 
-  listRules(userId: number): Rule[] {
-    const rows = this.sqlite
-      .prepare(
-        `SELECT id, name, feed_id AS feedId, folder_id AS folderId,
+    listRules(userId: number): Rule[] {
+        const rows = this.sqlite
+            .prepare(
+                `SELECT id, name, feed_id AS feedId, folder_id AS folderId,
                 conditions_json AS conditionsJson, condition_operator AS conditionOperator, action,
-                enabled, (SELECT COUNT(*) FROM article_rule_matches WHERE rule_id = rules.id) AS matchedCount,
+                enabled, (SELECT COUNT(*) FROM article_rule_matches
+                          WHERE rule_id = rules.id) AS matchedCount,
                 created_at AS createdAt, updated_at AS updatedAt
          FROM rules WHERE user_id = ? ORDER BY created_at DESC, id DESC`,
-      )
-      .all(userId) as Row[];
-    return rows.map(mapRule);
-  }
+            )
+            .all(userId) as Row[];
+        return rows.map(
+            (row): Rule => ({
+                id: Number(row.id),
+                name: String(row.name),
+                feedId: row.feedId === null ? null : Number(row.feedId),
+                folderId: row.folderId === null ? null : Number(row.folderId),
+                conditions: JSON.parse(
+                    String(row.conditionsJson),
+                ) as RuleCondition[],
+                conditionOperator:
+                    row.conditionOperator as RuleConditionOperator,
+                action: row.action as RuleAction,
+                enabled: toBoolean(row.enabled),
+                matchedCount: Number(row.matchedCount),
+                createdAt: String(row.createdAt),
+                updatedAt: String(row.updatedAt),
+            }),
+        );
+    }
 
-  getRule(userId: number, id: number): Rule | null {
-    return this.listRules(userId).find((rule) => rule.id === id) ?? null;
-  }
+    getRule(userId: number, id: number): Rule | null {
+        return this.listRules(userId).find((rule) => rule.id === id) ?? null;
+    }
 
-  createRule(
-    userId: number,
-    input: {
-      name: string;
-      feedId?: number | null;
-      folderId?: number | null;
-      conditions: RuleCondition[];
-      conditionOperator: RuleConditionOperator;
-      action: RuleAction;
-      enabled?: boolean;
-    },
-  ): Rule {
-    return this.sqlite.transaction(() => {
-      this.assertRuleScope(userId, input.feedId, input.folderId);
-      const timestamp = now();
-      const result = this.sqlite
-        .prepare(
-          `INSERT INTO rules (
+    createRule(
+        userId: number,
+        input: {
+            name: string;
+            feedId?: number | null;
+            folderId?: number | null;
+            conditions: RuleCondition[];
+            conditionOperator: RuleConditionOperator;
+            action: RuleAction;
+            enabled?: boolean;
+        },
+    ): Rule {
+        return this.sqlite.transaction(() => {
+            this.assertRuleScope(userId, input.feedId, input.folderId);
+            const timestamp = now();
+            const result = this.sqlite
+                .prepare(
+                    `INSERT INTO rules (
            user_id, name, feed_id, folder_id, conditions_json, condition_operator, action, enabled,
            created_at, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          userId,
-          input.name,
-          input.feedId ?? null,
-          input.folderId ?? null,
-          JSON.stringify(input.conditions),
-          input.conditionOperator,
-          input.action,
-          (input.enabled ?? true) ? 1 : 0,
-          timestamp,
-          timestamp,
-        );
-      const id = Number(result.lastInsertRowid);
-      this.reapplyRule(id);
-      return this.getRule(userId, id) as Rule;
-    })();
-  }
+                )
+                .run(
+                    userId,
+                    input.name,
+                    input.feedId ?? null,
+                    input.folderId ?? null,
+                    JSON.stringify(input.conditions),
+                    input.conditionOperator,
+                    input.action,
+                    (input.enabled ?? true) ? 1 : 0,
+                    timestamp,
+                    timestamp,
+                );
+            const id = Number(result.lastInsertRowid);
+            this.reapplyRule(id);
+            const rule = this.getRule(userId, id);
+            assert(rule, "The new rule is missing");
+            return rule;
+        })();
+    }
 
-  updateRule(
-    userId: number,
-    id: number,
-    input: Partial<{
-      name: string;
-      feedId: number | null;
-      folderId: number | null;
-      conditions: RuleCondition[];
-      conditionOperator: RuleConditionOperator;
-      action: RuleAction;
-      enabled: boolean;
-    }>,
-  ): Rule | null {
-    return this.sqlite.transaction(() => {
-      const existing = this.getRule(userId, id);
-      if (!existing) return null;
-      const feedId = input.feedId === undefined ? existing.feedId : input.feedId;
-      const folderId = input.folderId === undefined ? existing.folderId : input.folderId;
-      this.assertRuleScope(userId, feedId, folderId);
-      this.sqlite
-        .prepare(
-          `UPDATE rules
+    updateRule(
+        userId: number,
+        id: number,
+        input: Partial<{
+            name: string;
+            feedId: number | null;
+            folderId: number | null;
+            conditions: RuleCondition[];
+            conditionOperator: RuleConditionOperator;
+            action: RuleAction;
+            enabled: boolean;
+        }>,
+    ): Rule | null {
+        return this.sqlite.transaction(() => {
+            const existing = this.getRule(userId, id);
+            if (!existing) {
+                return null;
+            }
+            const feedId =
+                input.feedId === undefined ? existing.feedId : input.feedId;
+            const folderId =
+                input.folderId === undefined
+                    ? existing.folderId
+                    : input.folderId;
+            this.assertRuleScope(userId, feedId, folderId);
+            this.sqlite
+                .prepare(
+                    `UPDATE rules
          SET name = ?, feed_id = ?, folder_id = ?, conditions_json = ?, condition_operator = ?,
              action = ?, enabled = ?, updated_at = ?
          WHERE id = ? AND user_id = ?`,
-        )
-        .run(
-          input.name ?? existing.name,
-          input.feedId === undefined ? existing.feedId : input.feedId,
-          input.folderId === undefined ? existing.folderId : input.folderId,
-          JSON.stringify(input.conditions ?? existing.conditions),
-          input.conditionOperator ?? existing.conditionOperator,
-          input.action ?? existing.action,
-          (input.enabled ?? existing.enabled) ? 1 : 0,
-          now(),
-          id,
-          userId,
+                )
+                .run(
+                    input.name ?? existing.name,
+                    input.feedId === undefined ? existing.feedId : input.feedId,
+                    input.folderId === undefined
+                        ? existing.folderId
+                        : input.folderId,
+                    JSON.stringify(input.conditions ?? existing.conditions),
+                    input.conditionOperator ?? existing.conditionOperator,
+                    input.action ?? existing.action,
+                    (input.enabled ?? existing.enabled) ? 1 : 0,
+                    now(),
+                    id,
+                    userId,
+                );
+            this.reapplyRule(id);
+            return this.getRule(userId, id);
+        })();
+    }
+
+    deleteRule(userId: number, id: number): boolean {
+        return (
+            this.sqlite
+                .prepare("DELETE FROM rules WHERE id = ? AND user_id = ?")
+                .run(id, userId).changes > 0
         );
-      this.reapplyRule(id);
-      return this.getRule(userId, id);
-    })();
-  }
-
-  deleteRule(userId: number, id: number): boolean {
-    return (
-      this.sqlite.prepare("DELETE FROM rules WHERE id = ? AND user_id = ?").run(id, userId)
-        .changes > 0
-    );
-  }
-
-  private assertRuleScope(
-    userId: number,
-    feedId: number | null | undefined,
-    folderId: number | null | undefined,
-  ): void {
-    if (feedId && folderId) {
-      throw new InvalidRequestError("Choose either one feed or one folder for this rule.");
     }
-    if (
-      feedId !== null &&
-      feedId !== undefined &&
-      !this.sqlite.prepare("SELECT 1 FROM feeds WHERE id = ? AND user_id = ?").get(feedId, userId)
-    ) {
-      throw new InvalidRequestError("That feed or folder no longer exists. Reload and try again.");
-    }
-    if (
-      folderId !== null &&
-      folderId !== undefined &&
-      !this.sqlite
-        .prepare("SELECT 1 FROM folders WHERE id = ? AND user_id = ?")
-        .get(folderId, userId)
-    ) {
-      throw new InvalidRequestError("That feed or folder no longer exists. Reload and try again.");
-    }
-  }
 
-  private reapplyRule(ruleId: number): void {
-    this.sqlite.prepare("DELETE FROM article_rule_matches WHERE rule_id = ?").run(ruleId);
-    const rows = this.sqlite
-      .prepare(
-        `SELECT articles.id, feeds.id AS feedId
+    private assertRuleScope(
+        userId: number,
+        feedId: number | null | undefined,
+        folderId: number | null | undefined,
+    ): void {
+        if (feedId && folderId) {
+            throw new InvalidRequestError(
+                "Choose either one feed or one folder for this rule.",
+            );
+        }
+        if (
+            feedId !== null &&
+            feedId !== undefined &&
+            !this.sqlite
+                .prepare("SELECT 1 FROM feeds WHERE id = ? AND user_id = ?")
+                .get(feedId, userId)
+        ) {
+            throw new InvalidRequestError(
+                "That feed or folder no longer exists. Reload and try again.",
+            );
+        }
+        if (
+            folderId !== null &&
+            folderId !== undefined &&
+            !this.sqlite
+                .prepare("SELECT 1 FROM folders WHERE id = ? AND user_id = ?")
+                .get(folderId, userId)
+        ) {
+            throw new InvalidRequestError(
+                "That feed or folder no longer exists. Reload and try again.",
+            );
+        }
+    }
+
+    private reapplyRule(ruleId: number): void {
+        this.sqlite
+            .prepare("DELETE FROM article_rule_matches WHERE rule_id = ?")
+            .run(ruleId);
+        const rows = this.sqlite
+            .prepare(
+                `SELECT articles.id, feeds.id AS feedId
            FROM feed_articles
            JOIN articles ON articles.id = feed_articles.article_id
            JOIN feeds ON feeds.id = feed_articles.feed_id
            JOIN rules ON rules.user_id = feeds.user_id
            WHERE rules.id = ?`,
-      )
-      .all(ruleId) as Array<{ id: number; feedId: number }>;
-    for (const row of rows) this.applyRuleToArticle(ruleId, row.feedId, row.id);
-  }
+            )
+            .all(ruleId) as Array<{ id: number; feedId: number }>;
+        for (const row of rows) {
+            this.applyRuleToArticle(ruleId, row.feedId, row.id);
+        }
+    }
 
-  recomputeRulesForArticle(articleId: number): void {
-    this.recomputeRulesForArticles([articleId]);
-  }
+    recomputeRulesForArticle(articleId: number): void {
+        this.recomputeRulesForArticles([articleId]);
+    }
 
-  recomputeRulesForArticles(articleIds: Iterable<number>): void {
-    this.recomputeRules(articleIds);
-  }
+    recomputeRulesForArticles(articleIds: Iterable<number>): void {
+        this.recomputeRules(articleIds);
+    }
 
-  recomputeRulesForAccountArticles(userId: number, articleIds: Iterable<number>): void {
-    this.recomputeRules(articleIds, { userId });
-  }
+    recomputeRulesForFeedArticles(
+        userId: number,
+        feedId: number,
+        articleIds: Iterable<number>,
+    ): void {
+        this.recomputeRules(articleIds, { userId, feedId });
+    }
 
-  recomputeRulesForFeedArticles(
-    userId: number,
-    feedId: number,
-    articleIds: Iterable<number>,
-  ): void {
-    this.recomputeRules(articleIds, { userId, feedId });
-  }
-
-  recomputeRulesForAllArticles(userId: number): void {
-    const articles = this.sqlite
-      .prepare(
-        `SELECT DISTINCT articles.id
+    recomputeRulesForAllArticles(userId: number): void {
+        const articles = this.sqlite
+            .prepare(
+                `SELECT DISTINCT articles.id
          FROM feed_articles
          JOIN articles ON articles.id = feed_articles.article_id
          JOIN feeds ON feeds.id = feed_articles.feed_id
          WHERE feeds.user_id = ?`,
-      )
-      .all(userId) as Array<{ id: number }>;
-    this.recomputeRulesForAccountArticles(
-      userId,
-      articles.map((article) => article.id),
-    );
-  }
-
-  private recomputeRules(
-    articleIds: Iterable<number>,
-    scope?: { userId: number; feedId?: number },
-  ): void {
-    const deleteMatches =
-      scope?.feedId !== undefined
-        ? this.sqlite.prepare(
-            "DELETE FROM article_rule_matches WHERE article_id = ? AND feed_id = ?",
-          )
-        : scope
-          ? this.sqlite.prepare(
-              `DELETE FROM article_rule_matches
-             WHERE article_id = ? AND rule_id IN (SELECT id FROM rules WHERE user_id = ?)`,
             )
-          : this.sqlite.prepare("DELETE FROM article_rule_matches WHERE article_id = ?");
-    const deliveries =
-      scope?.feedId !== undefined
-        ? this.sqlite.prepare(
-            `SELECT rules.id, feeds.id AS feedId
+            .all(userId) as Array<{ id: number }>;
+        this.recomputeRules(
+            articles.map(({ id }) => id),
+            { userId },
+        );
+    }
+
+    private recomputeRules(
+        articleIds: Iterable<number>,
+        scope?: { userId: number; feedId?: number },
+    ): void {
+        const deleteMatches =
+            scope?.feedId !== undefined
+                ? this.sqlite.prepare(
+                      "DELETE FROM article_rule_matches WHERE article_id = ? AND feed_id = ?",
+                  )
+                : scope
+                  ? this.sqlite.prepare(
+                        `DELETE FROM article_rule_matches
+             WHERE article_id = ? AND rule_id IN (SELECT id FROM rules WHERE user_id = ?)`,
+                    )
+                  : this.sqlite.prepare(
+                        "DELETE FROM article_rule_matches WHERE article_id = ?",
+                    );
+        const deliveries =
+            scope?.feedId !== undefined
+                ? this.sqlite.prepare(
+                      `SELECT rules.id, feeds.id AS feedId
            FROM rules
            JOIN feeds ON feeds.user_id = rules.user_id
            JOIN feed_articles ON feed_articles.feed_id = feeds.id
            WHERE feed_articles.article_id = ? AND feeds.user_id = ? AND feeds.id = ?`,
-          )
-        : scope
-          ? this.sqlite.prepare(
-              `SELECT rules.id, feeds.id AS feedId
+                  )
+                : scope
+                  ? this.sqlite.prepare(
+                        `SELECT rules.id, feeds.id AS feedId
              FROM rules
              JOIN feeds ON feeds.user_id = rules.user_id
              JOIN feed_articles ON feed_articles.feed_id = feeds.id
              WHERE feed_articles.article_id = ? AND rules.user_id = ?`,
-            )
-          : this.sqlite.prepare(
-              `SELECT rules.id, feeds.id AS feedId
+                    )
+                  : this.sqlite.prepare(
+                        `SELECT rules.id, feeds.id AS feedId
              FROM rules
              JOIN feeds ON feeds.user_id = rules.user_id
              JOIN feed_articles ON feed_articles.feed_id = feeds.id
              WHERE feed_articles.article_id = ?`,
-            );
-    for (const articleId of articleIds) {
-      if (scope?.feedId !== undefined) deleteMatches.run(articleId, scope.feedId);
-      else if (scope) deleteMatches.run(articleId, scope.userId);
-      else deleteMatches.run(articleId);
-      const matchingDeliveries = (
-        scope?.feedId !== undefined
-          ? deliveries.all(articleId, scope.userId, scope.feedId)
-          : scope
-            ? deliveries.all(articleId, scope.userId)
-            : deliveries.all(articleId)
-      ) as Array<{ id: number; feedId: number }>;
-      for (const delivery of matchingDeliveries) {
-        this.applyRuleToArticle(delivery.id, delivery.feedId, articleId);
-      }
+                    );
+        for (const articleId of articleIds) {
+            if (scope?.feedId !== undefined) {
+                deleteMatches.run(articleId, scope.feedId);
+            } else if (scope) {
+                deleteMatches.run(articleId, scope.userId);
+            } else {
+                deleteMatches.run(articleId);
+            }
+            const matchingDeliveries = (
+                scope?.feedId !== undefined
+                    ? deliveries.all(articleId, scope.userId, scope.feedId)
+                    : scope
+                      ? deliveries.all(articleId, scope.userId)
+                      : deliveries.all(articleId)
+            ) as Array<{ id: number; feedId: number }>;
+            for (const delivery of matchingDeliveries) {
+                this.applyRuleToArticle(
+                    delivery.id,
+                    delivery.feedId,
+                    articleId,
+                );
+            }
+        }
     }
-  }
 
-  private getArticleInRuleScope(rule: Row, feedId: number, articleId: number): RuleArticle | null {
-    const article = this.sqlite
-      .prepare(
-        `SELECT articles.*, feeds.id AS feedId, feeds.folder_id, feeds.user_id AS userId
+    private getArticleInRuleScope(
+        rule: Row,
+        feedId: number,
+        articleId: number,
+    ): RuleArticle | null {
+        const article = this.sqlite
+            .prepare(
+                `SELECT articles.*, feeds.id AS feedId, feeds.folder_id, feeds.user_id AS userId
          FROM feed_articles
          JOIN articles ON articles.id = feed_articles.article_id
          JOIN feeds ON feeds.id = feed_articles.feed_id
          WHERE articles.id = ? AND feeds.id = ?`,
-      )
-      .get(articleId, feedId) as Row | undefined;
-    if (!article) return null;
-    if (Number(rule.user_id) !== Number(article.userId)) return null;
-    if (rule.feed_id !== null && Number(rule.feed_id) !== Number(article.feedId)) return null;
-    if (rule.folder_id !== null) {
-      const inScope = this.sqlite
-        .prepare(
-          `WITH RECURSIVE folder_tree(id) AS (
+            )
+            .get(articleId, feedId) as Row | undefined;
+        if (!article) {
+            return null;
+        }
+        if (Number(rule.user_id) !== Number(article.userId)) {
+            return null;
+        }
+        if (
+            rule.feed_id !== null &&
+            Number(rule.feed_id) !== Number(article.feedId)
+        ) {
+            return null;
+        }
+        if (rule.folder_id !== null) {
+            const inScope = this.sqlite
+                .prepare(
+                    `WITH RECURSIVE folder_tree(id) AS (
              SELECT id FROM folders WHERE id = ? AND user_id = ?
              UNION ALL
              SELECT folders.id FROM folders JOIN folder_tree ON folders.parent_id = folder_tree.id
              WHERE folders.user_id = ?
            )
            SELECT 1 FROM folder_tree WHERE id = ?`,
-        )
-        .get(rule.folder_id, rule.user_id, rule.user_id, article.folder_id);
-      if (!inScope) return null;
+                )
+                .get(
+                    rule.folder_id,
+                    rule.user_id,
+                    rule.user_id,
+                    article.folder_id,
+                );
+            if (!inScope) {
+                return null;
+            }
+        }
+        return {
+            title: String(article.title ?? ""),
+            author: String(article.author ?? ""),
+            summary: String(article.summary ?? ""),
+            feedContentHtml: String(article.feed_content_html ?? ""),
+            contentHtml: String(article.content_html ?? ""),
+            media: parseArticleMedia(article.media_json),
+        };
     }
-    return {
-      title: String(article.title ?? ""),
-      author: String(article.author ?? ""),
-      summary: String(article.summary ?? ""),
-      feedContentHtml: String(article.feed_content_html ?? ""),
-      contentHtml: String(article.content_html ?? ""),
-      media: parseArticleMedia(article.media_json),
-    };
-  }
 
-  private applyRuleToArticle(ruleId: number, feedId: number, articleId: number): void {
-    const rule = this.sqlite.prepare("SELECT * FROM rules WHERE id = ?").get(ruleId) as
-      | Row
-      | undefined;
-    if (!rule) return;
-    const article = this.getArticleInRuleScope(rule, feedId, articleId);
-    if (!article) return;
-    const matched = articleMatchesRule(article, {
-      conditions: JSON.parse(String(rule.conditions_json)) as RuleCondition[],
-      conditionOperator: rule.condition_operator as RuleConditionOperator,
-    });
-    if (!matched) return;
-    const inserted = this.sqlite
-      .prepare(
-        `INSERT OR IGNORE INTO article_rule_matches (feed_id, article_id, rule_id)
+    private applyRuleToArticle(
+        ruleId: number,
+        feedId: number,
+        articleId: number,
+    ): void {
+        const rule = this.sqlite
+            .prepare("SELECT * FROM rules WHERE id = ?")
+            .get(ruleId) as Row | undefined;
+        if (!rule) {
+            return;
+        }
+        const article = this.getArticleInRuleScope(rule, feedId, articleId);
+        if (!article) {
+            return;
+        }
+        const matched = articleMatchesRule(article, {
+            conditions: JSON.parse(
+                String(rule.conditions_json),
+            ) as RuleCondition[],
+            conditionOperator: rule.condition_operator as RuleConditionOperator,
+        });
+        if (!matched) {
+            return;
+        }
+        const inserted = this.sqlite
+            .prepare(
+                `INSERT OR IGNORE INTO article_rule_matches (feed_id, article_id, rule_id)
          VALUES (?, ?, ?)`,
-      )
-      .run(feedId, articleId, ruleId);
-    if (inserted.changes === 0) return;
-    if (rule.enabled === 1 && rule.action === "mark_read") {
-      this.sqlite
-        .prepare("UPDATE feed_articles SET is_read = 1 WHERE feed_id = ? AND article_id = ?")
-        .run(feedId, articleId);
+            )
+            .run(feedId, articleId, ruleId);
+        if (inserted.changes === 0) {
+            return;
+        }
+        if (rule.enabled === 1 && rule.action === "mark_read") {
+            this.sqlite
+                .prepare(
+                    "UPDATE feed_articles SET is_read = 1 WHERE feed_id = ? AND article_id = ?",
+                )
+                .run(feedId, articleId);
+        }
     }
-  }
 }

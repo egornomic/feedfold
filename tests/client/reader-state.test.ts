@@ -17,7 +17,6 @@ import {
   updateBootstrapCounts,
 } from "../../src/client/features/reader/reader-state.js";
 import { AppDatabase } from "../../src/server/database.js";
-import type { ParsedFeed } from "../../src/server/features/shared.js";
 import type { Article, BootstrapData, Feed, Folder } from "../../src/shared/types.js";
 import { completeFeedRefresh } from "../helpers/feeds.js";
 
@@ -236,16 +235,6 @@ describe("reader state", () => {
       feedUrl: "https://example.test/busy.xml",
       folderId: null,
     });
-    const feedArticle = (index: number): ParsedFeed["articles"][number] => ({
-      externalId: `article-${index}`,
-      title: `Article ${index}`,
-      url: null,
-      author: null,
-      publishedAt: new Date(Date.UTC(2026, 6, index)).toISOString(),
-      summary: "",
-      imageUrl: null,
-      feedContentHtml: null,
-    });
     completeFeedRefresh(database.feeds, feed.id, {
       httpStatus: 200,
       etag: null,
@@ -253,7 +242,19 @@ describe("reader state", () => {
       parsed: {
         title: feed.title,
         siteUrl: null,
-        articles: Array.from({ length: 8 }, (_, index) => feedArticle(index + 1)),
+        articles: Array.from({ length: 8 }, (_, index) => {
+          const articleNumber = index + 1;
+          return {
+            externalId: `article-${articleNumber}`,
+            title: `Article ${articleNumber}`,
+            url: null,
+            author: null,
+            publishedAt: new Date(Date.UTC(2026, 6, articleNumber)).toISOString(),
+            summary: "",
+            imageUrl: null,
+            feedContentHtml: null,
+          };
+        }),
       },
     });
 

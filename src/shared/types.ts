@@ -1,364 +1,390 @@
 export type RegistrationMode = "closed" | "invite" | "open";
 
 export interface InvitationSummary {
-  id: string;
-  number: number;
-  createdAt: string;
-  expiresAt: string;
-  revokedAt: string | null;
-  redeemedAt: string | null;
+    id: string;
+    number: number;
+    createdAt: string;
+    expiresAt: string;
+    revokedAt: string | null;
+    redeemedAt: string | null;
 }
 
-export type InvitationAllowance = { kind: "unlimited" } | { kind: "limited"; remaining: 0 | 1 };
+export type InvitationAllowance =
+    | { kind: "unlimited" }
+    | { kind: "limited"; remaining: 0 | 1 };
 
 export interface InvitationOverview {
-  enabled: boolean;
-  allowance: InvitationAllowance;
-  invitations: InvitationSummary[];
+    enabled: boolean;
+    allowance: InvitationAllowance;
+    invitations: InvitationSummary[];
 }
 
 export type ArticleState = "all" | "unread" | "read" | "saved";
 export type FolderSortDirection = "newest" | "oldest";
 export type ReadingMode = "magazine" | "expanded";
-type ExtractionStatus = "pending" | "processing" | "complete" | "failed" | "feed";
+type ExtractionStatus =
+    | "pending"
+    | "processing"
+    | "complete"
+    | "failed"
+    | "feed";
 export type FeedSourceKind = "published" | "web";
 export type FeedErrorKind =
-  | "network"
-  | "http"
-  | "timeout"
-  | "parse"
-  | "inaccessible"
-  | "access_blocked"
-  | "javascript_timeout"
-  | "unsupported_content"
-  | "selection_broken";
-export type RuleField = "title" | "author" | "summary" | "content" | "media" | "any";
+    | "network"
+    | "http"
+    | "timeout"
+    | "parse"
+    | "inaccessible"
+    | "access_blocked"
+    | "javascript_timeout"
+    | "unsupported_content"
+    | "selection_broken";
+export type RuleField =
+    | "title"
+    | "author"
+    | "summary"
+    | "content"
+    | "media"
+    | "any";
 export type RuleAction = "hide" | "keep" | "mark_read";
 export type RuleConditionOperator = "and" | "or";
 export type AiProvider = "gemini" | "openai" | "anthropic";
 export interface AiRequestCredential {
-  provider: AiProvider;
-  apiKey: string;
+    provider: AiProvider;
+    apiKey: string;
 }
 export type AiFeature = "article_summary";
 export type AiArticleSourceKind = "full" | "feed" | "excerpt";
 export const MARK_READ_AGE_DAYS = [1, 2, 3, 7, 14] as const;
 export type MarkReadAgeDays = (typeof MARK_READ_AGE_DAYS)[number];
 export const DUPLICATE_ARTICLE_WINDOW_DAYS = [1, 7, 30] as const;
-export type DuplicateArticleWindowDays = (typeof DUPLICATE_ARTICLE_WINDOW_DAYS)[number];
+export type DuplicateArticleWindowDays =
+    (typeof DUPLICATE_ARTICLE_WINDOW_DAYS)[number];
 export const FEED_POLL_INTERVAL_MINUTES = [5, 10, 30, 180, 360, 720] as const;
-export type FeedPollIntervalMinutes = (typeof FEED_POLL_INTERVAL_MINUTES)[number];
+export type FeedPollIntervalMinutes =
+    (typeof FEED_POLL_INTERVAL_MINUTES)[number];
 
-export function normalizeFeedPollInterval(minutes: number): FeedPollIntervalMinutes {
-  return FEED_POLL_INTERVAL_MINUTES.find((interval) => interval >= minutes) ?? 720;
+export function normalizeFeedPollInterval(
+    minutes: number,
+): FeedPollIntervalMinutes {
+    return (
+        FEED_POLL_INTERVAL_MINUTES.find((interval) => interval >= minutes) ??
+        720
+    );
 }
 
 export interface AiModelOption {
-  id: string;
-  label: string;
+    id: string;
+    label: string;
 }
 
 interface AiProviderOption {
-  id: AiProvider;
-  label: string;
-  configured: boolean;
-  defaultModel: string;
-  models: AiModelOption[];
+    id: AiProvider;
+    label: string;
+    configured: boolean;
+    defaultModel: string;
+    models: AiModelOption[];
 }
 
 export interface AiFeatureSetting {
-  provider: AiProvider;
-  model: string;
+    provider: AiProvider;
+    model: string;
 }
 
 export interface AiSettings {
-  credentialStorageAvailable: boolean;
-  providers: AiProviderOption[];
-  features: {
-    articleSummary: AiFeatureSetting | null;
-  };
+    credentialStorageAvailable: boolean;
+    providers: AiProviderOption[];
+    features: {
+        articleSummary: AiFeatureSetting | null;
+    };
 }
 
 export interface AiUsage {
-  inputTokens: number | null;
-  outputTokens: number | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
 }
 
 export interface AiCustomPrompt {
-  id: string;
-  name: string;
-  prompt: string;
+    id: string;
+    name: string;
+    prompt: string;
 }
 
 interface AiGroundingSource {
-  uri: string;
-  title: string;
+    uri: string;
+    title: string;
 }
 
 interface AiGroundingSupport {
-  startIndex: number;
-  endIndex: number;
-  sourceIndices: number[];
+    startIndex: number;
+    endIndex: number;
+    sourceIndices: number[];
 }
 
 export interface AiGrounding {
-  sources: AiGroundingSource[];
-  supports: AiGroundingSupport[];
-  searchSuggestionsHtml: string | null;
+    sources: AiGroundingSource[];
+    supports: AiGroundingSupport[];
+    searchSuggestionsHtml: string | null;
 }
 
 export interface ArticleAiSummary {
-  text: string;
-  promptId: string | null;
-  provider: AiProvider;
-  model: string;
-  sourceKind: AiArticleSourceKind;
-  generatedAt: string;
-  usage: AiUsage;
-  grounding: AiGrounding | null;
+    text: string;
+    promptId: string | null;
+    provider: AiProvider;
+    model: string;
+    sourceKind: AiArticleSourceKind;
+    generatedAt: string;
+    usage: AiUsage;
+    grounding: AiGrounding | null;
 }
 
 export interface ArticleAiTranslation {
-  html: string;
-  language: string;
-  provider: AiProvider;
-  model: string;
-  sourceKind: AiArticleSourceKind;
-  generatedAt: string;
-  usage: AiUsage;
+    html: string;
+    language: string;
+    provider: AiProvider;
+    model: string;
+    sourceKind: AiArticleSourceKind;
+    generatedAt: string;
+    usage: AiUsage;
 }
 
 export interface RuleCondition {
-  field: RuleField;
-  pattern: string;
+    field: RuleField;
+    pattern: string;
 }
 
 export interface ArticleMedia {
-  provider: "youtube";
-  type: "video" | "short";
-  embedUrl: string;
-  thumbnailUrl: string;
-  viewCount: number | null;
+    provider: "youtube";
+    type: "video" | "short";
+    embedUrl: string;
+    thumbnailUrl: string;
+    viewCount: number | null;
 }
 
 interface TelegramArticleMediaItem {
-  kind: "image" | "video";
-  sourceUrl: string;
-  posterUrl: string | null;
-  aspectRatio: number | null;
+    kind: "image" | "video";
+    sourceUrl: string;
+    posterUrl: string | null;
+    aspectRatio: number | null;
 }
 
 export interface TelegramArticleMedia {
-  items: TelegramArticleMediaItem[];
+    items: TelegramArticleMediaItem[];
 }
 
 export interface XArticleMedia {
-  sourceUrl: string;
-  posterUrl: string | null;
-  aspectRatio: number | null;
+    sourceUrl: string;
+    posterUrl: string | null;
+    aspectRatio: number | null;
 }
 
 export interface SessionUser {
-  id: string;
-  username: string;
-  hasPassword: boolean;
+    id: string;
+    username: string;
+    hasPassword: boolean;
 }
 
 export interface Folder {
-  id: number;
-  parentId: number | null;
-  name: string;
-  position: number;
-  sortDirection: FolderSortDirection;
-  unreadCount: number;
+    id: number;
+    parentId: number | null;
+    name: string;
+    position: number;
+    sortDirection: FolderSortDirection;
+    unreadCount: number;
 }
 
 export interface Feed {
-  id: number;
-  folderId: number | null;
-  title: string;
-  feedUrl: string;
-  siteUrl: string | null;
-  sourceKind: FeedSourceKind;
-  lastErrorKind: FeedErrorKind | null;
-  lastMatchCount: number | null;
-  createdAt: string;
-  pollIntervalMinutes: number;
-  unreadCount: number;
-  totalCount: number;
-  paused: boolean;
-  refreshing: boolean;
-  lastPostAt: string | null;
-  lastAttemptAt: string | null;
-  lastSuccessAt: string | null;
-  lastHttpStatus: number | null;
-  lastError: string | null;
-  nextPollAt: string | null;
+    id: number;
+    folderId: number | null;
+    title: string;
+    feedUrl: string;
+    siteUrl: string | null;
+    sourceKind: FeedSourceKind;
+    lastErrorKind: FeedErrorKind | null;
+    lastMatchCount: number | null;
+    createdAt: string;
+    pollIntervalMinutes: number;
+    unreadCount: number;
+    totalCount: number;
+    paused: boolean;
+    refreshing: boolean;
+    lastPostAt: string | null;
+    lastAttemptAt: string | null;
+    lastSuccessAt: string | null;
+    lastHttpStatus: number | null;
+    lastError: string | null;
+    nextPollAt: string | null;
 }
 
 export interface FeedPreviewArticle {
-  title: string;
-  url: string | null;
-  author: string | null;
-  publishedAt: string | null;
-  summary: string;
-  imageUrl: string | null;
+    title: string;
+    url: string | null;
+    author: string | null;
+    publishedAt: string | null;
+    summary: string;
+    imageUrl: string | null;
 }
 
 export interface FeedPreview {
-  feedUrl: string;
-  title: string;
-  siteUrl: string | null;
-  totalArticles: number;
-  articles: FeedPreviewArticle[];
+    feedUrl: string;
+    title: string;
+    siteUrl: string | null;
+    totalArticles: number;
+    articles: FeedPreviewArticle[];
 }
 
 interface PublishedFeedDiscovery {
-  kind: "published";
-  preview: FeedPreview;
+    kind: "published";
+    preview: FeedPreview;
 }
 
 export interface WebPageFeedDiscovery {
-  kind: "web_page";
-  pageUrl: string;
-  title: string;
+    kind: "web_page";
+    pageUrl: string;
+    title: string;
 }
 
 export type FeedDiscoveryResult = PublishedFeedDiscovery | WebPageFeedDiscovery;
 
-export type WebFeedField = "title" | "link" | "date" | "author" | "summary" | "image";
+export type WebFeedField =
+    | "title"
+    | "link"
+    | "date"
+    | "author"
+    | "summary"
+    | "image";
 
 export interface WebFeedSelectors {
-  item: string;
-  title: string;
-  link: string;
-  date: string | null;
-  author: string | null;
-  summary: string | null;
-  image: string | null;
+    item: string;
+    title: string;
+    link: string;
+    date: string | null;
+    author: string | null;
+    summary: string | null;
+    image: string | null;
 }
 
 export interface WebFeedConfig {
-  pageUrl: string;
-  selectors: WebFeedSelectors;
+    pageUrl: string;
+    selectors: WebFeedSelectors;
 }
 
 export interface WebFeedCandidate {
-  id: string;
-  label: string;
-  itemCount: number;
-  availableFields: WebFeedField[];
-  config: WebFeedConfig;
-  articles: FeedPreviewArticle[];
+    id: string;
+    label: string;
+    itemCount: number;
+    availableFields: WebFeedField[];
+    config: WebFeedConfig;
+    articles: FeedPreviewArticle[];
 }
 
 export interface WebFeedAnalysis {
-  pageUrl: string;
-  title: string;
-  snapshotId: string;
-  messageToken: string;
-  candidates: WebFeedCandidate[];
-  suggestedCandidateIds: string[];
-  selectedCandidateId: string | null;
-  savedSelectionMatched: boolean;
+    pageUrl: string;
+    title: string;
+    snapshotId: string;
+    messageToken: string;
+    candidates: WebFeedCandidate[];
+    suggestedCandidateIds: string[];
+    selectedCandidateId: string | null;
+    savedSelectionMatched: boolean;
 }
 
 export interface Article {
-  id: number;
-  feedId: number | null;
-  feedTitle: string;
-  feedSourceKind: FeedSourceKind;
-  folderId: number | null;
-  title: string;
-  url: string | null;
-  author: string | null;
-  publishedAt: string | null;
-  discoveredAt: string;
-  summary: string;
-  imageUrl: string | null;
-  media: ArticleMedia | null;
-  feedContentHtml: string | null;
-  contentHtml: string | null;
-  contentSource: "article" | "feed" | null;
-  extractionStatus: ExtractionStatus;
-  extractionError: string | null;
-  aiSummary: ArticleAiSummary | null;
-  isRead: boolean;
-  isSaved: boolean;
+    id: number;
+    feedId: number | null;
+    feedTitle: string;
+    feedSourceKind: FeedSourceKind;
+    folderId: number | null;
+    title: string;
+    url: string | null;
+    author: string | null;
+    publishedAt: string | null;
+    discoveredAt: string;
+    summary: string;
+    imageUrl: string | null;
+    media: ArticleMedia | null;
+    feedContentHtml: string | null;
+    contentHtml: string | null;
+    contentSource: "article" | "feed" | null;
+    extractionStatus: ExtractionStatus;
+    extractionError: string | null;
+    aiSummary: ArticleAiSummary | null;
+    isRead: boolean;
+    isSaved: boolean;
 }
 
 export interface Rule {
-  id: number;
-  name: string;
-  feedId: number | null;
-  folderId: number | null;
-  conditions: RuleCondition[];
-  conditionOperator: RuleConditionOperator;
-  action: RuleAction;
-  enabled: boolean;
-  matchedCount: number;
-  createdAt: string;
-  updatedAt: string;
+    id: number;
+    name: string;
+    feedId: number | null;
+    folderId: number | null;
+    conditions: RuleCondition[];
+    conditionOperator: RuleConditionOperator;
+    action: RuleAction;
+    enabled: boolean;
+    matchedCount: number;
+    createdAt: string;
+    updatedAt: string;
 }
 
 export interface AppSettings {
-  pollIntervalMinutes: number;
-  duplicateArticleWindowDays: DuplicateArticleWindowDays;
-  singleKeyShortcuts: boolean;
-  markReadOnScroll: boolean;
-  showYouTubeDescriptions: boolean;
-  translationLanguage: string;
-  summaryPrompt: string;
-  translationPrompt: string;
-  customPrompts: AiCustomPrompt[];
+    pollIntervalMinutes: number;
+    duplicateArticleWindowDays: DuplicateArticleWindowDays;
+    singleKeyShortcuts: boolean;
+    markReadOnScroll: boolean;
+    showYouTubeDescriptions: boolean;
+    translationLanguage: string;
+    summaryPrompt: string;
+    translationPrompt: string;
+    customPrompts: AiCustomPrompt[];
 }
 
 export interface BootstrapData {
-  folders: Folder[];
-  feeds: Feed[];
-  settings: AppSettings;
-  aiSettings: AiSettings;
-  counts: {
-    unread: number;
-    saved: number;
-    all: number;
-  };
-  capabilities: {
-    manualRefresh: boolean;
-  };
+    folders: Folder[];
+    feeds: Feed[];
+    settings: AppSettings;
+    aiSettings: AiSettings;
+    counts: {
+        unread: number;
+        saved: number;
+        all: number;
+    };
+    capabilities: {
+        manualRefresh: boolean;
+    };
 }
 
 export interface ArticleQuery {
-  state: ArticleState;
-  feedId?: number;
-  folderId?: number;
-  search?: string;
-  limit?: number;
-  cursor?: string;
-  anchorId?: number;
-  includeContent?: boolean;
+    state: ArticleState;
+    feedId?: number;
+    folderId?: number;
+    search?: string;
+    limit?: number;
+    cursor?: string;
+    anchorId?: number;
+    includeContent?: boolean;
 }
 
 export interface MarkReadRequest {
-  articleIds?: number[];
-  feedId?: number;
-  folderId?: number;
-  olderThanDays?: MarkReadAgeDays;
+    articleIds?: number[];
+    feedId?: number;
+    folderId?: number;
+    olderThanDays?: MarkReadAgeDays;
 }
 
 export interface ArticlePage {
-  articles: Article[];
-  nextCursor: string | null;
-  anchorIndex: number | null;
+    articles: Article[];
+    nextCursor: string | null;
+    anchorIndex: number | null;
 }
 
 export interface ImportResult {
-  imported: number;
-  duplicates: number;
-  failed: Array<{ title: string; url: string; error: string }>;
+    imported: number;
+    duplicates: number;
+    failed: Array<{ title: string; url: string; error: string }>;
 }
 
 export interface RefreshResult {
-  requested: number;
-  refreshingFeedIds: number[];
+    requested: number;
+    refreshingFeedIds: number[];
 }

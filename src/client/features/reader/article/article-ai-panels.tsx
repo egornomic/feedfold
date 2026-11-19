@@ -1,202 +1,258 @@
-import { AlertTriangle, Languages, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
+import {
+    AlertTriangle,
+    Languages,
+    LoaderCircle,
+    RefreshCw,
+    Sparkles,
+} from "lucide-react";
 import { motion, useIsPresent, useReducedMotion } from "motion/react";
 import { lazy, Suspense } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
 import { surfaceTransition } from "../../../ui/motion";
-import type { ArticleSummaryViewState, ArticleTranslationViewState } from "./article-ai-state";
+import type {
+    ArticleSummaryViewState,
+    ArticleTranslationViewState,
+} from "./article-ai-state";
 
 const AiMarkdown = lazy(() =>
-  import("./ai-markdown").then((module) => ({ default: module.AiMarkdown })),
+    import("./ai-markdown").then((module) => ({ default: module.AiMarkdown })),
 );
 
 export function ArticleSummaryPanel({
-  article,
-  state,
-  customPrompts,
-  onRegenerate,
-  onOpenSettings,
+    article,
+    state,
+    customPrompts,
+    onRegenerate,
+    onOpenSettings,
 }: {
-  article: Article;
-  state: ArticleSummaryViewState;
-  customPrompts: AiCustomPrompt[];
-  onRegenerate: (article: Article) => void;
-  onOpenSettings: () => void;
+    article: Article;
+    state: ArticleSummaryViewState;
+    customPrompts: AiCustomPrompt[];
+    onRegenerate: (article: Article) => void;
+    onOpenSettings: () => void;
 }) {
-  const present = useIsPresent();
-  const reduced = Boolean(useReducedMotion());
-  const summary = state.summary;
-  const loading = state.kind === "loading";
-  const titleId = `article-${article.id}-ai-summary-title`;
-  const customPromptName = state.promptId
-    ? customPrompts.find((prompt) => prompt.id === state.promptId)?.name
-    : null;
-  const copy = customPromptName
-    ? {
-        generating: `Running ${customPromptName}`,
-        update: "Run again",
-        updating: "Running again",
-        failed: `Could not run ${customPromptName}`,
-        outdated: "This result is out of date",
-        outdatedHint: "The article text has changed. Run the action again on the current text.",
-      }
-    : {
-        generating: "Generating summary",
-        update: "Update summary",
-        updating: "Updating summary",
-        failed: "Could not create the summary",
-        outdated: "This summary is out of date",
-        outdatedHint: "The article text has changed. Create a summary from the current text.",
-      };
+    const present = useIsPresent();
+    const reduced = Boolean(useReducedMotion());
+    const summary = state.summary;
+    const loading = state.kind === "loading";
+    const titleId = `article-${article.id}-ai-summary-title`;
+    const customPromptName = state.promptId
+        ? customPrompts.find((prompt) => prompt.id === state.promptId)?.name
+        : null;
+    const copy = customPromptName
+        ? {
+              generating: `Running ${customPromptName}`,
+              update: "Run again",
+              updating: "Running again",
+              failed: `Could not run ${customPromptName}`,
+              outdated: "This result is out of date",
+              outdatedHint:
+                  "The article text has changed. Run the action again on the current text.",
+          }
+        : {
+              generating: "Generating summary",
+              update: "Update summary",
+              updating: "Updating summary",
+              failed: "Could not create the summary",
+              outdated: "This summary is out of date",
+              outdatedHint:
+                  "The article text has changed. Create a summary from the current text.",
+          };
 
-  return (
-    <motion.section
-      initial={
-        surfaceTransition(reduced).duration === 0
-          ? false
-          : { opacity: 0, transform: reduced ? "none" : "translateY(4px)" }
-      }
-      animate={{ opacity: 1, transform: reduced ? "none" : "translateY(0px)" }}
-      exit="closed"
-      variants={{
-        closed: ({ reduced: reduce }) => ({
-          opacity: 0,
-          transform: reduce ? "none" : "translateY(4px)",
-          transition: surfaceTransition(reduce, true),
-        }),
-      }}
-      transition={surfaceTransition(reduced)}
-      id={`article-${article.id}-ai-summary`}
-      className="article-ai-summary"
-      inert={!present}
-      aria-labelledby={titleId}
-      aria-hidden={!present}
-      aria-live="polite"
-      aria-busy={loading}
-    >
-      <div className="article-ai-summary-heading">
-        <div>
-          <Sparkles aria-hidden="true" size={17} />
-          <h3 id={titleId}>{customPromptName ?? "Summary"}</h3>
-        </div>
-        {summary ? (
-          <button
-            className="quiet-button article-summary-regenerate"
-            type="button"
-            disabled={loading}
-            onClick={() => onRegenerate(article)}
-          >
-            {loading ? (
-              <LoaderCircle className="spin" aria-hidden="true" size={14} />
-            ) : (
-              <RefreshCw aria-hidden="true" size={14} />
-            )}
-            {loading ? copy.updating : copy.update}
-          </button>
-        ) : null}
-      </div>
+    return (
+        <motion.section
+            initial={
+                surfaceTransition(reduced).duration === 0
+                    ? false
+                    : {
+                          opacity: 0,
+                          transform: reduced ? "none" : "translateY(4px)",
+                      }
+            }
+            animate={{
+                opacity: 1,
+                transform: reduced ? "none" : "translateY(0px)",
+            }}
+            exit="closed"
+            variants={{
+                closed: ({ reduced: reduce }) => ({
+                    opacity: 0,
+                    transform: reduce ? "none" : "translateY(4px)",
+                    transition: surfaceTransition(reduce, true),
+                }),
+            }}
+            transition={surfaceTransition(reduced)}
+            id={`article-${article.id}-ai-summary`}
+            className="article-ai-summary"
+            inert={!present}
+            aria-labelledby={titleId}
+            aria-hidden={!present}
+            aria-live="polite"
+            aria-busy={loading}
+        >
+            <div className="article-ai-summary-heading">
+                <div>
+                    <Sparkles aria-hidden="true" size={17} />
+                    <h3 id={titleId}>{customPromptName ?? "Summary"}</h3>
+                </div>
+                {summary ? (
+                    <button
+                        className="quiet-button article-summary-regenerate"
+                        type="button"
+                        disabled={loading}
+                        onClick={() => onRegenerate(article)}
+                    >
+                        {loading ? (
+                            <LoaderCircle
+                                className="spin"
+                                aria-hidden="true"
+                                size={14}
+                            />
+                        ) : (
+                            <RefreshCw aria-hidden="true" size={14} />
+                        )}
+                        {loading ? copy.updating : copy.update}
+                    </button>
+                ) : null}
+            </div>
 
-      {loading && !summary ? (
-        <div className="article-summary-loading" role="status">
-          <span>{copy.generating}</span>
-          <div className="article-summary-skeleton" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-        </div>
-      ) : state.kind === "setup-needed" ? (
-        <div className="article-summary-message">
-          <strong>Set up summaries first</strong>
-          <p>In Settings, choose an AI provider and save its API key.</p>
-          <button className="secondary-button" type="button" onClick={onOpenSettings}>
-            Open Settings
-          </button>
-        </div>
-      ) : summary ? (
-        <div className="article-summary-text">
-          <Suspense fallback={<div role="status">Loading summary…</div>}>
-            <AiMarkdown text={summary.text} grounding={summary.grounding} />
-          </Suspense>
-        </div>
-      ) : state.kind === "outdated" ? (
-        <div className="article-summary-message">
-          <strong>{copy.outdated}</strong>
-          <p>{copy.outdatedHint}</p>
-          <button className="secondary-button" type="button" onClick={() => onRegenerate(article)}>
-            <Sparkles aria-hidden="true" size={14} />
-            {copy.update}
-          </button>
-        </div>
-      ) : null}
+            {loading && !summary ? (
+                <div className="article-summary-loading" role="status">
+                    <span>{copy.generating}</span>
+                    <div
+                        className="article-summary-skeleton"
+                        aria-hidden="true"
+                    >
+                        <span />
+                        <span />
+                        <span />
+                    </div>
+                </div>
+            ) : state.kind === "setup-needed" ? (
+                <div className="article-summary-message">
+                    <strong>Set up summaries first</strong>
+                    <p>
+                        In Settings, choose an AI provider and save its API key.
+                    </p>
+                    <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={onOpenSettings}
+                    >
+                        Open Settings
+                    </button>
+                </div>
+            ) : summary ? (
+                <div className="article-summary-text">
+                    <Suspense
+                        fallback={<div role="status">Loading summary…</div>}
+                    >
+                        <AiMarkdown
+                            text={summary.text}
+                            grounding={summary.grounding}
+                        />
+                    </Suspense>
+                </div>
+            ) : state.kind === "outdated" ? (
+                <div className="article-summary-message">
+                    <strong>{copy.outdated}</strong>
+                    <p>{copy.outdatedHint}</p>
+                    <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => onRegenerate(article)}
+                    >
+                        <Sparkles aria-hidden="true" size={14} />
+                        {copy.update}
+                    </button>
+                </div>
+            ) : null}
 
-      {state.kind === "failed" ? (
-        <div className="article-summary-error" role="alert">
-          <AlertTriangle aria-hidden="true" size={16} />
-          <div>
-            <strong>{copy.failed}</strong>
-            <p>{state.error}</p>
-          </div>
-          {!summary ? (
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => onRegenerate(article)}
-            >
-              <RefreshCw aria-hidden="true" size={14} />
-              Try again
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-    </motion.section>
-  );
+            {state.kind === "failed" ? (
+                <div className="article-summary-error" role="alert">
+                    <AlertTriangle aria-hidden="true" size={16} />
+                    <div>
+                        <strong>{copy.failed}</strong>
+                        <p>{state.error}</p>
+                    </div>
+                    {!summary ? (
+                        <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={() => onRegenerate(article)}
+                        >
+                            <RefreshCw aria-hidden="true" size={14} />
+                            Try again
+                        </button>
+                    ) : null}
+                </div>
+            ) : null}
+        </motion.section>
+    );
 }
 
 export function ArticleTranslationNotice({
-  state,
-  language,
-  onOpenSettings,
+    state,
+    language,
+    onOpenSettings,
 }: {
-  state: ArticleTranslationViewState;
-  language: string;
-  onOpenSettings: () => void;
+    state: ArticleTranslationViewState;
+    language: string;
+    onOpenSettings: () => void;
 }) {
-  if (state.kind === "original" || state.kind === "translated") return null;
-  if (state.kind === "translating") {
+    if (state.kind === "original" || state.kind === "translated") {
+        return null;
+    }
+    if (state.kind === "translating") {
+        return (
+            <div
+                className="article-extraction-state article-translation-state"
+                role="status"
+            >
+                <LoaderCircle className="spin" aria-hidden="true" size={18} />
+                <div>
+                    <strong>Translating to {language}</strong>
+                    <p>
+                        You can keep reading the original until the translation
+                        is ready.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+    if (state.kind === "setup-needed") {
+        return (
+            <div
+                className="article-extraction-state article-translation-state"
+                role="note"
+            >
+                <Languages aria-hidden="true" size={18} />
+                <div>
+                    <strong>Set up translations first</strong>
+                    <p>
+                        In Settings, choose an AI provider and save its API key.
+                    </p>
+                    <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={onOpenSettings}
+                    >
+                        Open Settings
+                    </button>
+                </div>
+            </div>
+        );
+    }
     return (
-      <div className="article-extraction-state article-translation-state" role="status">
-        <LoaderCircle className="spin" aria-hidden="true" size={18} />
-        <div>
-          <strong>Translating to {language}</strong>
-          <p>You can keep reading the original until the translation is ready.</p>
+        <div
+            className="article-extraction-state article-translation-state extraction-failed"
+            role="alert"
+        >
+            <AlertTriangle aria-hidden="true" size={18} />
+            <div>
+                <strong>Could not translate the article</strong>
+                <p>{state.error}</p>
+            </div>
         </div>
-      </div>
     );
-  }
-  if (state.kind === "setup-needed") {
-    return (
-      <div className="article-extraction-state article-translation-state" role="note">
-        <Languages aria-hidden="true" size={18} />
-        <div>
-          <strong>Set up translations first</strong>
-          <p>In Settings, choose an AI provider and save its API key.</p>
-          <button className="secondary-button" type="button" onClick={onOpenSettings}>
-            Open Settings
-          </button>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div
-      className="article-extraction-state article-translation-state extraction-failed"
-      role="alert"
-    >
-      <AlertTriangle aria-hidden="true" size={18} />
-      <div>
-        <strong>Could not translate the article</strong>
-        <p>{state.error}</p>
-      </div>
-    </div>
-  );
 }

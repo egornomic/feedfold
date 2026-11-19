@@ -26,10 +26,6 @@ let origin: string;
 let backlog: ReturnType<typeof seedReaderBacklog>;
 const providerDelays = new Map<string, number>();
 
-function providerTask(system: string): string {
-  return system.split("Task:\n")[1]?.split("\n")[0] ?? "";
-}
-
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "feedfold-ai-actions-"));
   database = new AppDatabase(join(directory, "feedfold.db"));
@@ -40,7 +36,7 @@ beforeAll(async () => {
     });
     request.on("end", async () => {
       const { instructions } = JSON.parse(body) as { instructions: string };
-      const task = providerTask(instructions);
+      const task = instructions.split("Task:\n")[1]?.split("\n")[0] ?? "";
       const name = task.startsWith("Fact-check")
         ? "Fact-check"
         : task.startsWith("Summarize")

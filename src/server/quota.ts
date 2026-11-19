@@ -4,12 +4,15 @@ import type Sqlite from "better-sqlite3";
 import type { ServicePolicy } from "./service-policy.js";
 
 type DailyResource =
-  | "article_extraction"
-  | "feed_discovery"
-  | "media_proxy"
-  | "outbound_request"
-  | "web_analysis";
-type ConcurrentResource = "article_extraction" | "chromium" | "outbound_request";
+    | "article_extraction"
+    | "feed_discovery"
+    | "media_proxy"
+    | "outbound_request"
+    | "web_analysis";
+type ConcurrentResource =
+    | "article_extraction"
+    | "chromium"
+    | "outbound_request";
 
 // Leases only expire to recover slots from crashed processes; running holders keep renewing theirs.
 const LEASE_MS = 120_000;
@@ -26,248 +29,287 @@ const ARTICLE_BYTE_COLUMNS = `
 `;
 
 export class QuotaExceededError extends Error {
-  readonly code = "quota_exceeded";
-  readonly statusCode = 429;
+    readonly code = "quota_exceeded";
+    readonly statusCode = 429;
 
-  constructor(message: string) {
-    super(message);
-    this.name = "QuotaExceededError";
-  }
-}
-
-function today(now: Date): string {
-  return now.toISOString().slice(0, 10);
-}
-
-function byteLimitLabel(bytes: number): string {
-  return bytes >= 1_048_576 && bytes % 1_048_576 === 0
-    ? `${bytes / 1_048_576} MiB`
-    : `${bytes.toLocaleString("en-US")} bytes`;
+    constructor(message: string) {
+        super(message);
+        this.name = "QuotaExceededError";
+    }
 }
 
 export class QuotaService {
-  constructor(
-    private readonly sqlite: Sqlite.Database,
-    private readonly policy: ServicePolicy,
-    private readonly now: () => Date = () => new Date(),
-  ) {
-    const byteLimit = policy.quotas.globalStoredBytes;
-    if (byteLimit !== null) {
-      const pageSize = Number(sqlite.pragma("page_size", { simple: true }));
-      sqlite.pragma(`max_page_count = ${Math.max(1, Math.floor(byteLimit / pageSize))}`);
+    constructor(
+        private readonly sqlite: Sqlite.Database,
+        private readonly policy: ServicePolicy,
+        private readonly now: () => Date = () => new Date(),
+    ) {
+        const byteLimit = policy.quotas.globalStoredBytes;
+        if (byteLimit !== null) {
+            const pageSize = Number(
+                sqlite.pragma("page_size", { simple: true }),
+            );
+            sqlite.pragma(
+                `max_page_count = ${Math.max(1, Math.floor(byteLimit / pageSize))}`,
+            );
+        }
     }
-  }
 
-  private dailyLimit(resource: DailyResource): number | null {
-    const quotas = this.policy.quotas;
-    switch (resource) {
-      case "feed_discovery":
-        return quotas.feedDiscoveriesPerDay;
-      case "web_analysis":
-        return quotas.webAnalysesPerDay;
-      case "article_extraction":
-        return quotas.articleExtractionsPerDay;
-      case "media_proxy":
-        return quotas.mediaProxyRequestsPerDay;
-      case "outbound_request":
-        return quotas.outboundRequestsPerDay;
+    private dailyLimit(resource: DailyResource): number | null {
+        const quotas = this.policy.quotas;
+        switch (resource) {
+            case "feed_discovery":
+                return quotas.feedDiscoveriesPerDay;
+            case "web_analysis":
+                return quotas.webAnalysesPerDay;
+            case "article_extraction":
+                return quotas.articleExtractionsPerDay;
+            case "media_proxy":
+                return quotas.mediaProxyRequestsPerDay;
+            case "outbound_request":
+                return quotas.outboundRequestsPerDay;
+        }
     }
-  }
 
-  private concurrentLimit(resource: ConcurrentResource): number | null {
-    const quotas = this.policy.quotas;
-    switch (resource) {
-      case "chromium":
-        return quotas.chromiumConcurrent;
-      case "article_extraction":
-        return quotas.articleExtractionsConcurrent;
-      case "outbound_request":
-        return quotas.outboundRequestsConcurrent;
+    private concurrentLimit(resource: ConcurrentResource): number | null {
+        const quotas = this.policy.quotas;
+        switch (resource) {
+            case "chromium":
+                return quotas.chromiumConcurrent;
+            case "article_extraction":
+                return quotas.articleExtractionsConcurrent;
+            case "outbound_request":
+                return quotas.outboundRequestsConcurrent;
+        }
     }
-  }
 
-  consume(resource: Exclude<DailyResource, "outbound_request">, userId: number): void {
-    this.consumeDaily(resource, `user:${userId}`);
-  }
+    consume(
+        resource: Exclude<DailyResource, "outbound_request">,
+        userId: number,
+    ): void {
+        this.consumeDaily(resource, `user:${userId}`);
+    }
 
-  private consumeDaily(resource: DailyResource, scope: string): void {
-    const limit = this.dailyLimit(resource);
-    if (limit === null) return;
-    const day = today(this.now());
-    this.sqlite.transaction(() => {
-      this.sqlite.prepare("DELETE FROM quota_daily_usage WHERE day < date(?, '-2 days')").run(day);
-      const used = Number(
-        this.sqlite
-          .prepare(
-            "SELECT count FROM quota_daily_usage WHERE scope = ? AND resource = ? AND day = ?",
-          )
-          .pluck()
-          .get(scope, resource, day) ?? 0,
-      );
-      if (used >= limit) {
-        const labels: Record<DailyResource, string> = {
-          article_extraction: "full-article extraction",
-          feed_discovery: "feed discovery",
-          media_proxy: "media loading",
-          outbound_request: "outbound request",
-          web_analysis: "web-page analysis",
-        };
-        throw new QuotaExceededError(
-          resource === "outbound_request"
-            ? "The server has reached today's outbound request limit. Try again tomorrow."
-            : `This account has reached today's ${labels[resource]} limit. Try again tomorrow.`,
-        );
-      }
-      this.sqlite
-        .prepare(
-          `INSERT INTO quota_daily_usage (scope, resource, day, count)
+    private consumeDaily(resource: DailyResource, scope: string): void {
+        const limit = this.dailyLimit(resource);
+        if (limit === null) {
+            return;
+        }
+        const day = this.now().toISOString().slice(0, 10);
+        this.sqlite.transaction(() => {
+            this.sqlite
+                .prepare(
+                    "DELETE FROM quota_daily_usage WHERE day < date(?, '-2 days')",
+                )
+                .run(day);
+            const used = Number(
+                this.sqlite
+                    .prepare(
+                        "SELECT count FROM quota_daily_usage WHERE scope " +
+                            "= ? AND resource = ? AND day = ?",
+                    )
+                    .pluck()
+                    .get(scope, resource, day) ?? 0,
+            );
+            if (used >= limit) {
+                const labels: Record<DailyResource, string> = {
+                    article_extraction: "full-article extraction",
+                    feed_discovery: "feed discovery",
+                    media_proxy: "media loading",
+                    outbound_request: "outbound request",
+                    web_analysis: "web-page analysis",
+                };
+                throw new QuotaExceededError(
+                    resource === "outbound_request"
+                        ? "The server has reached today's outbound request " +
+                              "limit. Try again tomorrow."
+                        : "This account has reached today's " +
+                              `${labels[resource]} limit. Try again tomorrow.`,
+                );
+            }
+            this.sqlite
+                .prepare(
+                    `INSERT INTO quota_daily_usage (scope, resource, day, count)
            VALUES (?, ?, ?, 1)
            ON CONFLICT(scope, resource, day) DO UPDATE SET count = count + 1`,
-        )
-        .run(scope, resource, day);
-    })();
-  }
-
-  private acquire(resource: ConcurrentResource): (() => void) | null {
-    const limit = this.concurrentLimit(resource);
-    if (limit === null) return () => {};
-    const id = randomUUID();
-    const leaseUntil = () => new Date(this.now().getTime() + LEASE_MS).toISOString();
-    const acquired = this.sqlite.transaction(() => {
-      this.sqlite
-        .prepare("DELETE FROM quota_leases WHERE expires_at <= ?")
-        .run(this.now().toISOString());
-      const active = Number(
-        this.sqlite
-          .prepare("SELECT COUNT(*) FROM quota_leases WHERE resource = ?")
-          .pluck()
-          .get(resource),
-      );
-      if (active >= limit) return false;
-      this.sqlite
-        .prepare("INSERT INTO quota_leases (id, resource, expires_at) VALUES (?, ?, ?)")
-        .run(id, resource, leaseUntil());
-      return true;
-    })();
-    if (!acquired) return null;
-    const renewal = setInterval(() => {
-      this.sqlite
-        .prepare("UPDATE quota_leases SET expires_at = ? WHERE id = ?")
-        .run(leaseUntil(), id);
-    }, LEASE_MS / 2);
-    renewal.unref();
-    return () => {
-      clearInterval(renewal);
-      this.sqlite.prepare("DELETE FROM quota_leases WHERE id = ?").run(id);
-    };
-  }
-
-  private async concurrent<T>(
-    resource: ConcurrentResource,
-    message: string,
-    task: () => Promise<T>,
-  ): Promise<T> {
-    const release = this.acquire(resource);
-    if (!release) throw new QuotaExceededError(message);
-    try {
-      return await task();
-    } finally {
-      release();
+                )
+                .run(scope, resource, day);
+        })();
     }
-  }
 
-  runChromium<T>(task: () => Promise<T>): Promise<T> {
-    return this.concurrent(
-      "chromium",
-      "The server is already analyzing other web pages. Try again shortly.",
-      task,
-    );
-  }
-
-  runArticleExtraction<T>(task: () => Promise<T>): Promise<T> {
-    return this.concurrent(
-      "article_extraction",
-      "The server is already extracting other articles. Try again shortly.",
-      task,
-    );
-  }
-
-  async runOutbound<T>(task: () => Promise<T>): Promise<T> {
-    const release = await this.startOutboundRequest();
-    try {
-      return await task();
-    } finally {
-      release();
+    private acquire(resource: ConcurrentResource): (() => void) | null {
+        const limit = this.concurrentLimit(resource);
+        if (limit === null) {
+            return () => {};
+        }
+        const id = randomUUID();
+        const leaseUntil = () =>
+            new Date(this.now().getTime() + LEASE_MS).toISOString();
+        const acquired = this.sqlite.transaction(() => {
+            this.sqlite
+                .prepare("DELETE FROM quota_leases WHERE expires_at <= ?")
+                .run(this.now().toISOString());
+            const active = Number(
+                this.sqlite
+                    .prepare(
+                        "SELECT COUNT(*) FROM quota_leases WHERE resource = ?",
+                    )
+                    .pluck()
+                    .get(resource),
+            );
+            if (active >= limit) {
+                return false;
+            }
+            this.sqlite
+                .prepare(
+                    "INSERT INTO quota_leases (id, resource, expires_at) VALUES (?, ?, ?)",
+                )
+                .run(id, resource, leaseUntil());
+            return true;
+        })();
+        if (!acquired) {
+            return null;
+        }
+        const renewal = setInterval(() => {
+            this.sqlite
+                .prepare("UPDATE quota_leases SET expires_at = ? WHERE id = ?")
+                .run(leaseUntil(), id);
+        }, LEASE_MS / 2);
+        renewal.unref();
+        return () => {
+            clearInterval(renewal);
+            this.sqlite
+                .prepare("DELETE FROM quota_leases WHERE id = ?")
+                .run(id);
+        };
     }
-  }
 
-  async startOutboundRequest(signal?: AbortSignal): Promise<() => void> {
-    const timeout = AbortSignal.timeout(120_000);
-    const waiting = signal ? AbortSignal.any([signal, timeout]) : timeout;
-    waiting.throwIfAborted();
-    let release = this.acquire("outbound_request");
-    for (let attempt = 0; !release; attempt += 1) {
-      // Leases are shared through SQLite, including with other server processes. Waiters back off
-      // with jitter so a full pool is not re-checked by every waiter in lockstep.
-      const step = Math.min(MAX_WAIT_STEP_MS, FIRST_WAIT_STEP_MS * 2 ** attempt);
-      await delay(Math.random() * step, undefined, { signal: waiting });
-      waiting.throwIfAborted();
-      release = this.acquire("outbound_request");
+    private async concurrent<T>(
+        resource: ConcurrentResource,
+        message: string,
+        task: () => Promise<T>,
+    ): Promise<T> {
+        const release = this.acquire(resource);
+        if (!release) {
+            throw new QuotaExceededError(message);
+        }
+        try {
+            return await task();
+        } finally {
+            release();
+        }
     }
-    try {
-      this.consumeDaily("outbound_request", "global");
-      return release;
-    } catch (error) {
-      release();
-      throw error;
-    }
-  }
 
-  assertOpmlUpload(source: string, feedCount: number): void {
-    const bytes = Buffer.byteLength(source, "utf8");
-    const byteLimit = this.policy.quotas.opmlUploadBytes;
-    if (byteLimit !== null && bytes > byteLimit) {
-      throw new QuotaExceededError(
-        `This OPML file is larger than the ${byteLimitLabel(byteLimit)} upload limit.`,
-      );
+    runChromium<T>(task: () => Promise<T>): Promise<T> {
+        return this.concurrent(
+            "chromium",
+            "The server is already analyzing other web pages. Try again shortly.",
+            task,
+        );
     }
-    const feedLimit = this.policy.quotas.opmlFeedsPerImport;
-    if (feedLimit !== null && feedCount > feedLimit) {
-      throw new QuotaExceededError(
-        `An OPML file can import up to ${feedLimit} ${feedLimit === 1 ? "feed" : "feeds"}.`,
-      );
-    }
-  }
 
-  canRegisterAccount(): boolean {
-    const limit = this.policy.quotas.registeredAccounts;
-    if (limit === null) return true;
-    const count = Number(
-      this.sqlite
-        .prepare("SELECT COUNT(*) FROM users WHERE username <> '__legacy_owner__'")
-        .pluck()
-        .get(),
-    );
-    return count < limit;
-  }
-
-  assertCanRegisterAccount(): void {
-    if (!this.canRegisterAccount()) {
-      throw new QuotaExceededError("This feedfold server is not accepting more accounts.");
+    runArticleExtraction<T>(task: () => Promise<T>): Promise<T> {
+        return this.concurrent(
+            "article_extraction",
+            "The server is already extracting other articles. Try again shortly.",
+            task,
+        );
     }
-    this.assertGlobalStorage();
-  }
 
-  assertAccountStorage(userId: number, additionalArticles = 0, additionalBytes = 0): void {
-    if (
-      this.policy.quotas.articlesPerAccount === null &&
-      this.policy.quotas.storedBytesPerAccount === null
-    ) {
-      return;
+    async runOutbound<T>(task: () => Promise<T>): Promise<T> {
+        const release = await this.startOutboundRequest();
+        try {
+            return await task();
+        } finally {
+            release();
+        }
     }
-    const row = this.sqlite
-      .prepare(
-        `SELECT COUNT(*) AS articleCount, COALESCE(SUM(articleBytes), 0) AS storedBytes
+
+    async startOutboundRequest(signal?: AbortSignal): Promise<() => void> {
+        const timeout = AbortSignal.timeout(120_000);
+        const waiting = signal ? AbortSignal.any([signal, timeout]) : timeout;
+        waiting.throwIfAborted();
+        let release = this.acquire("outbound_request");
+        for (let attempt = 0; !release; attempt += 1) {
+            // Leases are shared through SQLite, including with other server
+            // processes. Waiters back off
+            // with jitter so a full pool is not re-checked by every waiter in lockstep.
+            const step = Math.min(
+                MAX_WAIT_STEP_MS,
+                FIRST_WAIT_STEP_MS * 2 ** attempt,
+            );
+            await delay(Math.random() * step, undefined, { signal: waiting });
+            waiting.throwIfAborted();
+            release = this.acquire("outbound_request");
+        }
+        try {
+            this.consumeDaily("outbound_request", "global");
+            return release;
+        } catch (error) {
+            release();
+            throw error;
+        }
+    }
+
+    assertOpmlUpload(source: string, feedCount: number): void {
+        const bytes = Buffer.byteLength(source, "utf8");
+        const byteLimit = this.policy.quotas.opmlUploadBytes;
+        if (byteLimit !== null && bytes > byteLimit) {
+            throw new QuotaExceededError(
+                `This OPML file is larger than the ${
+                    byteLimit >= 1_048_576 && byteLimit % 1_048_576 === 0
+                        ? `${byteLimit / 1_048_576} MiB`
+                        : `${byteLimit.toLocaleString("en-US")} bytes`
+                } upload limit.`,
+            );
+        }
+        const feedLimit = this.policy.quotas.opmlFeedsPerImport;
+        if (feedLimit !== null && feedCount > feedLimit) {
+            throw new QuotaExceededError(
+                `An OPML file can import up to ${feedLimit} ${feedLimit === 1 ? "feed" : "feeds"}.`,
+            );
+        }
+    }
+
+    canRegisterAccount(): boolean {
+        const limit = this.policy.quotas.registeredAccounts;
+        if (limit === null) {
+            return true;
+        }
+        const count = Number(
+            this.sqlite
+                .prepare(
+                    "SELECT COUNT(*) FROM users WHERE username <> '__legacy_owner__'",
+                )
+                .pluck()
+                .get(),
+        );
+        return count < limit;
+    }
+
+    assertCanRegisterAccount(): void {
+        if (!this.canRegisterAccount()) {
+            throw new QuotaExceededError(
+                "This feedfold server is not accepting more accounts.",
+            );
+        }
+        this.assertGlobalStorage();
+    }
+
+    assertAccountStorage(
+        userId: number,
+        additionalArticles = 0,
+        additionalBytes = 0,
+    ): void {
+        if (
+            this.policy.quotas.articlesPerAccount === null &&
+            this.policy.quotas.storedBytesPerAccount === null
+        ) {
+            return;
+        }
+        const row = this.sqlite
+            .prepare(
+                `SELECT COUNT(*) AS articleCount, COALESCE(SUM(articleBytes), 0) AS storedBytes
          FROM (
            SELECT articles.id, ${ARTICLE_BYTE_COLUMNS} AS articleBytes
            FROM articles
@@ -275,42 +317,61 @@ export class QuotaService {
            WHERE account_articles.user_id = ?
            GROUP BY articles.id
          )`,
-      )
-      .get(userId) as { articleCount: number; storedBytes: number };
-    const articleLimit = this.policy.quotas.articlesPerAccount;
-    if (articleLimit !== null && Number(row.articleCount) + additionalArticles > articleLimit) {
-      throw new QuotaExceededError(
-        `This account has reached its ${articleLimit.toLocaleString("en-US")} article limit.`,
-      );
+            )
+            .get(userId) as { articleCount: number; storedBytes: number };
+        const articleLimit = this.policy.quotas.articlesPerAccount;
+        if (
+            articleLimit !== null &&
+            Number(row.articleCount) + additionalArticles > articleLimit
+        ) {
+            throw new QuotaExceededError(
+                "This account has reached its " +
+                    `${articleLimit.toLocaleString("en-US")} article limit.`,
+            );
+        }
+        const byteLimit = this.policy.quotas.storedBytesPerAccount;
+        if (
+            byteLimit !== null &&
+            Number(row.storedBytes) + additionalBytes > byteLimit
+        ) {
+            throw new QuotaExceededError(
+                "This account has reached its stored-data limit.",
+            );
+        }
     }
-    const byteLimit = this.policy.quotas.storedBytesPerAccount;
-    if (byteLimit !== null && Number(row.storedBytes) + additionalBytes > byteLimit) {
-      throw new QuotaExceededError("This account has reached its stored-data limit.");
-    }
-  }
 
-  assertArticleAccountsStorage(articleId: number, additionalBytes = 0): void {
-    if (
-      this.policy.quotas.articlesPerAccount === null &&
-      this.policy.quotas.storedBytesPerAccount === null
-    ) {
-      return;
+    assertArticleAccountsStorage(articleId: number, additionalBytes = 0): void {
+        if (
+            this.policy.quotas.articlesPerAccount === null &&
+            this.policy.quotas.storedBytesPerAccount === null
+        ) {
+            return;
+        }
+        const userIds = this.sqlite
+            .prepare(
+                `SELECT DISTINCT user_id AS userId FROM account_articles WHERE article_id = ?`,
+            )
+            .all(articleId) as Array<{ userId: number }>;
+        for (const { userId } of userIds) {
+            this.assertAccountStorage(userId, 0, additionalBytes);
+        }
     }
-    const userIds = this.sqlite
-      .prepare(`SELECT DISTINCT user_id AS userId FROM account_articles WHERE article_id = ?`)
-      .all(articleId) as Array<{ userId: number }>;
-    for (const { userId } of userIds) {
-      this.assertAccountStorage(userId, 0, additionalBytes);
-    }
-  }
 
-  assertGlobalStorage(additionalBytes = 0): void {
-    const limit = this.policy.quotas.globalStoredBytes;
-    if (limit === null) return;
-    const pageCount = Number(this.sqlite.pragma("page_count", { simple: true }));
-    const pageSize = Number(this.sqlite.pragma("page_size", { simple: true }));
-    if (pageCount * pageSize + additionalBytes > limit) {
-      throw new QuotaExceededError("This feedfold server has reached its storage limit.");
+    assertGlobalStorage(additionalBytes = 0): void {
+        const limit = this.policy.quotas.globalStoredBytes;
+        if (limit === null) {
+            return;
+        }
+        const pageCount = Number(
+            this.sqlite.pragma("page_count", { simple: true }),
+        );
+        const pageSize = Number(
+            this.sqlite.pragma("page_size", { simple: true }),
+        );
+        if (pageCount * pageSize + additionalBytes > limit) {
+            throw new QuotaExceededError(
+                "This feedfold server has reached its storage limit.",
+            );
+        }
     }
-  }
 }

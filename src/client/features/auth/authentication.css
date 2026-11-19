@@ -1,198 +1,200 @@
 /* Authentication */
 .auth-legal {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px 20px;
-  margin-top: 24px;
-  font-size: var(--type-supporting);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px 20px;
+    margin-top: 24px;
+    font-size: var(--type-supporting);
 }
 
 .auth-legal a {
-  display: inline-flex;
-  min-height: 44px;
-  min-width: 44px;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  text-underline-offset: 0.2em;
+    display: inline-flex;
+    min-height: 44px;
+    min-width: 44px;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    text-underline-offset: 0.2em;
 }
 
 .auth-page {
-  display: flex;
-  width: 100%;
-  height: 100dvh;
-  align-items: safe center;
-  justify-content: center;
-  padding: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px))
-    max(24px, env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: var(--paper-canvas);
-  background-blend-mode: var(--paper-blend);
+    display: flex;
+    width: 100%;
+    height: 100dvh;
+    align-items: safe center;
+    justify-content: center;
+    padding: max(24px, env(safe-area-inset-top, 0px))
+        max(24px, env(safe-area-inset-right, 0px))
+        max(24px, env(safe-area-inset-bottom, 0px))
+        max(24px, env(safe-area-inset-left, 0px));
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: var(--paper-canvas);
+    background-blend-mode: var(--paper-blend);
 }
 
 .login-dialog {
-  --control-size: var(--control-size-touch);
-  --control-size-compact: var(--control-size-touch);
-  --control-height: var(--control-size-touch);
-  width: min(390px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px);
-  padding: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  background: var(--paper-surface);
-  background-blend-mode: var(--paper-blend);
-  color: var(--text);
+    --control-size: var(--control-size-touch);
+    --control-size-compact: var(--control-size-touch);
+    --control-height: var(--control-size-touch);
+    width: min(390px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    padding: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--paper-surface);
+    background-blend-mode: var(--paper-blend);
+    color: var(--text);
 }
 
 .login-panel {
-  padding: 28px;
+    padding: 28px;
 }
 
 .login-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
 }
 
 .login-brand,
 .session-loading {
-  color: var(--text);
+    color: var(--text);
 }
 
 .login-heading {
-  margin: 24px 0;
+    margin: 24px 0;
 }
 
 .login-heading h2 {
-  margin: 0 0 5px;
-  font-size: var(--type-auth-title);
-  line-height: var(--leading-heading);
-  letter-spacing: -0.02em;
+    margin: 0 0 5px;
+    font-size: var(--type-auth-title);
+    line-height: var(--leading-heading);
+    letter-spacing: -0.02em;
 }
 
 .login-heading p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--type-body);
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--type-body);
 }
 
 .login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
 
 .login-field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 5px;
-  color: var(--text-secondary);
-  font-size: var(--type-supporting);
-  font-weight: var(--weight-semibold);
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+    color: var(--text-secondary);
+    font-size: var(--type-supporting);
+    font-weight: var(--weight-semibold);
 }
 
 .login-field input {
-  width: 100%;
-  height: var(--control-height);
-  padding: 7px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 16px;
+    width: 100%;
+    height: var(--control-height);
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
 }
 
 .login-error {
-  padding: 9px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--danger-surface);
-  color: var(--danger);
-  font-size: var(--type-supporting);
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--danger-surface);
+    color: var(--danger);
+    font-size: var(--type-supporting);
 }
 
 .login-button {
-  width: 100%;
-  margin-top: 3px;
+    width: 100%;
+    margin-top: 3px;
 }
 
 .auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 2px 0;
-  color: var(--muted);
-  font-size: var(--type-label);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 2px 0;
+    color: var(--muted);
+    font-size: var(--type-label);
 }
 
 .auth-divider::before,
 .auth-divider::after {
-  height: 1px;
-  flex: 1;
-  background: var(--border);
-  content: "";
+    height: 1px;
+    flex: 1;
+    background: var(--border);
+    content: "";
 }
 
 .auth-switch {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0 5px;
-  margin-top: 18px;
-  color: var(--muted);
-  font-size: var(--type-supporting);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0 5px;
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: var(--type-supporting);
 }
 
 .auth-switch button {
-  min-height: var(--control-size-compact);
-  padding: 4px;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font-weight: var(--weight-semibold);
-  transition:
-    transform var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) ease;
+    min-height: var(--control-size-compact);
+    padding: 4px;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font-weight: var(--weight-semibold);
+    transition:
+        transform var(--duration-fast) var(--ease-out),
+        color var(--duration-fast) ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .auth-switch button:hover:not(:disabled) {
-    color: var(--accent-strong);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
+    .auth-switch button:hover:not(:disabled) {
+        color: var(--accent-strong);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
 }
 
 .auth-switch button:active:not(:disabled, :focus-visible) {
-  transform: scale(0.97);
+    transform: scale(0.97);
 }
 
 .session-loading {
-  --brand-loading-delay: 300ms;
-  display: flex;
-  align-items: center;
-  color: var(--text-secondary);
+    --brand-loading-delay: 300ms;
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
 }
 
 .registration-closed {
-  margin: 18px 0 0;
-  color: var(--muted);
-  font-size: var(--type-supporting);
-  text-align: center;
+    margin: 18px 0 0;
+    color: var(--muted);
+    font-size: var(--type-supporting);
+    text-align: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .login-dialog {
-    transition-duration: var(--duration-reduced);
-  }
+    .login-dialog {
+        transition-duration: var(--duration-reduced);
+    }
 }
 
 :root[data-input-modality="keyboard"] .login-dialog {
-  transition: none;
+    transition: none;
 }

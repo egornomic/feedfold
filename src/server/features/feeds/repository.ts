@@ -1,71 +1,84 @@
+import assert from "node:assert/strict";
 import type Sqlite from "better-sqlite3";
 import type {
-  Feed,
-  FeedErrorKind,
-  FeedPollIntervalMinutes,
-  WebFeedConfig,
+    Feed,
+    FeedErrorKind,
+    FeedPollIntervalMinutes,
+    FeedSourceKind,
+    WebFeedConfig,
 } from "../../../shared/types.js";
 import { xFeedUrl } from "../../../shared/x.js";
 import { accountActivityCutoff } from "../../account-activity.js";
 import { nitterBaseUrls } from "../../x-feed.js";
 import type { FolderRepository } from "../folders/repository.js";
 import {
-  deleteOrphanSources,
-  type FeedRecord,
-  feedPollIntervalSql,
-  feedRecordColumns,
-  mapFeed,
-  mapFeedRecord,
-  now,
-  type ParsedFeed,
-  type Row,
-  visibleClause,
-  WEB_FEED_POLL_INTERVAL_MINUTES,
+    deleteOrphanSources,
+    type FeedRecord,
+    feedPollIntervalSql,
+    feedRecordColumns,
+    now,
+    type ParsedFeed,
+    type Row,
+    toBoolean,
+    visibleClause,
+    WEB_FEED_POLL_INTERVAL_MINUTES,
 } from "../shared.js";
 import { FeedPollingPolicy } from "./polling-policy.js";
-import { failureRetryAt, sourcePollInterval, staggeredPollAt } from "./schedule.js";
+import {
+    failureRetryAt,
+    sourcePollInterval,
+    staggeredPollAt,
+} from "./schedule.js";
 
 export interface SourceSubscription {
-  feedId: number;
-  userId: number;
-  initialized: boolean;
+    feedId: number;
+    userId: number;
+    initialized: boolean;
 }
 
 export class FeedRepository {
-  constructor(
-    private readonly sqlite: Sqlite.Database,
-    private readonly folders: FolderRepository,
-    private readonly accountActivityWindowDays: number | null,
-  ) {}
+    constructor(
+        private readonly sqlite: Sqlite.Database,
+        private readonly folders: FolderRepository,
+        private readonly accountActivityWindowDays: number | null,
+    ) {}
 
-  listFeeds(userId: number): Feed[] {
-    return this.selectFeeds(userId);
-  }
+    listFeeds(userId: number): Feed[] {
+        return this.selectFeeds(userId);
+    }
 
-  countFeeds(userId: number, sourceKind?: Feed["sourceKind"]): number {
-    return Number(
-      this.sqlite
-        .prepare(
-          `SELECT COUNT(*) FROM feeds
+    countFeeds(userId: number, sourceKind?: Feed["sourceKind"]): number {
+        return Number(
+            this.sqlite
+                .prepare(
+                    `SELECT COUNT(*) FROM feeds
            JOIN feed_sources ON feed_sources.id = feeds.source_id
-           WHERE feeds.user_id = ? ${sourceKind === undefined ? "" : "AND feed_sources.source_kind = ?"}`,
-        )
-        .pluck()
-        .get(...(sourceKind === undefined ? [userId] : [userId, sourceKind])),
-    );
-  }
+           WHERE feeds.user_id = ?
+               ${sourceKind === undefined ? "" : "AND feed_sources.source_kind = ?"}`,
+                )
+                .pluck()
+                .get(
+                    ...(sourceKind === undefined
+                        ? [userId]
+                        : [userId, sourceKind]),
+                ),
+        );
+    }
 
-  userIdForFeed(feedId: number): number {
-    return Number(
-      this.sqlite.prepare("SELECT user_id FROM feeds WHERE id = ?").pluck().get(feedId),
-    );
-  }
+    userIdForFeed(feedId: number): number {
+        return Number(
+            this.sqlite
+                .prepare("SELECT user_id FROM feeds WHERE id = ?")
+                .pluck()
+                .get(feedId),
+        );
+    }
 
-  private selectFeeds(userId: number, feedId?: number): Feed[] {
-    const feedIdClause = feedId === undefined ? "" : "AND feeds.id = ?";
-    const rows = this.sqlite
-      .prepare(
-        `SELECT feeds.id, feeds.folder_id AS folderId, feeds.title,
+    private selectFeeds(userId: number, feedId?: number): Feed[] {
+        const feedIdClause = feedId === undefined ? "" : "AND feeds.id = ?";
+        const rows = this.sqlite
+            .prepare(
+                `SELECT feeds.id, feeds.folder_id AS folderId, feeds.title,
                 feed_sources.feed_url AS feedUrl, feed_sources.site_url AS siteUrl,
                 feed_sources.source_kind AS sourceKind,
                 feed_sources.last_error_kind AS lastErrorKind,
@@ -92,185 +105,246 @@ export class FeedRepository {
          WHERE feeds.user_id = ? ${feedIdClause}
          GROUP BY feeds.id
          ORDER BY feeds.title COLLATE NOCASE`,
-      )
-      .all(...(feedId === undefined ? [userId] : [userId, feedId])) as Row[];
-    return rows.map(mapFeed);
-  }
+            )
+            .all(
+                ...(feedId === undefined ? [userId] : [userId, feedId]),
+            ) as Row[];
+        return rows.map(
+            (row): Feed => ({
+                id: Number(row.id),
+                folderId: row.folderId === null ? null : Number(row.folderId),
+                title: String(row.title),
+                feedUrl: String(row.feedUrl),
+                siteUrl: row.siteUrl === null ? null : String(row.siteUrl),
+                sourceKind: row.sourceKind as FeedSourceKind,
+                lastErrorKind:
+                    row.lastErrorKind === null
+                        ? null
+                        : (row.lastErrorKind as FeedErrorKind),
+                lastMatchCount:
+                    row.lastMatchCount === null
+                        ? null
+                        : Number(row.lastMatchCount),
+                createdAt: String(row.createdAt),
+                pollIntervalMinutes: Number(row.pollIntervalMinutes),
+                unreadCount: Number(row.unreadCount),
+                totalCount: Number(row.totalCount),
+                paused: toBoolean(row.paused),
+                refreshing: toBoolean(row.refreshing),
+                lastPostAt:
+                    row.lastPostAt === null ? null : String(row.lastPostAt),
+                lastAttemptAt:
+                    row.lastAttemptAt === null
+                        ? null
+                        : String(row.lastAttemptAt),
+                lastSuccessAt:
+                    row.lastSuccessAt === null
+                        ? null
+                        : String(row.lastSuccessAt),
+                lastHttpStatus:
+                    row.lastHttpStatus === null
+                        ? null
+                        : Number(row.lastHttpStatus),
+                lastError:
+                    row.lastError === null ? null : String(row.lastError),
+                nextPollAt:
+                    row.nextPollAt === null ? null : String(row.nextPollAt),
+            }),
+        );
+    }
 
-  getFeed(userId: number, id: number): Feed | null {
-    return this.selectFeeds(userId, id)[0] ?? null;
-  }
+    getFeed(userId: number, id: number): Feed | null {
+        return this.selectFeeds(userId, id)[0] ?? null;
+    }
 
-  private publishedSource(feedUrl: string, userId: number): number {
-    const timestamp = now();
-    this.sqlite
-      .prepare(
-        `INSERT OR IGNORE INTO feed_sources (
+    private publishedSource(feedUrl: string, userId: number): number {
+        const timestamp = now();
+        this.sqlite
+            .prepare(
+                `INSERT OR IGNORE INTO feed_sources (
            feed_url, source_kind, source_config_key, title, poll_interval_minutes,
            next_poll_at, created_at, updated_at
          ) VALUES (?, 'published', '', ?,
                    (SELECT poll_interval_minutes FROM settings WHERE user_id = ?), ?, ?, ?)`,
-      )
-      .run(feedUrl, feedUrl, userId, timestamp, timestamp, timestamp);
-    return Number(
-      this.sqlite
-        .prepare(
-          `SELECT id FROM feed_sources
+            )
+            .run(feedUrl, feedUrl, userId, timestamp, timestamp, timestamp);
+        return Number(
+            this.sqlite
+                .prepare(
+                    `SELECT id FROM feed_sources
            WHERE source_kind = 'published' AND feed_url = ? AND source_config_key = ''`,
-        )
-        .pluck()
-        .get(feedUrl),
-    );
-  }
-
-  createFeed(
-    userId: number,
-    input: {
-      feedUrl: string;
-      title?: string;
-      siteUrl?: string | null;
-      folderId?: number | null;
-      paused?: boolean;
-    },
-  ): Feed {
-    this.folders.assertFolderExists(userId, input.folderId);
-    const timestamp = now();
-    const feedUrl = xFeedUrl(input.feedUrl, nitterBaseUrls()) ?? new URL(input.feedUrl).toString();
-    const sourceId = this.publishedSource(feedUrl, userId);
-    if (input.siteUrl !== undefined) {
-      this.sqlite
-        .prepare("UPDATE feed_sources SET site_url = COALESCE(site_url, ?) WHERE id = ?")
-        .run(input.siteUrl, sourceId);
+                )
+                .pluck()
+                .get(feedUrl),
+        );
     }
-    const result = this.sqlite
-      .prepare(
-        `INSERT INTO feeds (
+
+    createFeed(
+        userId: number,
+        input: {
+            feedUrl: string;
+            title?: string;
+            siteUrl?: string | null;
+            folderId?: number | null;
+            paused?: boolean;
+        },
+    ): { id: number; sourceId: number } {
+        this.folders.assertFolderExists(userId, input.folderId);
+        const timestamp = now();
+        const feedUrl =
+            xFeedUrl(input.feedUrl, nitterBaseUrls()) ??
+            new URL(input.feedUrl).toString();
+        const sourceId = this.publishedSource(feedUrl, userId);
+        if (input.siteUrl !== undefined) {
+            this.sqlite
+                .prepare(
+                    "UPDATE feed_sources SET site_url = COALESCE(site_url, ?) WHERE id = ?",
+                )
+                .run(input.siteUrl, sourceId);
+        }
+        const result = this.sqlite
+            .prepare(
+                `INSERT INTO feeds (
            user_id, source_id, folder_id, title, paused, created_at, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        userId,
-        sourceId,
-        input.folderId ?? null,
-        input.title?.trim() || feedUrl,
-        input.paused ? 1 : 0,
-        timestamp,
-        timestamp,
-      );
-    return this.getFeed(userId, Number(result.lastInsertRowid)) as Feed;
-  }
-
-  updateFeed(
-    userId: number,
-    id: number,
-    input: {
-      title?: string;
-      feedUrl?: string;
-      siteUrl?: string | null;
-      folderId?: number | null;
-      paused?: boolean;
-    },
-  ): Feed | null {
-    const existing = this.getFeed(userId, id);
-    if (!existing) return null;
-    this.folders.assertFolderExists(userId, input.folderId);
-    const feedUrl = input.feedUrl
-      ? ((existing.sourceKind === "published" ? xFeedUrl(input.feedUrl, nitterBaseUrls()) : null) ??
-        new URL(input.feedUrl).toString())
-      : existing.feedUrl;
-    if (existing.sourceKind === "web" && feedUrl !== existing.feedUrl) {
-      throw new Error("To change a web feed URL, edit its page selection.");
+            )
+            .run(
+                userId,
+                sourceId,
+                input.folderId ?? null,
+                input.title?.trim() || feedUrl,
+                input.paused ? 1 : 0,
+                timestamp,
+                timestamp,
+            );
+        return { id: Number(result.lastInsertRowid), sourceId };
     }
-    const oldSourceId = this.sourceIdForFeed(id);
-    const sourceId =
-      existing.sourceKind === "published" && feedUrl !== existing.feedUrl
-        ? this.publishedSource(feedUrl, userId)
-        : oldSourceId;
-    const title = input.title ?? (existing.title === existing.feedUrl ? feedUrl : existing.title);
-    const paused = input.paused ?? existing.paused;
-    const sourceChanged = sourceId !== oldSourceId;
-    this.sqlite.transaction(() => {
-      this.sqlite
-        .prepare(
-          `UPDATE feeds
-           SET source_id = ?, title = ?, folder_id = ?, paused = ?,
-               initialized_at = CASE WHEN ? = 1 THEN NULL ELSE initialized_at END,
-               updated_at = ?
-           WHERE id = ? AND user_id = ?`,
-        )
-        .run(
-          sourceId,
-          title,
-          input.folderId === undefined ? existing.folderId : input.folderId,
-          paused ? 1 : 0,
-          sourceChanged ? 1 : 0,
-          now(),
-          id,
-          userId,
-        );
-      if (input.siteUrl !== undefined) {
+
+    updateFeed(
+        userId: number,
+        existing: Feed,
+        input: {
+            title?: string;
+            feedUrl?: string;
+            siteUrl?: string | null;
+            folderId?: number | null;
+            paused?: boolean;
+        },
+    ): Feed {
+        const { id } = existing;
+        this.folders.assertFolderExists(userId, input.folderId);
+        const feedUrl = input.feedUrl
+            ? ((existing.sourceKind === "published"
+                  ? xFeedUrl(input.feedUrl, nitterBaseUrls())
+                  : null) ?? new URL(input.feedUrl).toString())
+            : existing.feedUrl;
+        if (existing.sourceKind === "web" && feedUrl !== existing.feedUrl) {
+            throw new Error(
+                "To change a web feed URL, edit its page selection.",
+            );
+        }
+        const oldSourceId = this.sourceIdForFeed(id);
+        const sourceId =
+            existing.sourceKind === "published" && feedUrl !== existing.feedUrl
+                ? this.publishedSource(feedUrl, userId)
+                : oldSourceId;
+        const title =
+            input.title ??
+            (existing.title === existing.feedUrl ? feedUrl : existing.title);
+        const paused = input.paused ?? existing.paused;
+        const sourceChanged = sourceId !== oldSourceId;
         this.sqlite
-          .prepare("UPDATE feed_sources SET site_url = ? WHERE id = ?")
-          .run(input.siteUrl, sourceId);
-      }
-      if (!paused && (sourceChanged || existing.paused)) {
-        this.sqlite
-          .prepare("UPDATE feed_sources SET next_poll_at = ? WHERE id = ?")
-          .run(now(), sourceId);
-      }
-      if (sourceChanged) this.deleteOrphanSources();
-    })();
-    return this.getFeed(userId, id);
-  }
+            .prepare(
+                `UPDATE feeds
+         SET source_id = ?, title = ?, folder_id = ?, paused = ?,
+             initialized_at = CASE WHEN ? = 1 THEN NULL ELSE initialized_at END,
+             updated_at = ?
+         WHERE id = ? AND user_id = ?`,
+            )
+            .run(
+                sourceId,
+                title,
+                input.folderId === undefined
+                    ? existing.folderId
+                    : input.folderId,
+                paused ? 1 : 0,
+                sourceChanged ? 1 : 0,
+                now(),
+                id,
+                userId,
+            );
+        if (input.siteUrl !== undefined) {
+            this.sqlite
+                .prepare("UPDATE feed_sources SET site_url = ? WHERE id = ?")
+                .run(input.siteUrl, sourceId);
+        }
+        if (!paused && (sourceChanged || existing.paused)) {
+            this.sqlite
+                .prepare(
+                    "UPDATE feed_sources SET next_poll_at = ? WHERE id = ?",
+                )
+                .run(now(), sourceId);
+        }
+        if (sourceChanged) {
+            this.deleteOrphanSources();
+        }
+        const updated = this.getFeed(userId, id);
+        assert(updated, "The updated feed is missing");
+        return updated;
+    }
 
-  deleteFeed(userId: number, id: number): boolean {
-    const changed = this.sqlite.transaction(() => {
-      const deleted = this.sqlite
-        .prepare("DELETE FROM feeds WHERE id = ? AND user_id = ?")
-        .run(id, userId).changes;
-      if (deleted > 0) this.deleteOrphanSources();
-      return deleted;
-    })();
-    return changed > 0;
-  }
+    deleteFeed(userId: number, id: number): boolean {
+        const changed = this.sqlite.transaction(() => {
+            const deleted = this.sqlite
+                .prepare("DELETE FROM feeds WHERE id = ? AND user_id = ?")
+                .run(id, userId).changes;
+            if (deleted > 0) {
+                this.deleteOrphanSources();
+            }
+            return deleted;
+        })();
+        return changed > 0;
+    }
 
-  deleteOrphanSources(): void {
-    deleteOrphanSources(this.sqlite);
-  }
+    deleteOrphanSources(): void {
+        deleteOrphanSources(this.sqlite);
+    }
 
-  sourceIdForFeed(feedId: number): number {
-    const value = this.sqlite
-      .prepare("SELECT source_id FROM feeds WHERE id = ?")
-      .pluck()
-      .get(feedId);
-    return value === undefined ? 0 : Number(value);
-  }
+    sourceIdForFeed(feedId: number): number {
+        const value = this.sqlite
+            .prepare("SELECT source_id FROM feeds WHERE id = ?")
+            .pluck()
+            .get(feedId);
+        return value === undefined ? 0 : Number(value);
+    }
 
-  getWebFeedConfig(userId: number, feedId: number): WebFeedConfig | null {
-    const row = this.sqlite
-      .prepare(
-        `SELECT source_web_feed_configs.config_json AS configJson
+    getWebFeedConfig(userId: number, feedId: number): WebFeedConfig | null {
+        const row = this.sqlite
+            .prepare(
+                `SELECT source_web_feed_configs.config_json AS configJson
          FROM feeds
          JOIN feed_sources ON feed_sources.id = feeds.source_id
          JOIN source_web_feed_configs
            ON source_web_feed_configs.source_id = feed_sources.id
          WHERE feeds.id = ? AND feeds.user_id = ? AND feed_sources.source_kind = 'web'`,
-      )
-      .get(feedId, userId) as { configJson: string } | undefined;
-    return row ? (JSON.parse(row.configJson) as WebFeedConfig) : null;
-  }
-
-  getRefreshCandidates(feedIds?: number[]): FeedRecord[] {
-    const values: number[] = [];
-    let selected = "AND feeds.paused = 0";
-    if (feedIds) {
-      if (feedIds.length === 0) return [];
-      selected = `AND feeds.id IN (${feedIds.map(() => "?").join(", ")})`;
-      values.push(...feedIds);
+            )
+            .get(feedId, userId) as { configJson: string } | undefined;
+        return row ? (JSON.parse(row.configJson) as WebFeedConfig) : null;
     }
-    const rows = this.sqlite
-      .prepare(
-        `SELECT ${feedRecordColumns}
+
+    getRefreshCandidates(feedIds?: number[]): FeedRecord[] {
+        const values: number[] = [];
+        let selected = "AND feeds.paused = 0";
+        if (feedIds) {
+            if (feedIds.length === 0) {
+                return [];
+            }
+            selected = `AND feeds.id IN (${feedIds.map(() => "?").join(", ")})`;
+            values.push(...feedIds);
+        }
+        const rows = this.sqlite
+            .prepare(
+                `SELECT ${feedRecordColumns}
          FROM feed_sources
          LEFT JOIN source_web_feed_configs
            ON source_web_feed_configs.source_id = feed_sources.id
@@ -278,36 +352,83 @@ export class FeedRepository {
            SELECT 1 FROM feeds
            WHERE feeds.source_id = feed_sources.id ${selected}
          )`,
-      )
-      .all(...values) as Row[];
-    return rows.map(mapFeedRecord);
-  }
+            )
+            .all(...values) as Row[];
+        return rows.map((row): FeedRecord => {
+            const base = {
+                id: Number(row.id),
+                title: String(row.title),
+                feedUrl: String(row.feedUrl),
+                siteUrl: row.siteUrl === null ? null : String(row.siteUrl),
+                etag: row.etag === null ? null : String(row.etag),
+                lastModified:
+                    row.lastModified === null ? null : String(row.lastModified),
+                pollIntervalMinutes: Number(
+                    row.pollIntervalMinutes,
+                ) as FeedPollIntervalMinutes,
+            };
+            const { sourceKind } = row;
+            if (sourceKind === "published") {
+                assert(
+                    row.webConfigJson === null,
+                    `Published feed ${base.id} has a web feed configuration`,
+                );
+                return {
+                    ...base,
+                    sourceKind,
+                    webConfig: null,
+                    selectionRevision: null,
+                    lastMatchCount: null,
+                };
+            }
+            assert(
+                sourceKind === "web",
+                `Feed ${base.id} has an invalid source kind`,
+            );
+            assert(
+                typeof row.webConfigJson === "string",
+                `Web feed ${base.id} is missing its page selection`,
+            );
+            return {
+                ...base,
+                sourceKind,
+                webConfig: JSON.parse(row.webConfigJson) as WebFeedConfig,
+                selectionRevision: Number(row.selectionRevision),
+                lastMatchCount: Number(row.lastMatchCount),
+            };
+        });
+    }
 
-  getUserRefreshFeedIds(userId: number, requestedIds?: number[]): number[] {
-    if (requestedIds?.length === 0) return [];
-    const selected = requestedIds
-      ? `AND paused = 0 AND id IN (${requestedIds.map(() => "?").join(", ")})`
-      : "AND paused = 0";
-    return (
-      this.sqlite
-        .prepare(`SELECT id FROM feeds WHERE user_id = ? ${selected}`)
-        .all(userId, ...(requestedIds ?? [])) as Array<{ id: number }>
-    ).map((row) => row.id);
-  }
+    getUserRefreshFeedIds(userId: number, requestedIds?: number[]): number[] {
+        if (requestedIds?.length === 0) {
+            return [];
+        }
+        const selected = requestedIds
+            ? `AND paused = 0 AND id IN (${requestedIds.map(() => "?").join(", ")})`
+            : "AND paused = 0";
+        return (
+            this.sqlite
+                .prepare(`SELECT id FROM feeds WHERE user_id = ? ${selected}`)
+                .all(userId, ...(requestedIds ?? [])) as Array<{ id: number }>
+        ).map((row) => row.id);
+    }
 
-  getDueFeedIds(at = now()): number[] {
-    const activityJoin =
-      this.accountActivityWindowDays === null
-        ? ""
-        : "JOIN users ON users.id = feeds.user_id AND users.last_active_at > ?";
-    const values =
-      this.accountActivityWindowDays === null
-        ? [at]
-        : [accountActivityCutoff(at, this.accountActivityWindowDays), at];
-    return (
-      this.sqlite
-        .prepare(
-          `SELECT MIN(feeds.id) AS id
+    getDueFeedIds(at = now()): number[] {
+        const activityJoin =
+            this.accountActivityWindowDays === null
+                ? ""
+                : "JOIN users ON users.id = feeds.user_id AND users.last_active_at > ?";
+        const values =
+            this.accountActivityWindowDays === null
+                ? [at]
+                : [
+                      accountActivityCutoff(at, this.accountActivityWindowDays),
+                      at,
+                  ];
+        return (
+            this.sqlite
+                .prepare(
+                    `SELECT MIN(feeds.id) AS id
            FROM feed_sources
            JOIN feeds ON feeds.source_id = feed_sources.id AND feeds.paused = 0
            ${activityJoin}
@@ -315,315 +436,397 @@ export class FeedRepository {
              AND (feed_sources.next_poll_at IS NULL OR feed_sources.next_poll_at <= ?)
            GROUP BY feed_sources.id
            ORDER BY COALESCE(feed_sources.next_poll_at, feed_sources.created_at)`,
-        )
-        .all(...values) as Array<{ id: number }>
-    ).map((row) => row.id);
-  }
+                )
+                .all(...values) as Array<{ id: number }>
+        ).map((row) => row.id);
+    }
 
-  markFeedRefreshing(sourceId: number): void {
-    this.sqlite.prepare("UPDATE feed_sources SET refreshing = 1 WHERE id = ?").run(sourceId);
-  }
+    markFeedRefreshing(sourceId: number): void {
+        this.sqlite
+            .prepare("UPDATE feed_sources SET refreshing = 1 WHERE id = ?")
+            .run(sourceId);
+    }
 
-  listSourceSubscriptions(sourceId: number): SourceSubscription[] {
-    return this.selectSourceSubscriptions(sourceId);
-  }
+    listSourceSubscriptions(sourceId: number): SourceSubscription[] {
+        return this.selectSourceSubscriptions(sourceId);
+    }
 
-  listDeliverableSourceSubscriptions(sourceId: number): SourceSubscription[] {
-    return this.selectSourceSubscriptions(sourceId, "AND paused = 0");
-  }
+    listDeliverableSourceSubscriptions(sourceId: number): SourceSubscription[] {
+        return this.selectSourceSubscriptions(sourceId, "AND paused = 0");
+    }
 
-  private selectSourceSubscriptions(
-    sourceId: number,
-    eligibilityClause = "",
-  ): SourceSubscription[] {
-    return this.sqlite
-      .prepare(
-        `SELECT id AS feedId, user_id AS userId, initialized_at IS NOT NULL AS initialized
+    private selectSourceSubscriptions(
+        sourceId: number,
+        eligibilityClause = "",
+    ): SourceSubscription[] {
+        return this.sqlite
+            .prepare(
+                `SELECT id AS feedId, user_id AS userId, initialized_at IS NOT NULL AS initialized
          FROM feeds WHERE source_id = ? ${eligibilityClause} ORDER BY id`,
-      )
-      .all(sourceId) as SourceSubscription[];
-  }
+            )
+            .all(sourceId) as SourceSubscription[];
+    }
 
-  createWebFeedRecord(
-    userId: number,
-    input: {
-      title: string;
-      pageUrl: string;
-      folderId: number | null;
-      config: WebFeedConfig;
-      parsed: ParsedFeed;
-    },
-  ): number {
-    const timestamp = now();
-    const sourceId = this.ensureWebFeedSource(input.pageUrl, input.config, input.parsed);
-    const result = this.sqlite
-      .prepare(
-        `INSERT INTO feeds (
+    createWebFeedRecord(
+        userId: number,
+        input: {
+            title: string;
+            pageUrl: string;
+            folderId: number | null;
+            config: WebFeedConfig;
+            parsed: ParsedFeed;
+        },
+    ): number {
+        const timestamp = now();
+        const sourceId = this.ensureWebFeedSource(
+            input.pageUrl,
+            input.config,
+            input.parsed,
+        );
+        const result = this.sqlite
+            .prepare(
+                `INSERT INTO feeds (
            user_id, source_id, folder_id, title, paused, created_at, updated_at
          ) VALUES (?, ?, ?, ?, 0, ?, ?)`,
-      )
-      .run(
-        userId,
-        sourceId,
-        input.folderId,
-        input.title.trim() || input.parsed.title.trim() || input.pageUrl,
-        timestamp,
-        timestamp,
-      );
-    return Number(result.lastInsertRowid);
-  }
+            )
+            .run(
+                userId,
+                sourceId,
+                input.folderId,
+                input.title.trim() ||
+                    input.parsed.title.trim() ||
+                    input.pageUrl,
+                timestamp,
+                timestamp,
+            );
+        return Number(result.lastInsertRowid);
+    }
 
-  private ensureWebFeedSource(pageUrl: string, config: WebFeedConfig, parsed: ParsedFeed): number {
-    const timestamp = now();
-    const configJson = JSON.stringify(config);
-    this.sqlite
-      .prepare(
-        `INSERT OR IGNORE INTO feed_sources (
+    private ensureWebFeedSource(
+        pageUrl: string,
+        config: WebFeedConfig,
+        parsed: ParsedFeed,
+    ): number {
+        const timestamp = now();
+        const configJson = JSON.stringify(config);
+        this.sqlite
+            .prepare(
+                `INSERT OR IGNORE INTO feed_sources (
            feed_url, site_url, source_kind, source_config_key, title, refreshing,
            poll_interval_minutes, next_poll_at, created_at, updated_at
          ) VALUES (?, ?, 'web', ?, ?, 1, ?, ?, ?, ?)`,
-      )
-      .run(
-        pageUrl,
-        parsed.siteUrl ?? pageUrl,
-        configJson,
-        parsed.title.trim() || pageUrl,
-        WEB_FEED_POLL_INTERVAL_MINUTES,
-        timestamp,
-        timestamp,
-        timestamp,
-      );
-    const sourceId = Number(
-      this.sqlite
-        .prepare(
-          `SELECT id FROM feed_sources
+            )
+            .run(
+                pageUrl,
+                parsed.siteUrl ?? pageUrl,
+                configJson,
+                parsed.title.trim() || pageUrl,
+                WEB_FEED_POLL_INTERVAL_MINUTES,
+                timestamp,
+                timestamp,
+                timestamp,
+            );
+        const sourceId = Number(
+            this.sqlite
+                .prepare(
+                    `SELECT id FROM feed_sources
            WHERE source_kind = 'web' AND feed_url = ? AND source_config_key = ?`,
-        )
-        .pluck()
-        .get(pageUrl, configJson),
-    );
-    this.sqlite
-      .prepare(
-        `INSERT OR IGNORE INTO source_web_feed_configs (
+                )
+                .pluck()
+                .get(pageUrl, configJson),
+        );
+        this.sqlite
+            .prepare(
+                `INSERT OR IGNORE INTO source_web_feed_configs (
            source_id, config_json, selection_revision, last_match_count, created_at, updated_at
          ) VALUES (?, ?, 1, ?, ?, ?)`,
-      )
-      .run(sourceId, configJson, parsed.articles.length, timestamp, timestamp);
-    return sourceId;
-  }
+            )
+            .run(
+                sourceId,
+                configJson,
+                parsed.articles.length,
+                timestamp,
+                timestamp,
+            );
+        return sourceId;
+    }
 
-  updateWebFeedSelectionRecord(feedId: number, config: WebFeedConfig, parsed: ParsedFeed): number {
-    const oldSourceId = this.sourceIdForFeed(feedId);
-    const oldRevision = Number(
-      this.sqlite
-        .prepare("SELECT selection_revision FROM source_web_feed_configs WHERE source_id = ?")
-        .pluck()
-        .get(oldSourceId) ?? 0,
-    );
-    const newSourceId = this.ensureWebFeedSource(config.pageUrl, config, parsed);
-    this.sqlite
-      .prepare(
-        `UPDATE source_web_feed_configs
+    updateWebFeedSelectionRecord(
+        feedId: number,
+        config: WebFeedConfig,
+        parsed: ParsedFeed,
+    ): number {
+        const oldSourceId = this.sourceIdForFeed(feedId);
+        const oldRevision = Number(
+            this.sqlite
+                .prepare(
+                    "SELECT selection_revision FROM source_web_feed_configs WHERE source_id = ?",
+                )
+                .pluck()
+                .get(oldSourceId) ?? 0,
+        );
+        const newSourceId = this.ensureWebFeedSource(
+            config.pageUrl,
+            config,
+            parsed,
+        );
+        this.sqlite
+            .prepare(
+                `UPDATE source_web_feed_configs
          SET selection_revision = MAX(selection_revision, ?)
          WHERE source_id = ?`,
-      )
-      .run(oldRevision + 1, newSourceId);
-    this.sqlite
-      .prepare("UPDATE feeds SET source_id = ?, initialized_at = NULL, updated_at = ? WHERE id = ?")
-      .run(newSourceId, now(), feedId);
-    if (oldSourceId !== newSourceId) this.deleteOrphanSources();
-    return newSourceId;
-  }
+            )
+            .run(oldRevision + 1, newSourceId);
+        this.sqlite
+            .prepare(
+                "UPDATE feeds SET source_id = ?, initialized_at = NULL, " +
+                    "updated_at = ? WHERE id = ?",
+            )
+            .run(newSourceId, now(), feedId);
+        if (oldSourceId !== newSourceId) {
+            this.deleteOrphanSources();
+        }
+        return newSourceId;
+    }
 
-  selectionRevisionMatches(sourceId: number, expectedRevision: number): boolean {
-    const revision = this.sqlite
-      .prepare("SELECT selection_revision FROM source_web_feed_configs WHERE source_id = ?")
-      .pluck()
-      .get(sourceId);
-    return revision !== undefined && Number(revision) === expectedRevision;
-  }
+    selectionRevisionMatches(
+        sourceId: number,
+        expectedRevision: number,
+    ): boolean {
+        const revision = this.sqlite
+            .prepare(
+                "SELECT selection_revision FROM source_web_feed_configs WHERE source_id = ?",
+            )
+            .pluck()
+            .get(sourceId);
+        return revision !== undefined && Number(revision) === expectedRevision;
+    }
 
-  markSubscriptionInitialized(feedId: number, initializedAt: string): void {
-    this.sqlite
-      .prepare("UPDATE feeds SET initialized_at = COALESCE(initialized_at, ?) WHERE id = ?")
-      .run(initializedAt, feedId);
-  }
+    markSubscriptionInitialized(feedId: number, initializedAt: string): void {
+        this.sqlite
+            .prepare(
+                "UPDATE feeds SET initialized_at = COALESCE(initialized_at, ?) WHERE id = ?",
+            )
+            .run(initializedAt, feedId);
+    }
 
-  subscriptionNeedsRefresh(feedId: number): boolean {
-    return (
-      this.sqlite.prepare("SELECT initialized_at FROM feeds WHERE id = ?").pluck().get(feedId) ===
-      null
-    );
-  }
+    subscriptionNeedsRefresh(feedId: number): boolean {
+        return (
+            this.sqlite
+                .prepare("SELECT initialized_at FROM feeds WHERE id = ?")
+                .pluck()
+                .get(feedId) === null
+        );
+    }
 
-  sourceHasSuccessfulRefresh(sourceId: number): boolean {
-    return (
-      this.sqlite
-        .prepare("SELECT last_success_at FROM feed_sources WHERE id = ?")
-        .pluck()
-        .get(sourceId) !== null
-    );
-  }
+    sourceHasSuccessfulRefresh(sourceId: number): boolean {
+        return (
+            this.sqlite
+                .prepare(
+                    "SELECT last_success_at FROM feed_sources WHERE id = ?",
+                )
+                .pluck()
+                .get(sourceId) !== null
+        );
+    }
 
-  isInitialSourceRefresh(sourceId: number): boolean {
-    return (
-      this.sqlite
-        .prepare("SELECT last_success_at FROM feed_sources WHERE id = ?")
-        .pluck()
-        .get(sourceId) === null
-    );
-  }
+    isInitialSourceRefresh(sourceId: number): boolean {
+        return (
+            this.sqlite
+                .prepare(
+                    "SELECT last_success_at FROM feed_sources WHERE id = ?",
+                )
+                .pluck()
+                .get(sourceId) === null
+        );
+    }
 
-  updateFromParsedFeed(sourceId: number, parsed: ParsedFeed): void {
-    const timestamp = now();
-    this.sqlite
-      .prepare(
-        `UPDATE feeds
+    updateFromParsedFeed(sourceId: number, parsed: ParsedFeed): void {
+        const timestamp = now();
+        this.sqlite
+            .prepare(
+                `UPDATE feeds
          SET title = ?, updated_at = ?
          WHERE source_id = ?
            AND title = (SELECT feed_url FROM feed_sources WHERE id = ?)`,
-      )
-      .run(parsed.title, timestamp, sourceId, sourceId);
-    this.sqlite
-      .prepare(
-        `UPDATE feed_sources
-         SET title = ?, site_url = COALESCE(?, site_url), updated_at = ?, publisher_hints = ? WHERE id = ?`,
-      )
-      .run(
-        parsed.title,
-        parsed.siteUrl,
-        timestamp,
-        JSON.stringify({ ttl: parsed.ttl, skipHours: parsed.skipHours, skipDays: parsed.skipDays }),
-        sourceId,
-      );
-  }
+            )
+            .run(parsed.title, timestamp, sourceId, sourceId);
+        this.sqlite
+            .prepare(
+                `UPDATE feed_sources
+         SET title = ?, site_url = COALESCE(?, site_url),
+             updated_at = ?, publisher_hints = ?
+         WHERE id = ?`,
+            )
+            .run(
+                parsed.title,
+                parsed.siteUrl,
+                timestamp,
+                JSON.stringify({
+                    ttl: parsed.ttl,
+                    skipHours: parsed.skipHours,
+                    skipDays: parsed.skipDays,
+                }),
+                sourceId,
+            );
+    }
 
-  completeSuccessfulRefresh(
-    sourceId: number,
-    input: {
-      httpStatus: number;
-      etag: string | null;
-      lastModified: string | null;
-      scheduled: boolean;
-      webMatchCount?: number;
-    },
-  ): void {
-    const completedAt = now();
-    const previous = this.sqlite
-      .prepare(
-        "SELECT poll_interval_minutes AS interval, last_success_at AS success FROM feed_sources WHERE id = ?",
-      )
-      .get(sourceId) as { interval: FeedPollIntervalMinutes; success: string | null };
-    const currentInterval = previous.interval;
-    const pollIntervalMinutes = input.scheduled
-      ? sourcePollInterval(this.sqlite, sourceId, currentInterval, completedAt)
-      : currentInterval;
-    const completed = Date.parse(completedAt);
-    const polling = new FeedPollingPolicy(this.sqlite);
-    polling.finishAttempt(sourceId, completed);
-    // Align once on initialization/interval changes; subsequent checks advance along the same grid.
-    const after =
-      previous.success === null || currentInterval !== pollIntervalMinutes
-        ? completed + pollIntervalMinutes * 60_000
-        : completed;
-    const nextPollAt = new Date(
-      polling.nextPollAt(sourceId, staggeredPollAt(sourceId, pollIntervalMinutes, after)),
-    ).toISOString();
-    this.sqlite
-      .prepare(
-        `UPDATE feed_sources
+    completeSuccessfulRefresh(
+        sourceId: number,
+        input: {
+            httpStatus: number;
+            etag: string | null;
+            lastModified: string | null;
+            scheduled: boolean;
+            webMatchCount?: number;
+        },
+    ): void {
+        const completedAt = now();
+        const previous = this.sqlite
+            .prepare(
+                "SELECT poll_interval_minutes AS interval, " +
+                    "last_success_at AS success FROM feed_sources WHERE id = ?",
+            )
+            .get(sourceId) as {
+            interval: FeedPollIntervalMinutes;
+            success: string | null;
+        };
+        const currentInterval = previous.interval;
+        const pollIntervalMinutes = input.scheduled
+            ? sourcePollInterval(
+                  this.sqlite,
+                  sourceId,
+                  currentInterval,
+                  completedAt,
+              )
+            : currentInterval;
+        const completed = Date.parse(completedAt);
+        const polling = new FeedPollingPolicy(this.sqlite);
+        polling.finishAttempt(sourceId, completed);
+        // Align once on initialization/interval changes; subsequent checks
+        // advance along the same grid.
+        const after =
+            previous.success === null || currentInterval !== pollIntervalMinutes
+                ? completed + pollIntervalMinutes * 60_000
+                : completed;
+        const nextPollAt = new Date(
+            polling.nextPollAt(
+                sourceId,
+                staggeredPollAt(sourceId, pollIntervalMinutes, after),
+            ),
+        ).toISOString();
+        this.sqlite
+            .prepare(
+                `UPDATE feed_sources
          SET refreshing = 0, last_success_at = ?,
              last_http_status = ?, last_error_kind = NULL, last_error = NULL,
              etag = COALESCE(?, etag), last_modified = COALESCE(?, last_modified),
              poll_interval_minutes = ?, next_poll_at = ? WHERE id = ?`,
-      )
-      .run(
-        completedAt,
-        input.httpStatus,
-        input.etag,
-        input.lastModified,
-        pollIntervalMinutes,
-        nextPollAt,
-        sourceId,
-      );
-    if (input.webMatchCount !== undefined) {
-      this.sqlite
-        .prepare(
-          `UPDATE source_web_feed_configs
+            )
+            .run(
+                completedAt,
+                input.httpStatus,
+                input.etag,
+                input.lastModified,
+                pollIntervalMinutes,
+                nextPollAt,
+                sourceId,
+            );
+        if (input.webMatchCount !== undefined) {
+            this.sqlite
+                .prepare(
+                    `UPDATE source_web_feed_configs
            SET last_match_count = ?, updated_at = ? WHERE source_id = ?`,
-        )
-        .run(input.webMatchCount, completedAt, sourceId);
+                )
+                .run(input.webMatchCount, completedAt, sourceId);
+        }
     }
-  }
 
-  markFeedFailure(
-    sourceId: number,
-    input: {
-      httpStatus: number | null;
-      error: string;
-      errorKind: FeedErrorKind;
-      expectedSelectionRevision?: number;
-    },
-  ): void {
-    this.sqlite.transaction(() => {
-      if (
-        input.expectedSelectionRevision !== undefined &&
-        !this.selectionRevisionMatches(sourceId, input.expectedSelectionRevision)
-      )
-        return;
-      const completed = Date.now();
-      const source = this.sqlite
-        .prepare(
-          `SELECT poll_interval_minutes AS interval,
+    markFeedFailure(
+        sourceId: number,
+        input: {
+            httpStatus: number | null;
+            error: string;
+            errorKind: FeedErrorKind;
+            expectedSelectionRevision?: number;
+        },
+    ): void {
+        this.sqlite.transaction(() => {
+            if (
+                input.expectedSelectionRevision !== undefined &&
+                !this.selectionRevisionMatches(
+                    sourceId,
+                    input.expectedSelectionRevision,
+                )
+            ) {
+                return;
+            }
+            const completed = Date.now();
+            const source = this.sqlite
+                .prepare(
+                    `SELECT poll_interval_minutes AS interval,
              COALESCE(last_success_at, created_at) AS outageStartedAt
            FROM feed_sources WHERE id = ?`,
-        )
-        .get(sourceId) as { interval: FeedPollIntervalMinutes; outageStartedAt: string };
-      const polling = new FeedPollingPolicy(this.sqlite);
-      polling.finishAttempt(sourceId, completed);
-      const nextPollAt = new Date(
-        polling.nextPollAt(
-          sourceId,
-          failureRetryAt(source.interval, Date.parse(source.outageStartedAt), completed),
-        ),
-      ).toISOString();
-      this.sqlite
-        .prepare(
-          `UPDATE feed_sources
+                )
+                .get(sourceId) as {
+                interval: FeedPollIntervalMinutes;
+                outageStartedAt: string;
+            };
+            const polling = new FeedPollingPolicy(this.sqlite);
+            polling.finishAttempt(sourceId, completed);
+            const nextPollAt = new Date(
+                polling.nextPollAt(
+                    sourceId,
+                    failureRetryAt(
+                        source.interval,
+                        Date.parse(source.outageStartedAt),
+                        completed,
+                    ),
+                ),
+            ).toISOString();
+            this.sqlite
+                .prepare(
+                    `UPDATE feed_sources
            SET refreshing = 0, last_http_status = ?, last_error_kind = ?,
                last_error = ?, next_poll_at = ? WHERE id = ?`,
-        )
-        .run(input.httpStatus, input.errorKind, input.error, nextPollAt, sourceId);
-      if (input.errorKind === "selection_broken") {
-        this.sqlite
-          .prepare(
-            `UPDATE source_web_feed_configs
+                )
+                .run(
+                    input.httpStatus,
+                    input.errorKind,
+                    input.error,
+                    nextPollAt,
+                    sourceId,
+                );
+            if (input.errorKind === "selection_broken") {
+                this.sqlite
+                    .prepare(
+                        `UPDATE source_web_feed_configs
              SET last_match_count = 0, updated_at = ? WHERE source_id = ?`,
-          )
-          .run(now(), sourceId);
-      }
-    })();
-  }
+                    )
+                    .run(now(), sourceId);
+            }
+        })();
+    }
 
-  listOpmlFeeds(userId: number): Array<{
-    title: string;
-    feedUrl: string;
-    siteUrl: string | null;
-    folderId: number | null;
-  }> {
-    return this.sqlite
-      .prepare(
-        `SELECT feeds.title, feed_sources.feed_url AS feedUrl,
+    listOpmlFeeds(userId: number): Array<{
+        title: string;
+        feedUrl: string;
+        siteUrl: string | null;
+        folderId: number | null;
+    }> {
+        return this.sqlite
+            .prepare(
+                `SELECT feeds.title, feed_sources.feed_url AS feedUrl,
                 feed_sources.site_url AS siteUrl, feeds.folder_id AS folderId
          FROM feeds JOIN feed_sources ON feed_sources.id = feeds.source_id
          WHERE feeds.user_id = ? AND feed_sources.source_kind = 'published'
          ORDER BY feeds.title COLLATE NOCASE`,
-      )
-      .all(userId) as Array<{
-      title: string;
-      feedUrl: string;
-      siteUrl: string | null;
-      folderId: number | null;
-    }>;
-  }
+            )
+            .all(userId) as Array<{
+            title: string;
+            feedUrl: string;
+            siteUrl: string | null;
+            folderId: number | null;
+        }>;
+    }
 }

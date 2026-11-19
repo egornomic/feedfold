@@ -1,34 +1,43 @@
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import {
-  type AuthenticationResponseJSON,
-  type AuthenticatorTransportFuture,
-  generateAuthenticationOptions,
-  generateRegistrationOptions,
-  type RegistrationResponseJSON,
-  verifyAuthenticationResponse,
-  verifyRegistrationResponse,
+    createHash,
+    createHmac,
+    randomBytes,
+    scryptSync,
+    timingSafeEqual,
+} from "node:crypto";
+import {
+    type AuthenticationResponseJSON,
+    type AuthenticatorTransportFuture,
+    generateAuthenticationOptions,
+    generateRegistrationOptions,
+    type RegistrationResponseJSON,
+    verifyAuthenticationResponse,
+    verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import argon2 from "argon2";
 import type { PasskeySummary } from "../../../shared/api/operations.js";
 import {
-  INVITE_CODE_ALPHABET,
-  INVITE_CODE_LENGTH,
-  normalizeInviteCode,
+    INVITE_CODE_ALPHABET,
+    INVITE_CODE_LENGTH,
+    normalizeInviteCode,
 } from "../../../shared/auth.js";
 import {
-  type InvitationOverview,
-  normalizeFeedPollInterval,
-  type RegistrationMode,
-  type SessionUser,
+    type InvitationOverview,
+    normalizeFeedPollInterval,
+    type RegistrationMode,
+    type SessionUser,
 } from "../../../shared/types.js";
-import { accountActivityCutoff, accountActivityTouchBefore } from "../../account-activity.js";
+import {
+    accountActivityCutoff,
+    accountActivityTouchBefore,
+} from "../../account-activity.js";
 import { ApplicationApiError, OperationForbiddenError } from "../../errors.js";
 import type {
-  AuthRepository,
-  StoredAuthChallenge,
-  StoredPasskey,
-  StoredSession,
-  StoredUser,
+    AuthRepository,
+    StoredAuthChallenge,
+    StoredPasskey,
+    StoredSession,
+    StoredUser,
 } from "./repository.js";
 
 const SESSION_COOKIE = "feedfold_session";
@@ -36,744 +45,977 @@ const SESSION_SECONDS = 60 * 60 * 24 * 30;
 const CHALLENGE_SECONDS = 60 * 5;
 const PENDING_REGISTRATION_SECONDS = 60 * 5;
 const ARGON2_OPTIONS = {
-  type: argon2.argon2id,
-  memoryCost: 19_456,
-  timeCost: 2,
-  parallelism: 1,
+    type: argon2.argon2id,
+    memoryCost: 19_456,
+    timeCost: 2,
+    parallelism: 1,
 } as const;
 
 export interface LoginSession {
-  token: string;
-  user: AuthenticatedUser;
+    token: string;
+    user: AuthenticatedUser;
 }
 
 export interface AuthenticatedUser {
-  id: number;
-  publicId: string;
-  username: string;
-  hasPassword: boolean;
+    id: number;
+    publicId: string;
+    username: string;
+    hasPassword: boolean;
 }
 
 export interface WebAuthnContext {
-  origin: string;
-  rpId: string;
+    origin: string;
+    rpId: string;
 }
 
 export interface AuthRateLimitOptions {
-  registrationPerIp: { attempts: number; windowMs: number };
-  registrationGlobal: { attempts: number; windowMs: number };
-  loginPerIp: { attempts: number; windowMs: number };
-  loginPerAccount: { attempts: number; windowMs: number };
-  stepUp: { attempts: number; windowMs: number };
+    registrationPerIp: { attempts: number; windowMs: number };
+    registrationGlobal: { attempts: number; windowMs: number };
+    loginPerIp: { attempts: number; windowMs: number };
+    loginPerAccount: { attempts: number; windowMs: number };
+    stepUp: { attempts: number; windowMs: number };
 }
 
 export interface AuthOptions {
-  registrationMode?: RegistrationMode;
-  maxAccounts?: number;
-  recentAuthenticationSeconds?: number;
-  rateLimits?: Partial<AuthRateLimitOptions>;
+    registrationMode?: RegistrationMode;
+    maxAccounts?: number;
+    recentAuthenticationSeconds?: number;
+    rateLimits?: Partial<AuthRateLimitOptions>;
 }
 
 const DEFAULT_RATE_LIMITS: AuthRateLimitOptions = {
-  registrationPerIp: { attempts: 10, windowMs: 60 * 60_000 },
-  registrationGlobal: { attempts: 100, windowMs: 60 * 60_000 },
-  loginPerIp: { attempts: 50, windowMs: 15 * 60_000 },
-  loginPerAccount: { attempts: 10, windowMs: 15 * 60_000 },
-  stepUp: { attempts: 10, windowMs: 15 * 60_000 },
+    registrationPerIp: { attempts: 10, windowMs: 60 * 60_000 },
+    registrationGlobal: { attempts: 100, windowMs: 60 * 60_000 },
+    loginPerIp: { attempts: 50, windowMs: 15 * 60_000 },
+    loginPerAccount: { attempts: 10, windowMs: 15 * 60_000 },
+    stepUp: { attempts: 10, windowMs: 15 * 60_000 },
 };
 
 async function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password, ARGON2_OPTIONS);
+    return argon2.hash(password, ARGON2_OPTIONS);
 }
 
-function verifyLegacyPassword(password: string, stored: string): boolean {
-  const [algorithm, saltValue, digestValue] = stored.split("$");
-  if (algorithm !== "scrypt" || !saltValue || !digestValue) return false;
-  const expected = Buffer.from(digestValue, "base64url");
-  const actual = scryptSync(password, Buffer.from(saltValue, "base64url"), expected.length);
-  return timingSafeEqual(actual, expected);
-}
-
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  if (stored.startsWith("$argon2id$")) {
-    try {
-      return await argon2.verify(stored, password);
-    } catch {
-      return false;
+async function verifyPassword(
+    password: string,
+    stored: string,
+): Promise<boolean> {
+    if (stored.startsWith("$argon2id$")) {
+        try {
+            return await argon2.verify(stored, password);
+        } catch {
+            return false;
+        }
     }
-  }
-  return verifyLegacyPassword(password, stored);
+    const [algorithm, saltValue, digestValue] = stored.split("$");
+    if (algorithm !== "scrypt" || !saltValue || !digestValue) {
+        return false;
+    }
+    const expected = Buffer.from(digestValue, "base64url");
+    const actual = scryptSync(
+        password,
+        Buffer.from(saltValue, "base64url"),
+        expected.length,
+    );
+    return timingSafeEqual(actual, expected);
 }
 
 function tokenHash(token: string): string {
-  return createHash("sha256").update(token).digest("base64url");
+    return createHash("sha256").update(token).digest("base64url");
 }
 
 function now(): string {
-  return new Date().toISOString();
+    return new Date().toISOString();
 }
 
 function lastSignInMethodError(): ApplicationApiError {
-  return new ApplicationApiError(
-    409,
-    "Add another passkey or a password first. This is the only way to sign in to your account.",
-    "LAST_SIGN_IN_METHOD",
-  );
+    return new ApplicationApiError(
+        409,
+        "Add another passkey or a password first. This is the only way to sign in to your account.",
+        "LAST_SIGN_IN_METHOD",
+    );
 }
 
 function passkeySummary(passkey: StoredPasskey): PasskeySummary {
-  return {
-    id: passkey.id,
-    name: passkey.name,
-    createdAt: passkey.createdAt,
-    lastUsedAt: passkey.lastUsedAt,
-    deviceType: passkey.deviceType,
-    backedUp: passkey.backedUp,
-  };
+    return {
+        id: passkey.id,
+        name: passkey.name,
+        createdAt: passkey.createdAt,
+        lastUsedAt: passkey.lastUsedAt,
+        deviceType: passkey.deviceType,
+        backedUp: passkey.backedUp,
+    };
 }
 
 function authenticatedUser(user: StoredUser): AuthenticatedUser {
-  return {
-    id: user.id,
-    publicId: user.publicId,
-    username: user.username,
-    hasPassword: user.hasPassword,
-  };
+    return {
+        id: user.id,
+        publicId: user.publicId,
+        username: user.username,
+        hasPassword: user.hasPassword,
+    };
 }
 
 export function sessionToken(cookieHeader: string | undefined): string | null {
-  if (!cookieHeader) return null;
-  for (const part of cookieHeader.split(";")) {
-    const [name, ...value] = part.trim().split("=");
-    if (name === SESSION_COOKIE) return value.join("=") || null;
-  }
-  return null;
+    if (!cookieHeader) {
+        return null;
+    }
+    for (const part of cookieHeader.split(";")) {
+        const [name, ...value] = part.trim().split("=");
+        if (name === SESSION_COOKIE) {
+            return value.join("=") || null;
+        }
+    }
+    return null;
 }
 
 export class AuthService {
-  private readonly maxAccounts: number;
-  readonly registrationMode: RegistrationMode;
-  private readonly recentAuthenticationSeconds: number;
-  private readonly rateLimits: AuthRateLimitOptions;
-  private readonly authHashSecret: Buffer;
-  private readonly dummyPasswordHash: Promise<string>;
+    private readonly maxAccounts: number;
+    readonly registrationMode: RegistrationMode;
+    private readonly recentAuthenticationSeconds: number;
+    private readonly rateLimits: AuthRateLimitOptions;
+    private readonly authHashSecret: Buffer;
+    private readonly dummyPasswordHash: Promise<string>;
 
-  constructor(
-    private readonly repository: AuthRepository,
-    private readonly defaultPollIntervalMinutes = 30,
-    options: AuthOptions = {},
-  ) {
-    this.maxAccounts = options.maxAccounts ?? 1;
-    this.registrationMode = options.registrationMode ?? "open";
-    this.recentAuthenticationSeconds = options.recentAuthenticationSeconds ?? 5 * 60;
-    this.rateLimits = { ...DEFAULT_RATE_LIMITS, ...options.rateLimits };
-    this.authHashSecret = this.repository.authHashSecret();
-    const current = now();
-    this.repository.deleteExpiredSessions(current, accountActivityCutoff(current));
-    this.dummyPasswordHash = hashPassword(randomBytes(32).toString("base64url"));
-  }
-
-  publicUser(user: AuthenticatedUser | StoredUser): SessionUser {
-    return { id: user.publicId, username: user.username, hasPassword: user.hasPassword };
-  }
-
-  registrationAvailable(): boolean {
-    return (
-      this.registrationMode !== "closed" && this.repository.registrationAvailable(this.maxAccounts)
-    );
-  }
-
-  private inviteHash(code?: string): string | null {
-    const normalized = normalizeInviteCode(code);
-    return normalized ? this.keyedHash("invitation", normalized) : null;
-  }
-
-  private assertRegistrationAllowed(inviteHash: string | null): void {
-    if (this.registrationMode === "closed")
-      throw new OperationForbiddenError("Account creation is closed on this server.");
-    if (
-      this.registrationMode === "invite" &&
-      !this.repository.invitationAvailable(inviteHash, now())
+    constructor(
+        private readonly repository: AuthRepository,
+        private readonly defaultPollIntervalMinutes = 30,
+        options: AuthOptions = {},
     ) {
-      this.inviteUnavailable();
-    }
-  }
-
-  private inviteUnavailable(): never {
-    throw new OperationForbiddenError(
-      "This invite is invalid or no longer available. Ask for a new invite.",
-    );
-  }
-
-  invitations(userId: number): InvitationOverview {
-    const access = this.repository.invitationAllowance(userId);
-    if (!access) throw new OperationForbiddenError("Sign in to continue.");
-    return {
-      enabled: this.registrationMode === "invite",
-      allowance: access.allowance,
-      invitations:
-        this.registrationMode === "invite" ? this.repository.invitations(access.publicId) : [],
-    };
-  }
-
-  createInvitation(userId: number, replaceId?: string) {
-    if (this.registrationMode !== "invite")
-      throw new OperationForbiddenError("Invites are not enabled on this server.");
-    while (true) {
-      const code = [...randomBytes(INVITE_CODE_LENGTH)]
-        .map((byte) => INVITE_CODE_ALPHABET[byte & 31])
-        .join("");
-      const id = randomBytes(16).toString("hex");
-      const result = this.repository.createInvitation(
-        userId,
-        id,
-        this.inviteHash(code) as string,
-        replaceId,
-      );
-      if (result.status === "created") return { id, number: result.number, code };
-      if (result.status === "code-conflict") continue;
-      if (result.status === "allowance-used")
-        throw new OperationForbiddenError("You have already used your invite.");
-      if (result.status === "active-invite")
-        throw new OperationForbiddenError(
-          "Replace or revoke your unused invite before creating another.",
+        this.maxAccounts = options.maxAccounts ?? 1;
+        this.registrationMode = options.registrationMode ?? "open";
+        this.recentAuthenticationSeconds =
+            options.recentAuthenticationSeconds ?? 5 * 60;
+        this.rateLimits = { ...DEFAULT_RATE_LIMITS, ...options.rateLimits };
+        this.authHashSecret = this.repository.authHashSecret();
+        const current = now();
+        this.repository.deleteExpiredSessions(
+            current,
+            accountActivityCutoff(current),
         );
-      if (result.status === "replacement-unavailable")
-        throw new OperationForbiddenError("This invite cannot be replaced. Reload your invites.");
-      throw new OperationForbiddenError("Sign in to continue.");
+        this.dummyPasswordHash = hashPassword(
+            randomBytes(32).toString("base64url"),
+        );
     }
-  }
 
-  revokeInvitation(userId: number, id: string): void {
-    if (this.registrationMode !== "invite")
-      throw new OperationForbiddenError("Invites are not enabled on this server.");
-    if (!this.repository.revokeInvitation(userId, id))
-      throw new OperationForbiddenError("This invite cannot be revoked. Reload your invites.");
-  }
+    publicUser(user: AuthenticatedUser | StoredUser): SessionUser {
+        return {
+            id: user.publicId,
+            username: user.username,
+            hasPassword: user.hasPassword,
+        };
+    }
 
-  private keyedHash(namespace: string, value: string): string {
-    return createHmac("sha256", this.authHashSecret)
-      .update(`${namespace}\0${value}`)
-      .digest("base64url");
-  }
+    registrationAvailable(): boolean {
+        return (
+            this.registrationMode !== "closed" &&
+            this.repository.registrationAvailable(this.maxAccounts)
+        );
+    }
 
-  private consumeLimit(
-    namespace: string,
-    value: string,
-    setting: { attempts: number; windowMs: number },
-  ): number | null {
-    return this.repository.consumeRateLimit(
-      this.keyedHash(namespace, value),
-      setting.attempts,
-      setting.windowMs,
-      Date.now(),
-    );
-  }
+    private inviteHash(code?: string): string | null {
+        const normalized = normalizeInviteCode(code);
+        return normalized ? this.keyedHash("invitation", normalized) : null;
+    }
 
-  consumeRegistrationAttempt(ip: string): number | null {
-    const ipRetry = this.consumeLimit("registration-ip", ip, this.rateLimits.registrationPerIp);
-    if (ipRetry !== null) return ipRetry;
-    return this.consumeLimit(
-      "registration-global",
-      "deployment",
-      this.rateLimits.registrationGlobal,
-    );
-  }
+    private assertRegistrationAllowed(inviteHash: string | null): void {
+        if (this.registrationMode === "closed") {
+            throw new OperationForbiddenError(
+                "Account creation is closed on this server.",
+            );
+        }
+        if (
+            this.registrationMode === "invite" &&
+            !this.repository.invitationAvailable(inviteHash, now())
+        ) {
+            this.inviteUnavailable();
+        }
+    }
 
-  consumeLoginAttempt(ip: string, username: string): number | null {
-    const ipRetry = this.consumeLimit("login-ip", ip, this.rateLimits.loginPerIp);
-    if (ipRetry !== null) return ipRetry;
-    return this.consumeLimit(
-      "login-account",
-      username.trim().toLocaleLowerCase("en-US"),
-      this.rateLimits.loginPerAccount,
-    );
-  }
+    private inviteUnavailable(): never {
+        throw new OperationForbiddenError(
+            "This invite is invalid or no longer available. Ask for a new invite.",
+        );
+    }
 
-  loginSucceeded(ip: string, username: string): void {
-    this.repository.reduceRateLimit(this.keyedHash("login-ip", ip));
-    this.repository.clearRateLimit(
-      this.keyedHash("login-account", username.trim().toLocaleLowerCase("en-US")),
-    );
-  }
+    invitations(userId: number): InvitationOverview {
+        const access = this.repository.invitationAllowance(userId);
+        if (!access) {
+            throw new OperationForbiddenError("Sign in to continue.");
+        }
+        return {
+            enabled: this.registrationMode === "invite",
+            allowance: access.allowance,
+            invitations:
+                this.registrationMode === "invite"
+                    ? this.repository.invitations(access.publicId)
+                    : [],
+        };
+    }
 
-  consumePasskeyLoginAttempt(ip: string, credentialId?: string): number | null {
-    const ipRetry = this.consumeLimit("login-ip", ip, this.rateLimits.loginPerIp);
-    if (ipRetry !== null) return ipRetry;
-    return credentialId ? this.consumePasskeyAccountAttempt(credentialId) : null;
-  }
+    createInvitation(userId: number, replaceId?: string) {
+        if (this.registrationMode !== "invite") {
+            throw new OperationForbiddenError(
+                "Invites are not enabled on this server.",
+            );
+        }
+        while (true) {
+            const code = [...randomBytes(INVITE_CODE_LENGTH)]
+                .map((byte) => INVITE_CODE_ALPHABET[byte & 31])
+                .join("");
+            const id = randomBytes(16).toString("hex");
+            const result = this.repository.createInvitation(
+                userId,
+                id,
+                this.inviteHash(code) as string,
+                replaceId,
+            );
+            if (result.status === "created") {
+                return { id, number: result.number, code };
+            }
+            if (result.status === "code-conflict") {
+                continue;
+            }
+            if (result.status === "allowance-used") {
+                throw new OperationForbiddenError(
+                    "You have already used your invite.",
+                );
+            }
+            if (result.status === "active-invite") {
+                throw new OperationForbiddenError(
+                    "Replace or revoke your unused invite before creating another.",
+                );
+            }
+            if (result.status === "replacement-unavailable") {
+                throw new OperationForbiddenError(
+                    "This invite cannot be replaced. Reload your invites.",
+                );
+            }
+            throw new OperationForbiddenError("Sign in to continue.");
+        }
+    }
 
-  consumePasskeyAccountAttempt(credentialId: string): number | null {
-    const passkey = this.repository.passkeyById(credentialId);
-    return passkey
-      ? this.consumeLimit(
-          "login-account",
-          passkey.username.toLocaleLowerCase("en-US"),
-          this.rateLimits.loginPerAccount,
-        )
-      : null;
-  }
+    revokeInvitation(userId: number, id: string): void {
+        if (this.registrationMode !== "invite") {
+            throw new OperationForbiddenError(
+                "Invites are not enabled on this server.",
+            );
+        }
+        if (!this.repository.revokeInvitation(userId, id)) {
+            throw new OperationForbiddenError(
+                "This invite cannot be revoked. Reload your invites.",
+            );
+        }
+    }
 
-  passkeyLoginSucceeded(ip: string, username: string): void {
-    this.loginSucceeded(ip, username);
-  }
+    private keyedHash(namespace: string, value: string): string {
+        return createHmac("sha256", this.authHashSecret)
+            .update(`${namespace}\0${value}`)
+            .digest("base64url");
+    }
 
-  consumeStepUpAttempt(sessionHash: string): number | null {
-    return this.consumeLimit("step-up-session", sessionHash, this.rateLimits.stepUp);
-  }
+    private consumeLimit(
+        namespace: string,
+        value: string,
+        setting: { attempts: number; windowMs: number },
+    ): number | null {
+        return this.repository.consumeRateLimit(
+            this.keyedHash(namespace, value),
+            setting.attempts,
+            setting.windowMs,
+            Date.now(),
+        );
+    }
 
-  stepUpSucceeded(sessionHash: string): void {
-    this.repository.clearRateLimit(this.keyedHash("step-up-session", sessionHash));
-  }
+    consumeRegistrationAttempt(ip: string): number | null {
+        const ipRetry = this.consumeLimit(
+            "registration-ip",
+            ip,
+            this.rateLimits.registrationPerIp,
+        );
+        if (ipRetry !== null) {
+            return ipRetry;
+        }
+        return this.consumeLimit(
+            "registration-global",
+            "deployment",
+            this.rateLimits.registrationGlobal,
+        );
+    }
 
-  registrationQuotaReached(): boolean {
-    return this.repository.registrationQuotaReached();
-  }
+    consumeLoginAttempt(ip: string, username: string): number | null {
+        const ipRetry = this.consumeLimit(
+            "login-ip",
+            ip,
+            this.rateLimits.loginPerIp,
+        );
+        if (ipRetry !== null) {
+            return ipRetry;
+        }
+        return this.consumeLimit(
+            "login-account",
+            username.trim().toLocaleLowerCase("en-US"),
+            this.rateLimits.loginPerAccount,
+        );
+    }
 
-  async register(
-    username: string,
-    password: string,
-    inviteCode?: string,
-  ): Promise<LoginSession | null> {
-    const inviteHash = this.inviteHash(inviteCode);
-    this.assertRegistrationAllowed(inviteHash);
-    const token = randomBytes(32).toString("base64url");
-    const storedSession = this.storedSession(token);
-    const result = this.repository.registerUserWithSession(
-      username.trim(),
-      await hashPassword(password),
-      randomBytes(16).toString("hex"),
-      randomBytes(32),
-      normalizeFeedPollInterval(this.defaultPollIntervalMinutes),
-      storedSession,
-      this.maxAccounts,
-      this.registrationMode === "invite" ? inviteHash : null,
-    );
-    if (result.status === "invite-unavailable") return this.inviteUnavailable();
-    return result.status === "created" ? { token, user: authenticatedUser(result.user) } : null;
-  }
+    loginSucceeded(ip: string, username: string): void {
+        this.repository.reduceRateLimit(this.keyedHash("login-ip", ip));
+        this.repository.clearRateLimit(
+            this.keyedHash(
+                "login-account",
+                username.trim().toLocaleLowerCase("en-US"),
+            ),
+        );
+    }
 
-  async passkeySignupOptions(username: string, context: WebAuthnContext, inviteCode?: string) {
-    const inviteHash = this.inviteHash(inviteCode);
-    this.assertRegistrationAllowed(inviteHash);
-    const trimmedUsername = username.trim();
-    if (!this.registrationAvailable()) return null;
-    const userHandle = randomBytes(32);
-    const options = await generateRegistrationOptions({
-      rpName: "feedfold",
-      rpID: context.rpId,
-      userID: new Uint8Array(userHandle),
-      userName: trimmedUsername,
-      userDisplayName: trimmedUsername,
-      attestationType: "none",
-      authenticatorSelection: { residentKey: "required", userVerification: "required" },
-    });
-    const registrationId = randomBytes(32).toString("base64url");
-    const stored = this.repository.storePendingRegistration(
-      {
-        idHash: tokenHash(registrationId),
-        inviteHash: this.registrationMode === "invite" ? inviteHash : null,
-        username: trimmedUsername,
-        webauthnUserId: userHandle,
-        challenge: options.challenge,
-        origin: context.origin,
-        rpId: context.rpId,
-        expiresAt: new Date(Date.now() + PENDING_REGISTRATION_SECONDS * 1_000).toISOString(),
-      },
-      this.maxAccounts,
-    );
-    if (stored === "invite-unavailable") return this.inviteUnavailable();
-    return stored === "stored" ? { registrationId, options } : null;
-  }
+    consumePasskeyLoginAttempt(
+        ip: string,
+        credentialId?: string,
+    ): number | null {
+        const ipRetry = this.consumeLimit(
+            "login-ip",
+            ip,
+            this.rateLimits.loginPerIp,
+        );
+        if (ipRetry !== null) {
+            return ipRetry;
+        }
+        return credentialId
+            ? this.consumePasskeyAccountAttempt(credentialId)
+            : null;
+    }
 
-  async completePasskeySignup(
-    registrationId: string,
-    response: RegistrationResponseJSON,
-  ): Promise<LoginSession | null> {
-    const idHash = tokenHash(registrationId);
-    const pending = this.repository.pendingRegistration(idHash, now());
-    if (!pending) return null;
-    const inviteHash = this.registrationMode === "invite" ? pending.inviteHash : null;
-    this.assertRegistrationAllowed(inviteHash);
-    const verification = await verifyRegistrationResponse({
-      response,
-      expectedChallenge: pending.challenge,
-      expectedOrigin: pending.origin,
-      expectedRPID: pending.rpId,
-      requireUserVerification: true,
-    });
-    if (!verification.verified || !verification.registrationInfo) return null;
-    const { credential, credentialBackedUp, credentialDeviceType } = verification.registrationInfo;
-    const createdAt = now();
-    const token = randomBytes(32).toString("base64url");
-    const session = this.storedSession(token);
-    const result = this.repository.completePendingRegistration(
-      idHash,
-      await this.dummyPasswordHash,
-      randomBytes(16).toString("hex"),
-      {
-        id: credential.id,
-        name: credentialBackedUp ? "Synced passkey" : "Device passkey",
-        publicKey: Buffer.from(credential.publicKey),
-        counter: credential.counter,
-        deviceType: credentialDeviceType,
-        backedUp: credentialBackedUp,
-        transports: credential.transports ?? [],
-        createdAt,
-        lastUsedAt: null,
-      },
-      normalizeFeedPollInterval(this.defaultPollIntervalMinutes),
-      session,
-      this.maxAccounts,
-      inviteHash,
-      createdAt,
-    );
-    if (result.status === "invite-unavailable") return this.inviteUnavailable();
-    return result.status === "created" ? { token, user: authenticatedUser(result.user) } : null;
-  }
+    consumePasskeyAccountAttempt(credentialId: string): number | null {
+        const passkey = this.repository.passkeyById(credentialId);
+        return passkey
+            ? this.consumeLimit(
+                  "login-account",
+                  passkey.username.toLocaleLowerCase("en-US"),
+                  this.rateLimits.loginPerAccount,
+              )
+            : null;
+    }
 
-  async login(username: string, password: string): Promise<LoginSession | null> {
-    const row = this.repository.findEnabledUser(username.trim());
-    const storedHash = row?.hasPassword ? row.passwordHash : await this.dummyPasswordHash;
-    if (!(await verifyPassword(password, storedHash)) || !row?.hasPassword) return null;
-    if (
-      !row.passwordHash.startsWith("$argon2id$") ||
-      argon2.needsRehash(row.passwordHash, ARGON2_OPTIONS)
+    passkeyLoginSucceeded(ip: string, username: string): void {
+        this.loginSucceeded(ip, username);
+    }
+
+    consumeStepUpAttempt(sessionHash: string): number | null {
+        return this.consumeLimit(
+            "step-up-session",
+            sessionHash,
+            this.rateLimits.stepUp,
+        );
+    }
+
+    stepUpSucceeded(sessionHash: string): void {
+        this.repository.clearRateLimit(
+            this.keyedHash("step-up-session", sessionHash),
+        );
+    }
+
+    registrationQuotaReached(): boolean {
+        return this.repository.registrationQuotaReached();
+    }
+
+    async register(
+        username: string,
+        password: string,
+        inviteCode?: string,
+    ): Promise<LoginSession | null> {
+        const inviteHash = this.inviteHash(inviteCode);
+        this.assertRegistrationAllowed(inviteHash);
+        const token = randomBytes(32).toString("base64url");
+        const storedSession = this.storedSession(token);
+        const result = this.repository.registerUserWithSession(
+            username.trim(),
+            await hashPassword(password),
+            randomBytes(16).toString("hex"),
+            randomBytes(32),
+            normalizeFeedPollInterval(this.defaultPollIntervalMinutes),
+            storedSession,
+            this.maxAccounts,
+            this.registrationMode === "invite" ? inviteHash : null,
+        );
+        if (result.status === "invite-unavailable") {
+            return this.inviteUnavailable();
+        }
+        return result.status === "created"
+            ? { token, user: authenticatedUser(result.user) }
+            : null;
+    }
+
+    async passkeySignupOptions(
+        username: string,
+        context: WebAuthnContext,
+        inviteCode?: string,
     ) {
-      this.repository.upgradePasswordHash(row.id, await hashPassword(password), now());
+        const inviteHash = this.inviteHash(inviteCode);
+        this.assertRegistrationAllowed(inviteHash);
+        const trimmedUsername = username.trim();
+        if (!this.registrationAvailable()) {
+            return null;
+        }
+        const userHandle = randomBytes(32);
+        const options = await generateRegistrationOptions({
+            rpName: "feedfold",
+            rpID: context.rpId,
+            userID: new Uint8Array(userHandle),
+            userName: trimmedUsername,
+            userDisplayName: trimmedUsername,
+            attestationType: "none",
+            authenticatorSelection: {
+                residentKey: "required",
+                userVerification: "required",
+            },
+        });
+        const registrationId = randomBytes(32).toString("base64url");
+        const stored = this.repository.storePendingRegistration(
+            {
+                idHash: tokenHash(registrationId),
+                inviteHash:
+                    this.registrationMode === "invite" ? inviteHash : null,
+                username: trimmedUsername,
+                webauthnUserId: userHandle,
+                challenge: options.challenge,
+                origin: context.origin,
+                rpId: context.rpId,
+                expiresAt: new Date(
+                    Date.now() + PENDING_REGISTRATION_SECONDS * 1_000,
+                ).toISOString(),
+            },
+            this.maxAccounts,
+        );
+        if (stored === "invite-unavailable") {
+            return this.inviteUnavailable();
+        }
+        return stored === "stored" ? { registrationId, options } : null;
     }
-    return this.createSession(row);
-  }
 
-  private createSession(user: StoredUser): LoginSession {
-    const token = randomBytes(32).toString("base64url");
-    this.repository.insertSession(user.id, this.storedSession(token));
-    return { token, user: authenticatedUser(user) };
-  }
+    async completePasskeySignup(
+        registrationId: string,
+        response: RegistrationResponseJSON,
+    ): Promise<LoginSession | null> {
+        const idHash = tokenHash(registrationId);
+        const pending = this.repository.pendingRegistration(idHash, now());
+        if (!pending) {
+            return null;
+        }
+        const inviteHash =
+            this.registrationMode === "invite" ? pending.inviteHash : null;
+        this.assertRegistrationAllowed(inviteHash);
+        const verification = await verifyRegistrationResponse({
+            response,
+            expectedChallenge: pending.challenge,
+            expectedOrigin: pending.origin,
+            expectedRPID: pending.rpId,
+            requireUserVerification: true,
+        });
+        if (!verification.verified || !verification.registrationInfo) {
+            return null;
+        }
+        const { credential, credentialBackedUp, credentialDeviceType } =
+            verification.registrationInfo;
+        const createdAt = now();
+        const token = randomBytes(32).toString("base64url");
+        const session = this.storedSession(token);
+        const result = this.repository.completePendingRegistration(
+            idHash,
+            await this.dummyPasswordHash,
+            randomBytes(16).toString("hex"),
+            {
+                id: credential.id,
+                name: credentialBackedUp ? "Synced passkey" : "Device passkey",
+                publicKey: Buffer.from(credential.publicKey),
+                counter: credential.counter,
+                deviceType: credentialDeviceType,
+                backedUp: credentialBackedUp,
+                transports: credential.transports ?? [],
+                createdAt,
+                lastUsedAt: null,
+            },
+            normalizeFeedPollInterval(this.defaultPollIntervalMinutes),
+            session,
+            this.maxAccounts,
+            inviteHash,
+            createdAt,
+        );
+        if (result.status === "invite-unavailable") {
+            return this.inviteUnavailable();
+        }
+        return result.status === "created"
+            ? { token, user: authenticatedUser(result.user) }
+            : null;
+    }
 
-  private storedSession(token: string): StoredSession {
-    const createdAt = now();
-    return {
-      tokenHash: tokenHash(token),
-      createdAt,
-      lastSeenAt: createdAt,
-      expiresAt: new Date(Date.now() + SESSION_SECONDS * 1_000).toISOString(),
-      recentAuthAt: createdAt,
-    };
-  }
+    async login(
+        username: string,
+        password: string,
+    ): Promise<LoginSession | null> {
+        const row = this.repository.findEnabledUser(username.trim());
+        const storedHash = row?.hasPassword
+            ? row.passwordHash
+            : await this.dummyPasswordHash;
+        if (
+            !(await verifyPassword(password, storedHash)) ||
+            !row?.hasPassword
+        ) {
+            return null;
+        }
+        if (
+            !row.passwordHash.startsWith("$argon2id$") ||
+            argon2.needsRehash(row.passwordHash, ARGON2_OPTIONS)
+        ) {
+            this.repository.upgradePasswordHash(
+                row.id,
+                await hashPassword(password),
+                now(),
+            );
+        }
+        return this.createSession(row);
+    }
 
-  sessionForToken(token: string | null) {
-    if (!token) return null;
-    const current = now();
-    return this.repository.sessionForTokenHash(
-      tokenHash(token),
-      current,
-      accountActivityCutoff(current),
-      accountActivityTouchBefore(current),
-    );
-  }
+    private createSession(user: StoredUser): LoginSession {
+        const token = randomBytes(32).toString("base64url");
+        this.repository.insertSession(user.id, this.storedSession(token));
+        return { token, user: authenticatedUser(user) };
+    }
 
-  userForToken(token: string | null): AuthenticatedUser | null {
-    const user = this.sessionForToken(token)?.user;
-    return user ? authenticatedUser(user) : null;
-  }
+    private storedSession(token: string): StoredSession {
+        const createdAt = now();
+        return {
+            tokenHash: tokenHash(token),
+            createdAt,
+            lastSeenAt: createdAt,
+            expiresAt: new Date(
+                Date.now() + SESSION_SECONDS * 1_000,
+            ).toISOString(),
+            recentAuthAt: createdAt,
+        };
+    }
 
-  endSession(token: string | null): void {
-    if (token) this.repository.deleteSession(tokenHash(token));
-  }
+    sessionForToken(token: string | null) {
+        if (!token) {
+            return null;
+        }
+        const current = now();
+        return this.repository.sessionForTokenHash(
+            tokenHash(token),
+            current,
+            accountActivityCutoff(current),
+            accountActivityTouchBefore(current),
+        );
+    }
 
-  beginSensitiveOperation(
-    token: string | null,
-  ): { required: false } | { required: true; operationId: string } | null {
-    const session = this.sessionForToken(token);
-    if (!session) return null;
-    const recentCutoff = Date.now() - this.recentAuthenticationSeconds * 1_000;
-    if (session.recentAuthAt && new Date(session.recentAuthAt).getTime() >= recentCutoff)
-      return { required: false };
-    const operationId = randomBytes(32).toString("base64url");
-    const startedAt = now();
-    this.repository.storeAuthOperation({
-      idHash: tokenHash(operationId),
-      sessionHash: session.tokenHash,
-      userId: session.user.id,
-      startedAt,
-      passwordEnrolledAt: session.user.hasPassword ? session.user.passwordEnrolledAt : null,
-      passkeyIds: this.repository.passkeysForUser(session.user.id).map(({ id }) => id),
-      expiresAt: new Date(Date.now() + CHALLENGE_SECONDS * 1_000).toISOString(),
-    });
-    return { required: true, operationId };
-  }
+    userForToken(token: string | null): AuthenticatedUser | null {
+        const user = this.sessionForToken(token)?.user;
+        return user ? authenticatedUser(user) : null;
+    }
 
-  async stepUpWithPassword(token: string, operationId: string, password: string): Promise<boolean> {
-    const session = this.sessionForToken(token);
-    if (!session) return false;
-    const operation = this.repository.authOperation(
-      tokenHash(operationId),
-      session.tokenHash,
-      now(),
-    );
-    if (
-      !operation ||
-      !session.user.hasPassword ||
-      !session.user.passwordEnrolledAt ||
-      session.user.passwordEnrolledAt !== operation.passwordEnrolledAt ||
-      !(await verifyPassword(password, session.user.passwordHash))
-    )
-      return false;
-    return this.repository.markSessionRecentlyAuthenticated(session.tokenHash, now());
-  }
+    endSession(token: string | null): void {
+        if (token) {
+            this.repository.deleteSession(tokenHash(token));
+        }
+    }
 
-  async stepUpPasskeyOptions(token: string, operationId: string, context: WebAuthnContext) {
-    const session = this.sessionForToken(token);
-    if (!session) return null;
-    const operationHash = tokenHash(operationId);
-    const operation = this.repository.authOperation(operationHash, session.tokenHash, now());
-    if (!operation) return null;
-    const passkeys = this.repository
-      .passkeysForUser(session.user.id)
-      .filter((passkey) => operation.passkeyIds.includes(passkey.id));
-    if (passkeys.length === 0) return null;
-    const options = await generateAuthenticationOptions({
-      rpID: context.rpId,
-      userVerification: "required",
-      allowCredentials: passkeys.map((passkey) => ({
-        id: passkey.id,
-        transports: passkey.transports as AuthenticatorTransportFuture[],
-      })),
-    });
-    const ceremonyId = this.storeChallenge(
-      "step-up-authentication",
-      options.challenge,
-      context,
-      session.user.id,
-      session.tokenHash,
-      operationHash,
-    );
-    return { ceremonyId, options };
-  }
+    beginSensitiveOperation(
+        token: string | null,
+    ): { required: false } | { required: true; operationId: string } | null {
+        const session = this.sessionForToken(token);
+        if (!session) {
+            return null;
+        }
+        const recentCutoff =
+            Date.now() - this.recentAuthenticationSeconds * 1_000;
+        if (
+            session.recentAuthAt &&
+            new Date(session.recentAuthAt).getTime() >= recentCutoff
+        ) {
+            return { required: false };
+        }
+        const operationId = randomBytes(32).toString("base64url");
+        const startedAt = now();
+        this.repository.storeAuthOperation({
+            idHash: tokenHash(operationId),
+            sessionHash: session.tokenHash,
+            userId: session.user.id,
+            startedAt,
+            passwordEnrolledAt: session.user.hasPassword
+                ? session.user.passwordEnrolledAt
+                : null,
+            passkeyIds: this.repository
+                .passkeysForUser(session.user.id)
+                .map(({ id }) => id),
+            expiresAt: new Date(
+                Date.now() + CHALLENGE_SECONDS * 1_000,
+            ).toISOString(),
+        });
+        return { required: true, operationId };
+    }
 
-  async verifyStepUpPasskey(
-    token: string,
-    ceremonyId: string,
-    response: AuthenticationResponseJSON,
-  ): Promise<boolean> {
-    const session = this.sessionForToken(token);
-    const challenge = this.consumeChallenge(ceremonyId, "step-up-authentication");
-    if (
-      !session ||
-      !challenge ||
-      challenge.sessionHash !== session.tokenHash ||
-      !challenge.operationIdHash
-    )
-      return false;
-    const operation = this.repository.authOperation(
-      challenge.operationIdHash,
-      session.tokenHash,
-      now(),
-    );
-    const passkey = this.repository.passkeyById(response.id);
-    if (
-      !operation ||
-      !passkey ||
-      passkey.userId !== session.user.id ||
-      !operation.passkeyIds.includes(passkey.id)
-    )
-      return false;
-    const verified = await this.verifyPasskeyResponse(passkey, response, challenge);
-    if (!verified) return false;
-    return this.repository.markSessionRecentlyAuthenticated(session.tokenHash, now());
-  }
+    async stepUpWithPassword(
+        token: string,
+        operationId: string,
+        password: string,
+    ): Promise<boolean> {
+        const session = this.sessionForToken(token);
+        if (!session) {
+            return false;
+        }
+        const operation = this.repository.authOperation(
+            tokenHash(operationId),
+            session.tokenHash,
+            now(),
+        );
+        if (
+            !operation ||
+            !session.user.hasPassword ||
+            !session.user.passwordEnrolledAt ||
+            session.user.passwordEnrolledAt !== operation.passwordEnrolledAt ||
+            !(await verifyPassword(password, session.user.passwordHash))
+        ) {
+            return false;
+        }
+        return this.repository.markSessionRecentlyAuthenticated(
+            session.tokenHash,
+            now(),
+        );
+    }
 
-  async setPassword(userId: number, currentSessionToken: string, password: string): Promise<void> {
-    this.repository.updatePassword(
-      userId,
-      await hashPassword(password),
-      tokenHash(currentSessionToken),
-      now(),
-    );
-  }
+    async stepUpPasskeyOptions(
+        token: string,
+        operationId: string,
+        context: WebAuthnContext,
+    ) {
+        const session = this.sessionForToken(token);
+        if (!session) {
+            return null;
+        }
+        const operationHash = tokenHash(operationId);
+        const operation = this.repository.authOperation(
+            operationHash,
+            session.tokenHash,
+            now(),
+        );
+        if (!operation) {
+            return null;
+        }
+        const passkeys = this.repository
+            .passkeysForUser(session.user.id)
+            .filter((passkey) => operation.passkeyIds.includes(passkey.id));
+        if (passkeys.length === 0) {
+            return null;
+        }
+        const options = await generateAuthenticationOptions({
+            rpID: context.rpId,
+            userVerification: "required",
+            allowCredentials: passkeys.map((passkey) => ({
+                id: passkey.id,
+                transports:
+                    passkey.transports as AuthenticatorTransportFuture[],
+            })),
+        });
+        const ceremonyId = this.storeChallenge(
+            "step-up-authentication",
+            options.challenge,
+            context,
+            session.user.id,
+            session.tokenHash,
+            operationHash,
+        );
+        return { ceremonyId, options };
+    }
 
-  async removePassword(userId: number): Promise<void> {
-    const removed = this.repository.removePassword(
-      userId,
-      await hashPassword(randomBytes(32).toString("base64url")),
-      now(),
-    );
-    if (!removed) throw lastSignInMethodError();
-  }
+    async verifyStepUpPasskey(
+        token: string,
+        ceremonyId: string,
+        response: AuthenticationResponseJSON,
+    ): Promise<boolean> {
+        const session = this.sessionForToken(token);
+        const challenge = this.consumeChallenge(
+            ceremonyId,
+            "step-up-authentication",
+        );
+        if (
+            !session ||
+            !challenge ||
+            challenge.sessionHash !== session.tokenHash ||
+            !challenge.operationIdHash
+        ) {
+            return false;
+        }
+        const operation = this.repository.authOperation(
+            challenge.operationIdHash,
+            session.tokenHash,
+            now(),
+        );
+        const passkey = this.repository.passkeyById(response.id);
+        if (
+            !operation ||
+            !passkey ||
+            passkey.userId !== session.user.id ||
+            !operation.passkeyIds.includes(passkey.id)
+        ) {
+            return false;
+        }
+        const verified = await this.verifyPasskeyResponse(
+            passkey,
+            response,
+            challenge,
+        );
+        if (!verified) {
+            return false;
+        }
+        return this.repository.markSessionRecentlyAuthenticated(
+            session.tokenHash,
+            now(),
+        );
+    }
 
-  deleteAccount(userId: number): boolean {
-    return this.repository.deleteAccount(userId);
-  }
+    async setPassword(
+        userId: number,
+        currentSessionToken: string,
+        password: string,
+    ): Promise<void> {
+        this.repository.updatePassword(
+            userId,
+            await hashPassword(password),
+            tokenHash(currentSessionToken),
+            now(),
+        );
+    }
 
-  passkeys(userId: number): PasskeySummary[] {
-    return this.repository.passkeysForUser(userId).map(passkeySummary);
-  }
+    async removePassword(userId: number): Promise<void> {
+        const removed = this.repository.removePassword(
+            userId,
+            await hashPassword(randomBytes(32).toString("base64url")),
+            now(),
+        );
+        if (!removed) {
+            throw lastSignInMethodError();
+        }
+    }
 
-  async passkeyRegistrationOptions(userId: number, context: WebAuthnContext) {
-    const user = this.repository.userWithPasskeys(userId);
-    if (!user) return null;
-    const passkeys = this.repository.passkeysForUser(userId);
-    const options = await generateRegistrationOptions({
-      rpName: "feedfold",
-      rpID: context.rpId,
-      userID: new Uint8Array(user.webauthnUserId),
-      userName: user.username,
-      userDisplayName: user.username,
-      attestationType: "none",
-      excludeCredentials: passkeys.map((passkey) => ({
-        id: passkey.id,
-        transports: passkey.transports as AuthenticatorTransportFuture[],
-      })),
-      authenticatorSelection: { residentKey: "required", userVerification: "required" },
-    });
-    const ceremonyId = this.storeChallenge(
-      "passkey-registration",
-      options.challenge,
-      context,
-      userId,
-    );
-    return { ceremonyId, options };
-  }
+    deleteAccount(userId: number): boolean {
+        return this.repository.deleteAccount(userId);
+    }
 
-  async verifyPasskeyRegistration(
-    userId: number,
-    ceremonyId: string,
-    response: RegistrationResponseJSON,
-  ): Promise<PasskeySummary | null> {
-    const challenge = this.consumeChallenge(ceremonyId, "passkey-registration");
-    if (!challenge || challenge.userId !== userId) return null;
-    const verification = await verifyRegistrationResponse({
-      response,
-      expectedChallenge: challenge.challenge,
-      expectedOrigin: challenge.origin,
-      expectedRPID: challenge.rpId,
-      requireUserVerification: true,
-    });
-    if (!verification.verified || !verification.registrationInfo) return null;
-    const { credential, credentialBackedUp, credentialDeviceType } = verification.registrationInfo;
-    const createdAt = now();
-    const passkey: StoredPasskey = {
-      id: credential.id,
-      name: credentialBackedUp ? "Synced passkey" : "Device passkey",
-      userId,
-      username: "",
-      publicKey: Buffer.from(credential.publicKey),
-      counter: credential.counter,
-      deviceType: credentialDeviceType,
-      backedUp: credentialBackedUp,
-      transports: credential.transports ?? [],
-      createdAt,
-      lastUsedAt: null,
-    };
-    this.repository.insertPasskey(passkey);
-    return passkeySummary(passkey);
-  }
+    passkeys(userId: number): PasskeySummary[] {
+        return this.repository.passkeysForUser(userId).map(passkeySummary);
+    }
 
-  async passkeyAuthenticationOptions(context: WebAuthnContext) {
-    const options = await generateAuthenticationOptions({
-      rpID: context.rpId,
-      userVerification: "required",
-    });
-    const ceremonyId = this.storeChallenge(
-      "passkey-authentication",
-      options.challenge,
-      context,
-      null,
-    );
-    return { ceremonyId, options };
-  }
+    async passkeyRegistrationOptions(userId: number, context: WebAuthnContext) {
+        const user = this.repository.userWithPasskeys(userId);
+        if (!user) {
+            return null;
+        }
+        const passkeys = this.repository.passkeysForUser(userId);
+        const options = await generateRegistrationOptions({
+            rpName: "feedfold",
+            rpID: context.rpId,
+            userID: new Uint8Array(user.webauthnUserId),
+            userName: user.username,
+            userDisplayName: user.username,
+            attestationType: "none",
+            excludeCredentials: passkeys.map((passkey) => ({
+                id: passkey.id,
+                transports:
+                    passkey.transports as AuthenticatorTransportFuture[],
+            })),
+            authenticatorSelection: {
+                residentKey: "required",
+                userVerification: "required",
+            },
+        });
+        const ceremonyId = this.storeChallenge(
+            "passkey-registration",
+            options.challenge,
+            context,
+            userId,
+        );
+        return { ceremonyId, options };
+    }
 
-  private async verifyPasskeyResponse(
-    passkey: StoredPasskey,
-    response: AuthenticationResponseJSON,
-    challenge: StoredAuthChallenge,
-  ): Promise<boolean> {
-    const verification = await verifyAuthenticationResponse({
-      response,
-      expectedChallenge: challenge.challenge,
-      expectedOrigin: challenge.origin,
-      expectedRPID: challenge.rpId,
-      credential: {
-        id: passkey.id,
-        publicKey: new Uint8Array(passkey.publicKey),
-        counter: passkey.counter,
-        transports: passkey.transports as AuthenticatorTransportFuture[],
-      },
-      requireUserVerification: true,
-    });
-    if (!verification.verified) return false;
-    const { newCounter, credentialBackedUp, credentialDeviceType } =
-      verification.authenticationInfo;
-    this.repository.updatePasskeyUse(
-      passkey.id,
-      newCounter,
-      credentialDeviceType,
-      credentialBackedUp,
-      now(),
-    );
-    return true;
-  }
+    async verifyPasskeyRegistration(
+        userId: number,
+        ceremonyId: string,
+        response: RegistrationResponseJSON,
+    ): Promise<PasskeySummary | null> {
+        const challenge = this.consumeChallenge(
+            ceremonyId,
+            "passkey-registration",
+        );
+        if (!challenge || challenge.userId !== userId) {
+            return null;
+        }
+        const verification = await verifyRegistrationResponse({
+            response,
+            expectedChallenge: challenge.challenge,
+            expectedOrigin: challenge.origin,
+            expectedRPID: challenge.rpId,
+            requireUserVerification: true,
+        });
+        if (!verification.verified || !verification.registrationInfo) {
+            return null;
+        }
+        const { credential, credentialBackedUp, credentialDeviceType } =
+            verification.registrationInfo;
+        const createdAt = now();
+        const passkey: StoredPasskey = {
+            id: credential.id,
+            name: credentialBackedUp ? "Synced passkey" : "Device passkey",
+            userId,
+            username: "",
+            publicKey: Buffer.from(credential.publicKey),
+            counter: credential.counter,
+            deviceType: credentialDeviceType,
+            backedUp: credentialBackedUp,
+            transports: credential.transports ?? [],
+            createdAt,
+            lastUsedAt: null,
+        };
+        this.repository.insertPasskey(passkey);
+        return passkeySummary(passkey);
+    }
 
-  async verifyPasskeyAuthentication(
-    ceremonyId: string,
-    response: AuthenticationResponseJSON,
-  ): Promise<LoginSession | null> {
-    const challenge = this.consumeChallenge(ceremonyId, "passkey-authentication");
-    const passkey = this.repository.passkeyById(response.id);
-    if (!challenge || !passkey || !(await this.verifyPasskeyResponse(passkey, response, challenge)))
-      return null;
-    const user = this.repository.userWithPasskeys(passkey.userId);
-    return user ? this.createSession(user) : null;
-  }
+    async passkeyAuthenticationOptions(context: WebAuthnContext) {
+        const options = await generateAuthenticationOptions({
+            rpID: context.rpId,
+            userVerification: "required",
+        });
+        const ceremonyId = this.storeChallenge(
+            "passkey-authentication",
+            options.challenge,
+            context,
+            null,
+        );
+        return { ceremonyId, options };
+    }
 
-  deletePasskey(userId: number, id: string): boolean {
-    const result = this.repository.deletePasskey(userId, id);
-    if (result === "last-sign-in-method") throw lastSignInMethodError();
-    return result === "deleted";
-  }
+    private async verifyPasskeyResponse(
+        passkey: StoredPasskey,
+        response: AuthenticationResponseJSON,
+        challenge: StoredAuthChallenge,
+    ): Promise<boolean> {
+        const verification = await verifyAuthenticationResponse({
+            response,
+            expectedChallenge: challenge.challenge,
+            expectedOrigin: challenge.origin,
+            expectedRPID: challenge.rpId,
+            credential: {
+                id: passkey.id,
+                publicKey: new Uint8Array(passkey.publicKey),
+                counter: passkey.counter,
+                transports:
+                    passkey.transports as AuthenticatorTransportFuture[],
+            },
+            requireUserVerification: true,
+        });
+        if (!verification.verified) {
+            return false;
+        }
+        const { newCounter, credentialBackedUp, credentialDeviceType } =
+            verification.authenticationInfo;
+        this.repository.updatePasskeyUse(
+            passkey.id,
+            newCounter,
+            credentialDeviceType,
+            credentialBackedUp,
+            now(),
+        );
+        return true;
+    }
 
-  renamePasskey(userId: number, id: string, name: string): PasskeySummary | null {
-    if (!this.repository.renamePasskey(userId, id, name)) return null;
-    const passkey = this.repository.passkeyById(id);
-    return passkey ? passkeySummary(passkey) : null;
-  }
+    async verifyPasskeyAuthentication(
+        ceremonyId: string,
+        response: AuthenticationResponseJSON,
+    ): Promise<LoginSession | null> {
+        const challenge = this.consumeChallenge(
+            ceremonyId,
+            "passkey-authentication",
+        );
+        const passkey = this.repository.passkeyById(response.id);
+        if (
+            !challenge ||
+            !passkey ||
+            !(await this.verifyPasskeyResponse(passkey, response, challenge))
+        ) {
+            return null;
+        }
+        const user = this.repository.userWithPasskeys(passkey.userId);
+        return user ? this.createSession(user) : null;
+    }
 
-  private storeChallenge(
-    kind: StoredAuthChallenge["kind"],
-    challenge: string,
-    context: WebAuthnContext,
-    userId: number | null,
-    sessionHash: string | null = null,
-    operationIdHash: string | null = null,
-  ): string {
-    const ceremonyId = randomBytes(32).toString("base64url");
-    this.repository.storeChallenge({
-      idHash: tokenHash(ceremonyId),
-      challenge,
-      kind,
-      userId,
-      sessionHash,
-      operationIdHash,
-      origin: context.origin,
-      rpId: context.rpId,
-      expiresAt: new Date(Date.now() + CHALLENGE_SECONDS * 1_000).toISOString(),
-    });
-    return ceremonyId;
-  }
+    deletePasskey(userId: number, id: string): boolean {
+        const result = this.repository.deletePasskey(userId, id);
+        if (result === "last-sign-in-method") {
+            throw lastSignInMethodError();
+        }
+        return result === "deleted";
+    }
 
-  private consumeChallenge(
-    ceremonyId: string,
-    kind: StoredAuthChallenge["kind"],
-  ): StoredAuthChallenge | null {
-    return this.repository.consumeChallenge(tokenHash(ceremonyId), kind, now());
-  }
+    renamePasskey(
+        userId: number,
+        id: string,
+        name: string,
+    ): PasskeySummary | null {
+        if (!this.repository.renamePasskey(userId, id, name)) {
+            return null;
+        }
+        const passkey = this.repository.passkeyById(id);
+        return passkey ? passkeySummary(passkey) : null;
+    }
 
-  sessionCookie(token: string, secure: boolean): string {
-    return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_SECONDS}; Priority=High${secure ? "; Secure" : ""}`;
-  }
+    private storeChallenge(
+        kind: StoredAuthChallenge["kind"],
+        challenge: string,
+        context: WebAuthnContext,
+        userId: number | null,
+        sessionHash: string | null = null,
+        operationIdHash: string | null = null,
+    ): string {
+        const ceremonyId = randomBytes(32).toString("base64url");
+        this.repository.storeChallenge({
+            idHash: tokenHash(ceremonyId),
+            challenge,
+            kind,
+            userId,
+            sessionHash,
+            operationIdHash,
+            origin: context.origin,
+            rpId: context.rpId,
+            expiresAt: new Date(
+                Date.now() + CHALLENGE_SECONDS * 1_000,
+            ).toISOString(),
+        });
+        return ceremonyId;
+    }
 
-  clearSessionCookie(secure: boolean): string {
-    return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Priority=High${secure ? "; Secure" : ""}`;
-  }
+    private consumeChallenge(
+        ceremonyId: string,
+        kind: StoredAuthChallenge["kind"],
+    ): StoredAuthChallenge | null {
+        return this.repository.consumeChallenge(
+            tokenHash(ceremonyId),
+            kind,
+            now(),
+        );
+    }
+
+    sessionCookie(token: string, secure: boolean): string {
+        return (
+            `${SESSION_COOKIE}=` +
+            `${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=` +
+            `${SESSION_SECONDS}; Priority=High` +
+            `${secure ? "; Secure" : ""}`
+        );
+    }
+
+    clearSessionCookie(secure: boolean): string {
+        return (
+            `${SESSION_COOKIE}` +
+            "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Priority=High" +
+            `${secure ? "; Secure" : ""}`
+        );
+    }
 }
