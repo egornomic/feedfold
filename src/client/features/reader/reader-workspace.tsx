@@ -7,7 +7,8 @@ import type {
 } from "../../../shared/types";
 import type { AppRouteController } from "../../app/route";
 import { useReaderPreferences } from "../../app/session-state";
-import type { FeedManagementAction } from "../feeds/feed-management";
+import type { AnimationOrigin } from "../../ui/motion";
+import type { FeedActionHandler } from "../feeds/feed-management";
 import {
     EMPTY_ARTICLE_SUMMARY_STATE,
     EMPTY_ARTICLE_TRANSLATION_STATE,
@@ -44,11 +45,12 @@ interface ReaderWorkspaceProps {
     changeReadingMode: (mode: ReadingMode) => void;
     refresh: (feedId?: number, forceAll?: boolean) => Promise<void>;
     openAddFeed: () => void;
-    openFeedManagementById: (
-        feedId: number,
-        action: FeedManagementAction,
+    openFeedManagementById: FeedActionHandler<number>;
+    filterSelectedText: (
+        article: Article,
+        text: string,
+        origin: AnimationOrigin,
     ) => void;
-    filterSelectedText: (article: Article, text: string) => void;
 }
 
 export function ReaderWorkspace({

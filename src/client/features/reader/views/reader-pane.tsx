@@ -20,8 +20,11 @@ import {
 } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
 import { useDelayedPending } from "../../../ui/loading";
-import { interactionMotionIsInstant } from "../../../ui/motion";
-import type { FeedManagementAction } from "../../feeds/feed-management";
+import {
+    type AnimationOrigin,
+    interactionMotionIsInstant,
+} from "../../../ui/motion";
+import type { FeedActionHandler } from "../../feeds/feed-management";
 import { ArticleActions } from "../article/article-action-bar";
 import type {
     ArticleSummaryViewState,
@@ -158,13 +161,17 @@ export function ReaderPane({
     onToggleSave: (article: Article) => void;
     onCopy: (article: Article) => void;
     onOpenSource: (article: Article) => void;
-    onFeedAction: (feedId: number, action: FeedManagementAction) => void;
+    onFeedAction: FeedActionHandler<number>;
     onToggleFullContent: (article: Article) => void;
     onRunSummaryPrompt: (article: Article, promptId: string | null) => void;
     onToggleTranslation: (article: Article) => void;
     onRegenerateSummary: (article: Article) => void;
     onOpenAiSettings: () => void;
-    onFilterSelection: (article: Article, text: string) => void;
+    onFilterSelection: (
+        article: Article,
+        text: string,
+        origin: AnimationOrigin,
+    ) => void;
 }) {
     const snapshot = article
         ? {

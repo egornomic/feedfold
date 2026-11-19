@@ -288,8 +288,8 @@
     background: var(--paper-surface);
     background-blend-mode: var(--paper-blend);
     opacity: 1;
-    transform: translateY(0) scale(1);
-    transform-origin: top right;
+    transform: scale(1);
+    transform-origin: var(--trigger-origin, top right);
     transition:
         opacity var(--duration-surface) var(--ease-out),
         transform var(--duration-surface) var(--ease-out);
@@ -297,7 +297,7 @@
 
 .inline-editor[data-motion-state="closed"] {
     opacity: 0;
-    transform: translateY(-4px) scale(0.97);
+    transform: scale(0.97);
     pointer-events: none;
     transition-duration: var(--duration-fast);
 }
@@ -305,7 +305,7 @@
 @starting-style {
     .inline-editor[data-motion-state="open"] {
         opacity: 0;
-        transform: translateY(-4px) scale(0.97);
+        transform: scale(0.97);
     }
 }
 

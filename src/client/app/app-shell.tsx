@@ -24,7 +24,7 @@ import type {
 } from "../../shared/types";
 import { errorMessage } from "../api/api";
 import { SessionLoading } from "../features/auth/auth";
-import type { FeedManagementAction } from "../features/feeds/feed-management";
+import type { FeedActionHandler } from "../features/feeds/feed-management";
 import { folderPathLabel } from "../features/feeds/folder-hierarchy";
 import { Sidebar } from "../features/navigation/sidebar";
 import { useArticleActions } from "../features/reader/article-actions";
@@ -41,6 +41,7 @@ import { ReaderWorkspace } from "../features/reader/reader-workspace";
 import type { RuleFormDraft } from "../features/rules/rule-form-types";
 import { isDesktopApp } from "../platform/desktop";
 import { useDelayedPending } from "../ui/loading";
+import type { AnimationOrigin } from "../ui/motion";
 import { useAppRoute } from "./route";
 import {
     SessionStateProvider,
@@ -92,6 +93,9 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
     );
     const shortcutHelpOpen = useInterfaceState(
         (state) => state.shortcutHelpOpen,
+    );
+    const shortcutHelpOrigin = useInterfaceState(
+        (state) => state.shortcutHelpOrigin,
     );
     const setNavOpen = useInterfaceState((state) => state.setNavOpen);
     const setShortcutHelpOpen = useInterfaceState(
@@ -236,7 +240,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
     );
 
     const filterSelectedText = useCallback(
-        (article: Article, text: string) => {
+        (article: Article, text: string, origin: AnimationOrigin) => {
             const pattern = text.replace(/\s+/g, " ").trim();
             if (!pattern) {
                 return;
@@ -246,6 +250,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
                 id: ruleDraftId.current,
                 name: filterRuleName(pattern),
                 article,
+                origin,
                 articleIndex: Math.max(
                     0,
                     queue.articles.findIndex((item) => item.id === article.id),
@@ -273,13 +278,13 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
         [queue, route],
     );
 
-    const openFeedManagementById = useCallback(
-        (feedId: number, action: FeedManagementAction) => {
+    const openFeedManagementById = useCallback<FeedActionHandler<number>>(
+        (feedId, action, origin) => {
             const feed = bootstrap?.feeds.find(
                 (candidate) => candidate.id === feedId,
             );
             if (feed) {
-                openFeedManagement(feed, action);
+                openFeedManagement(feed, action, origin);
             }
         },
         [bootstrap, openFeedManagement],
@@ -582,6 +587,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
             {shortcutHelpOpen ? (
                 <Suspense fallback={null}>
                     <ShortcutHelp
+                        origin={shortcutHelpOrigin}
                         enabled={bootstrap.settings.singleKeyShortcuts}
                         manualRefreshEnabled={
                             bootstrap.capabilities.manualRefresh

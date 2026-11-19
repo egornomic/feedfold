@@ -5,6 +5,42 @@ const REDUCED_MOTION_EXIT_MS = 200;
 
 export type MotionState = "open" | "closed";
 
+export type AnimationOrigin = { x: number; y: number };
+
+export function triggerCenter(trigger: Element): AnimationOrigin {
+    const { left, top, width, height } = trigger.getBoundingClientRect();
+    return { x: left + width / 2, y: top + height / 2 };
+}
+
+export function setTriggerOrigin(
+    element: HTMLElement,
+    origin: AnimationOrigin | undefined,
+) {
+    if (!origin) {
+        element.style.removeProperty("--trigger-origin");
+        return;
+    }
+
+    let { left, top, width, height } = element.getBoundingClientRect();
+    if (width === 0 && height === 0) {
+        return;
+    }
+    const style = getComputedStyle(element);
+    // Recover the layout position if the panel has already applied its starting transform.
+    if (style.transform && style.transform !== "none") {
+        const [x = 0, y = 0] = style.transformOrigin
+            .split(" ")
+            .map(Number.parseFloat);
+        const matrix = new DOMMatrixReadOnly(style.transform);
+        left -= matrix.e + x * (1 - matrix.a);
+        top -= matrix.f + y * (1 - matrix.d);
+    }
+    element.style.setProperty(
+        "--trigger-origin",
+        `${origin.x - left}px ${origin.y - top}px`,
+    );
+}
+
 export function interactionMotionIsInstant(): boolean {
     return document.documentElement.dataset.inputModality === "keyboard";
 }

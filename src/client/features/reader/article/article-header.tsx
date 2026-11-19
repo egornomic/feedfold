@@ -2,8 +2,8 @@ import { ChevronDown } from "lucide-react";
 import type { Article } from "../../../../shared/types";
 import { Menu, MenuPopup } from "../../../ui/menu";
 import {
+    type FeedActionHandler,
     FeedActionMenuItems,
-    type FeedManagementAction,
 } from "../../feeds/feed-management";
 import { articleDate, mediaTypeLabel } from "./article-format";
 
@@ -14,7 +14,7 @@ export function ArticleHeader({
 }: {
     article: Article;
     id: string;
-    onFeedAction: (feedId: number, action: FeedManagementAction) => void;
+    onFeedAction: FeedActionHandler<number>;
 }) {
     const feedId = article.feedId;
     const source =
@@ -38,8 +38,8 @@ export function ArticleHeader({
                 >
                     <FeedActionMenuItems
                         sourceKind={article.feedSourceKind}
-                        onAction={(action) => {
-                            onFeedAction(feedId, action);
+                        onAction={(action, origin) => {
+                            onFeedAction(feedId, action, origin);
                         }}
                     />
                 </MenuPopup>

@@ -94,6 +94,7 @@ body {
     inset: 0;
     height: fit-content;
     margin: auto;
+    transform-origin: var(--trigger-origin, center);
 }
 
 .dialog-backdrop[data-starting-style],

@@ -1,5 +1,6 @@
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import type { FeedManagementAction } from "../../feeds/feed-management";
+import type { AnimationOrigin } from "../../../ui/motion";
+import type { FeedActionHandler } from "../../feeds/feed-management";
 import { ArticleActions } from "../article/article-action-bar";
 import {
     type ArticleSummaryViewState,
@@ -61,13 +62,17 @@ export function ExpandedStream({
     onToggleSave: (article: Article) => void;
     onCopy: (article: Article) => void;
     onOpenSource: (article: Article) => void;
-    onFeedAction: (feedId: number, action: FeedManagementAction) => void;
+    onFeedAction: FeedActionHandler<number>;
     onToggleFullContent: (article: Article) => void;
     onRunSummaryPrompt: (article: Article, promptId: string | null) => void;
     onToggleTranslation: (article: Article) => void;
     onRegenerateSummary: (article: Article) => void;
     onOpenAiSettings: () => void;
-    onFilterSelection: (article: Article, text: string) => void;
+    onFilterSelection: (
+        article: Article,
+        text: string,
+        origin: AnimationOrigin,
+    ) => void;
 }) {
     return (
         <VirtualArticles

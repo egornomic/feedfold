@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
     type FormEvent,
+    type SubmitEvent,
     useCallback,
     useEffect,
     useRef,
@@ -22,8 +23,9 @@ import {
 import { api, errorMessage } from "../../api/api";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import { Modal, useDialog } from "../../ui/dialog";
+import { triggerCenter } from "../../ui/motion";
 import { clearReaderPreferences } from "../reader/reader-preferences";
-import type { SensitiveAction } from "./settings-security";
+import { type SensitiveAction, submitOrigin } from "./settings-security";
 
 export function AccountSettingsSection({
     userId,
@@ -98,7 +100,7 @@ export function AccountSettingsSection({
         }
     }, [credentials.error, config.error]);
 
-    const addPasskey = async () => {
+    const addPasskey = async (trigger: HTMLButtonElement) => {
         setEditingPasskeyId(null);
         setPendingAction("passkey");
         setError(null);
@@ -115,7 +117,7 @@ export function AccountSettingsSection({
                         api.registerPasskey(ceremonyId, response),
                     )
                 ).passkey;
-            });
+            }, triggerCenter(trigger));
             setPasskeys((current) => [passkey, ...current]);
             showToast("Passkey added");
         } catch (caught) {
@@ -173,12 +175,13 @@ export function AccountSettingsSection({
         }
     };
 
-    const removePasskey = async (id: string) => {
+    const removePasskey = async (id: string, trigger: HTMLButtonElement) => {
         setPendingAction("passkey");
         setError(null);
         try {
-            await runSensitive(() =>
-                mutateRequest(() => api.deletePasskey(id)),
+            await runSensitive(
+                () => mutateRequest(() => api.deletePasskey(id)),
+                triggerCenter(trigger),
             );
             setPasskeys((current) =>
                 current.filter((passkey) => passkey.id !== id),
@@ -191,7 +194,7 @@ export function AccountSettingsSection({
         }
     };
 
-    const changePassword = async (event: FormEvent) => {
+    const changePassword = async (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (newPassword !== confirmPassword) {
             setError("The new passwords do not match.");
@@ -200,8 +203,9 @@ export function AccountSettingsSection({
         setPendingAction("password");
         setError(null);
         try {
-            await runSensitive(() =>
-                mutateRequest(() => api.changePassword(newPassword)),
+            await runSensitive(
+                () => mutateRequest(() => api.changePassword(newPassword)),
+                submitOrigin(event),
             );
             setHasPassword(true);
             setNewPassword("");
@@ -214,11 +218,14 @@ export function AccountSettingsSection({
         }
     };
 
-    const removePassword = async () => {
+    const removePassword = async (trigger: HTMLButtonElement) => {
         setPendingAction("password");
         setError(null);
         try {
-            await runSensitive(() => mutateRequest(() => api.removePassword()));
+            await runSensitive(
+                () => mutateRequest(() => api.removePassword()),
+                triggerCenter(trigger),
+            );
             setHasPassword(false);
             setNewPassword("");
             setConfirmPassword("");
@@ -236,12 +243,15 @@ export function AccountSettingsSection({
         }
     };
 
-    const deleteAccount = async (event: FormEvent) => {
+    const deleteAccount = async (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
         setPendingAction("delete-account");
         setAccountDeleteError(null);
         try {
-            await runSensitive(() => mutateRequest(() => api.deleteAccount()));
+            await runSensitive(
+                () => mutateRequest(() => api.deleteAccount()),
+                submitOrigin(event),
+            );
             clearReaderPreferences(userId);
             onAccountDeleted();
         } catch (caught) {
@@ -275,7 +285,9 @@ export function AccountSettingsSection({
                             disabled={
                                 !passkeysAvailable || loadingPasskeys || busy
                             }
-                            onClick={() => void addPasskey()}
+                            onClick={(event) =>
+                                void addPasskey(event.currentTarget)
+                            }
                         >
                             {passkeyBusy ? (
                                 <LoaderCircle
@@ -421,9 +433,10 @@ export function AccountSettingsSection({
                                                 type="button"
                                                 aria-label={`Remove ${passkey.name}`}
                                                 disabled={busy}
-                                                onClick={() =>
+                                                onClick={(event) =>
                                                     void removePasskey(
                                                         passkey.id,
+                                                        event.currentTarget,
                                                     )
                                                 }
                                             >
@@ -504,7 +517,9 @@ export function AccountSettingsSection({
                             className="danger-button"
                             type="button"
                             disabled={busy}
-                            onClick={() => void removePassword()}
+                            onClick={(event) =>
+                                void removePassword(event.currentTarget)
+                            }
                         >
                             Remove password
                         </button>
@@ -523,7 +538,9 @@ export function AccountSettingsSection({
                     className="danger-button"
                     type="button"
                     disabled={busy}
-                    onClick={accountDialog.open}
+                    onClick={(event) =>
+                        accountDialog.open(triggerCenter(event.currentTarget))
+                    }
                 >
                     <Trash2 aria-hidden="true" size={15} />
                     Delete account

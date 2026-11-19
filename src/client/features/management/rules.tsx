@@ -3,7 +3,11 @@ import { useRef, useState } from "react";
 import type { BootstrapData, Rule, RuleCondition } from "../../../shared/types";
 import { errorMessage } from "../../api/api";
 import { useDelayedPending } from "../../ui/loading";
-import { useMotionPresence } from "../../ui/motion";
+import {
+    type AnimationOrigin,
+    triggerCenter,
+    useMotionPresence,
+} from "../../ui/motion";
 import { formatNumber } from "../../ui/number-format";
 import type { ReaderDataMutations } from "../reader/reader-data";
 import { RuleForm } from "../rules/rule-form";
@@ -43,6 +47,7 @@ function RulesPage({
     const showLoading = useDelayedPending(rules === null && !error, "rules");
     const [formSession, setFormSession] = useState(0);
     const [editing, setEditing] = useState<Rule | null>(null);
+    const [formOrigin, setFormOrigin] = useState<AnimationOrigin>();
     const formPresence = useMotionPresence(formOpen);
     const pageRef = useRef<HTMLDivElement>(null);
     const addRuleTriggerRef = useRef<HTMLButtonElement>(null);
@@ -62,6 +67,16 @@ function RulesPage({
         : retainedRuleForm.current.editing;
     const displayedDraft = formOpen ? draft : retainedRuleForm.current.draft;
 
+    const openRuleForm = (trigger: HTMLButtonElement, rule: Rule | null) => {
+        ruleFormOpenerRef.current = trigger;
+        setFormOrigin(triggerCenter(trigger));
+        onClearDraft();
+        setEditing(rule);
+        setFormSession((current) => current + 1);
+        setFormOpen(true);
+        pageRef.current?.scrollTo({ top: 0 });
+    };
+
     return (
         <div className="management-page" ref={pageRef}>
             <PageHeader
@@ -75,14 +90,9 @@ function RulesPage({
                         ref={addRuleTriggerRef}
                         className="primary-button"
                         type="button"
-                        onClick={(event) => {
-                            ruleFormOpenerRef.current = event.currentTarget;
-                            onClearDraft();
-                            setEditing(null);
-                            setFormSession((current) => current + 1);
-                            setFormOpen(true);
-                            pageRef.current?.scrollTo({ top: 0 });
-                        }}
+                        onClick={(event) =>
+                            openRuleForm(event.currentTarget, null)
+                        }
                     >
                         <Plus aria-hidden="true" size={16} />
                         Add rule
@@ -107,6 +117,7 @@ function RulesPage({
                             : (displayedDraft ?? undefined)
                     }
                     motionState={formPresence.state}
+                    origin={displayedDraft?.origin ?? formOrigin}
                     mutations={mutations}
                     onCancel={() => {
                         const returnDraft = editing ? null : draft;
@@ -199,14 +210,9 @@ function RulesPage({
                         <button
                             className="secondary-button"
                             type="button"
-                            onClick={(event) => {
-                                ruleFormOpenerRef.current = event.currentTarget;
-                                onClearDraft();
-                                setEditing(null);
-                                setFormSession((current) => current + 1);
-                                setFormOpen(true);
-                                pageRef.current?.scrollTo({ top: 0 });
-                            }}
+                            onClick={(event) =>
+                                openRuleForm(event.currentTarget, null)
+                            }
                         >
                             Create your first rule
                         </button>
@@ -233,18 +239,9 @@ function RulesPage({
                                         rule={rule}
                                         bootstrap={bootstrap}
                                         mutations={mutations}
-                                        onEdit={(trigger) => {
-                                            ruleFormOpenerRef.current = trigger;
-                                            onClearDraft();
-                                            setEditing(rule);
-                                            setFormSession(
-                                                (current) => current + 1,
-                                            );
-                                            setFormOpen(true);
-                                            pageRef.current?.scrollTo({
-                                                top: 0,
-                                            });
-                                        }}
+                                        onEdit={(trigger) =>
+                                            openRuleForm(trigger, rule)
+                                        }
                                         showToast={showToast}
                                     />
                                 ))}

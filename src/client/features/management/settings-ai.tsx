@@ -9,7 +9,7 @@ import {
     Trash2,
     X,
 } from "lucide-react";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, type SubmitEvent, useRef, useState } from "react";
 import {
     AI_PROMPT_MAX_LENGTH,
     DEFAULT_ARTICLE_SUMMARY_PROMPT,
@@ -26,7 +26,8 @@ import { useRequestMutation } from "../../api/use-request-mutation";
 import { isDesktopApp } from "../../platform/desktop";
 import { Modal, useDialog } from "../../ui/dialog";
 import { DropdownSelect } from "../../ui/dropdown";
-import type { SensitiveAction } from "./settings-security";
+import { triggerCenter } from "../../ui/motion";
+import { type SensitiveAction, submitOrigin } from "./settings-security";
 
 export function AiSettingsSection({
     settings,
@@ -152,7 +153,7 @@ export function AiSettingsSection({
         }
     };
 
-    const saveKey = async (event: FormEvent) => {
+    const saveKey = async (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
         const nextKey = apiKey.trim();
         const nextModel = modelId.trim();
@@ -162,8 +163,12 @@ export function AiSettingsSection({
         setPendingAction("key");
         setError(null);
         try {
-            const keySettings = await runSensitive(() =>
-                mutateRequest(() => api.saveAiProviderKey(providerId, nextKey)),
+            const keySettings = await runSensitive(
+                () =>
+                    mutateRequest(() =>
+                        api.saveAiProviderKey(providerId, nextKey),
+                    ),
+                submitOrigin(event),
             );
             try {
                 const updated = await mutateRequest(() =>
@@ -189,7 +194,7 @@ export function AiSettingsSection({
         }
     };
 
-    const removeKey = async () => {
+    const removeKey = async (trigger: HTMLButtonElement) => {
         if (
             !window.confirm(
                 `Remove the ${provider.label}` +
@@ -203,8 +208,12 @@ export function AiSettingsSection({
         setError(null);
         try {
             onAiSettings(
-                await runSensitive(() =>
-                    mutateRequest(() => api.deleteAiProviderKey(providerId)),
+                await runSensitive(
+                    () =>
+                        mutateRequest(() =>
+                            api.deleteAiProviderKey(providerId),
+                        ),
+                    triggerCenter(trigger),
                 ),
             );
             setApiKey("");
@@ -251,12 +260,15 @@ export function AiSettingsSection({
         }
     };
 
-    const openCustomPromptDialog = (prompt?: AiCustomPrompt) => {
+    const openCustomPromptDialog = (
+        trigger: HTMLButtonElement,
+        prompt?: AiCustomPrompt,
+    ) => {
         setEditingCustomPrompt(prompt ?? null);
         setCustomPromptName(prompt?.name ?? "");
         setCustomPromptText(prompt?.prompt ?? "");
         setCustomPromptError(null);
-        customPromptDialog.open();
+        customPromptDialog.open(triggerCenter(trigger));
     };
 
     const closeCustomPromptDialog = () => {
@@ -548,7 +560,9 @@ export function AiSettingsSection({
                             disabled={
                                 busy || !aiSettings.credentialStorageAvailable
                             }
-                            onClick={() => void removeKey()}
+                            onClick={(event) =>
+                                void removeKey(event.currentTarget)
+                            }
                         >
                             Remove key
                         </button>
@@ -575,11 +589,11 @@ export function AiSettingsSection({
                     className="secondary-button"
                     type="button"
                     disabled={busy}
-                    onClick={() => {
+                    onClick={(event) => {
                         setSummaryPrompt(settings.summaryPrompt);
                         setTranslationPrompt(settings.translationPrompt);
                         setPromptError(null);
-                        promptDialog.open();
+                        promptDialog.open(triggerCenter(event.currentTarget));
                     }}
                 >
                     <Edit3 aria-hidden="true" size={15} />
@@ -600,7 +614,9 @@ export function AiSettingsSection({
                         className="secondary-button"
                         type="button"
                         disabled={busy}
-                        onClick={() => openCustomPromptDialog()}
+                        onClick={(event) =>
+                            openCustomPromptDialog(event.currentTarget)
+                        }
                     >
                         <Plus aria-hidden="true" size={15} />
                         Add prompt
@@ -623,8 +639,11 @@ export function AiSettingsSection({
                                         type="button"
                                         disabled={busy}
                                         aria-label={`Edit ${prompt.name}`}
-                                        onClick={() =>
-                                            openCustomPromptDialog(prompt)
+                                        onClick={(event) =>
+                                            openCustomPromptDialog(
+                                                event.currentTarget,
+                                                prompt,
+                                            )
                                         }
                                     >
                                         <Edit3 aria-hidden="true" size={15} />

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEventHandler, ReactNode } from "react";
 
 export function Kbd({ children }: { children: ReactNode }) {
     return <kbd>{children}</kbd>;
@@ -18,7 +18,7 @@ export function IconButton({
     pressed?: boolean;
     disabled?: boolean;
     tooltip?: boolean;
-    onClick: () => void;
+    onClick: MouseEventHandler<HTMLButtonElement>;
     className?: string;
 }) {
     return (

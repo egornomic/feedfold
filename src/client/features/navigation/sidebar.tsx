@@ -33,6 +33,7 @@ import {
 import { BrandIdentity } from "../../ui/brand";
 import { IconButton, Kbd } from "../../ui/controls";
 import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
+import { type AnimationOrigin, triggerCenter } from "../../ui/motion";
 import { formatNumber } from "../../ui/number-format";
 import {
     FeedDragProvider,
@@ -43,10 +44,10 @@ import {
 } from "../feeds/feed-drag";
 import { FEED_STATUS_LABELS, visibleFeedStatus } from "../feeds/feed-filters";
 import {
+    type FeedActionHandler,
     FeedActionMenuItems,
-    type FeedManagementAction,
+    type FolderActionHandler,
     FolderActionMenuItems,
-    type FolderManagementAction,
 } from "../feeds/feed-management";
 import { ADD_FEED_SOURCE_OPTIONS } from "../feeds/feed-source-options";
 import { useDrawerSwipe } from "./drawer-swipe";
@@ -521,17 +522,20 @@ function SidebarContent({
                             closeContextMenu();
                             onAddSubscription(sourceType);
                         }}
-                        onAddFolder={() => {
+                        onAddFolder={(origin) => {
                             closeContextMenu();
-                            setManagementRequest({ kind: "create-folder" });
+                            setManagementRequest({
+                                kind: "create-folder",
+                                origin,
+                            });
                         }}
-                        onFeedAction={(feed, action) => {
+                        onFeedAction={(feed, action, origin) => {
                             closeContextMenu();
-                            onFeedAction(feed, action);
+                            onFeedAction(feed, action, origin);
                         }}
-                        onFolderAction={(folder, action) => {
+                        onFolderAction={(folder, action, origin) => {
                             closeContextMenu();
-                            onFolderAction(folder, action);
+                            onFolderAction(folder, action, origin);
                         }}
                     />
                 ) : null}
@@ -557,13 +561,10 @@ function SidebarContextMenu({
 }: {
     state: SidebarContextMenuState;
     onAddSubscription: (sourceType: AddFeedSourceType) => void;
-    onAddFolder: () => void;
+    onAddFolder: (origin: AnimationOrigin) => void;
     onClose: () => void;
-    onFeedAction: (feed: Feed, action: FeedManagementAction) => void;
-    onFolderAction: (
-        folder: FolderType,
-        action: FolderManagementAction,
-    ) => void;
+    onFeedAction: FeedActionHandler<Feed>;
+    onFolderAction: FolderActionHandler<FolderType>;
 }) {
     return (
         <Menu.Root
@@ -608,7 +609,11 @@ function SidebarContextMenu({
                             ),
                         )}
                         <hr className="context-menu-separator" />
-                        <MenuItem onClick={onAddFolder}>
+                        <MenuItem
+                            onClick={(event) =>
+                                onAddFolder(triggerCenter(event.currentTarget))
+                            }
+                        >
                             <Folder aria-hidden="true" size={16} />
                             New folder
                         </MenuItem>
@@ -616,12 +621,14 @@ function SidebarContextMenu({
                 ) : state.kind === "feed" ? (
                     <FeedActionMenuItems
                         feed={state.feed}
-                        onAction={(action) => onFeedAction(state.feed, action)}
+                        onAction={(action, origin) =>
+                            onFeedAction(state.feed, action, origin)
+                        }
                     />
                 ) : (
                     <FolderActionMenuItems
-                        onAction={(action) =>
-                            onFolderAction(state.folder, action)
+                        onAction={(action, origin) =>
+                            onFolderAction(state.folder, action, origin)
                         }
                     />
                 )}

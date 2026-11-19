@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { SessionUser } from "../../../shared/types";
 import { appUrl } from "../../api/api";
 import { BrandIdentity } from "../../ui/brand";
+import { type AnimationOrigin, triggerCenter } from "../../ui/motion";
 import { AuthLegalLinks, LoginDialog } from "./auth";
 import "./homepage.css";
 
@@ -26,6 +27,7 @@ export function Homepage({
                 appUrl("/").replace(/\/$/, ""),
     );
     const [loginPending, setLoginPending] = useState(loginOpen);
+    const [loginOrigin, setLoginOrigin] = useState<AnimationOrigin>();
 
     return (
         <>
@@ -41,7 +43,10 @@ export function Homepage({
                             aria-haspopup="dialog"
                             aria-busy={loginPending}
                             disabled={loginPending}
-                            onClick={() => {
+                            onClick={(event) => {
+                                setLoginOrigin(
+                                    triggerCenter(event.currentTarget),
+                                );
                                 setLoginPending(true);
                                 setLoginOpen(true);
                             }}
@@ -80,6 +85,7 @@ export function Homepage({
             </div>
             {loginOpen ? (
                 <LoginDialog
+                    origin={loginOrigin}
                     onAuthenticated={onAuthenticated}
                     initialOnboardingUser={onboardingUser}
                     onDismiss={() => {
