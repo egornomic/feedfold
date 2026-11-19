@@ -209,19 +209,18 @@ export function VirtualArticles({
         );
         if (!first && rect.bottom > top + 1 && rect.top < bottom) first = row;
       }
-      if (first) {
-        const articleId = Number(first.dataset.articleId);
-        const block =
-          [...first.querySelectorAll<HTMLElement>("h2, p, img, pre, video, iframe")].find(
-            (element) => element.getBoundingClientRect().bottom > top + 1,
-          ) ?? first;
-        anchor = {
-          element: block,
-          top: block.getBoundingClientRect().top,
-          articleId,
-          rowTop: first.getBoundingClientRect().top - top,
-        };
-      }
+      if (!first) return;
+      const articleId = Number(first.dataset.articleId);
+      const block =
+        [...first.querySelectorAll<HTMLElement>("h2, p, img, pre, video, iframe")].find(
+          (element) => element.getBoundingClientRect().bottom > top + 1,
+        ) ?? first;
+      anchor = {
+        element: block,
+        top: block.getBoundingClientRect().top,
+        articleId,
+        rowTop: first.getBoundingClientRect().top - top,
+      };
     };
     const flush = () => {
       timer = undefined;
@@ -240,16 +239,16 @@ export function VirtualArticles({
       const down = scroller.scrollTop > lastTop;
       lastTop = scroller.scrollTop;
       measure();
-      const passedIds = down ? passed.passed(scroller.scrollTop) : [];
+      if (!down) return;
+      const passedIds = passed.passed(scroller.scrollTop);
       if (
-        down &&
-        performance.now() < intentUntil.current &&
-        latest.current.enabled &&
-        latest.current.markReadOnScroll
-      ) {
-        for (const id of passedIds) queued.add(id);
-        if (!timer && queued.size) timer = setTimeout(flush, 250);
-      }
+        performance.now() >= intentUntil.current ||
+        !latest.current.enabled ||
+        !latest.current.markReadOnScroll
+      )
+        return;
+      for (const id of passedIds) queued.add(id);
+      if (!timer && queued.size) timer = setTimeout(flush, 250);
     };
     const intent = () => {
       intentUntil.current = performance.now() + 1500;

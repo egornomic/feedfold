@@ -158,19 +158,17 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
       ai.deleteDeviceKeys(user.id, browserDeviceId(request));
     }
     requestUsers.set(request, user);
-    if (access === "recent-auth") {
-      const recent = services.authService.beginSensitiveOperation(
-        sessionToken(request.headers.cookie),
-      );
-      if (!recent) return reply.code(401).send({ error: "Sign in to continue." });
-      if (recent.required) {
-        return reply.code(428).send({
-          error: "Authenticate again to continue.",
-          code: "RECENT_AUTH_REQUIRED",
-          operationId: recent.operationId,
-        });
-      }
-    }
+    if (access !== "recent-auth") return;
+    const recent = services.authService.beginSensitiveOperation(
+      sessionToken(request.headers.cookie),
+    );
+    if (!recent) return reply.code(401).send({ error: "Sign in to continue." });
+    if (!recent.required) return;
+    return reply.code(428).send({
+      error: "Authenticate again to continue.",
+      code: "RECENT_AUTH_REQUIRED",
+      operationId: recent.operationId,
+    });
   });
 
   // biome-ignore-start lint/nursery/noMisusedPromises: Fastify awaits async plugins; Biome incorrectly selects its callback overload.

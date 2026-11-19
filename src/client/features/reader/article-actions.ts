@@ -112,16 +112,15 @@ export function useArticleActions({
   );
 
   useEffect(() => {
-    if (route.routedArticleId !== null && queue.activeArticle?.id === route.routedArticleId) {
-      if (
-        shouldAutoMarkRoutedArticleRead(
-          queue.activeArticle,
-          route.routedArticleId,
-          manuallyUnreadArticleIds.current,
-        )
-      ) {
-        void changeArticleState(queue.activeArticle, { isRead: true });
-      }
+    if (
+      queue.activeArticle &&
+      shouldAutoMarkRoutedArticleRead(
+        queue.activeArticle,
+        route.routedArticleId,
+        manuallyUnreadArticleIds.current,
+      )
+    ) {
+      void changeArticleState(queue.activeArticle, { isRead: true });
     }
   }, [changeArticleState, queue.activeArticle, route.routedArticleId]);
 

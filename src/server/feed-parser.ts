@@ -196,25 +196,23 @@ export function parseAndNormalizeFeed(source: string, feedUrl: string): ParsedFe
     return { title, siteUrl, articles };
   }
   const isRss = parsed.format === "rss";
-  if (isRss) {
-    // Feedsmith 2.9.6 drops singleton hour/day lists. Recover those channel fields
-    // with the existing XML parser; repeated values still come from feedsmith.
-    if (/<skip(?:Hours|Days)\b/.test(source)) {
-      const document = parseDocument(source, { xmlMode: true });
-      const root = DomUtils.getElementsByTagName("rss", document.children, false)[0];
-      const channel = root && DomUtils.getElementsByTagName("channel", root.children, false)[0];
-      if (channel) {
-        const values = (container: string, element: string) => {
-          const parent = DomUtils.getElementsByTagName(container, channel.children, false)[0];
-          return parent
-            ? DomUtils.getElementsByTagName(element, parent.children, false)
-                .map((node) => DomUtils.textContent(node).trim())
-                .filter(Boolean)
-            : undefined;
-        };
-        feed.skipHours ??= values("skipHours", "hour")?.map(Number).filter(Number.isFinite);
-        feed.skipDays ??= values("skipDays", "day");
-      }
+  // Feedsmith 2.9.6 drops singleton hour/day lists. Recover those channel fields
+  // with the existing XML parser; repeated values still come from feedsmith.
+  if (isRss && /<skip(?:Hours|Days)\b/.test(source)) {
+    const document = parseDocument(source, { xmlMode: true });
+    const root = DomUtils.getElementsByTagName("rss", document.children, false)[0];
+    const channel = root && DomUtils.getElementsByTagName("channel", root.children, false)[0];
+    if (channel) {
+      const values = (container: string, element: string) => {
+        const parent = DomUtils.getElementsByTagName(container, channel.children, false)[0];
+        return parent
+          ? DomUtils.getElementsByTagName(element, parent.children, false)
+              .map((node) => DomUtils.textContent(node).trim())
+              .filter(Boolean)
+          : undefined;
+      };
+      feed.skipHours ??= values("skipHours", "hour")?.map(Number).filter(Number.isFinite);
+      feed.skipDays ??= values("skipDays", "day");
     }
   }
   const title = string(feed.title) ?? feedUrl;

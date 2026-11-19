@@ -199,18 +199,17 @@ export class YouTubeService {
             rule.conditions[0]?.field === "media" &&
             rule.conditions[0]?.pattern === "short",
         );
-      if (!existing) {
-        const rule = this.database.rules.createRule(userId, {
-          name: "Hide YouTube Shorts",
-          folderId: folder.id,
-          conditions: [{ field: "media", pattern: "short" }],
-          conditionOperator: "and",
-          action: "hide",
-        });
-        this.database.connection
-          .prepare("UPDATE rules SET youtube_generated = 1 WHERE id = ? AND user_id = ?")
-          .run(rule.id, userId);
-      }
+      if (existing) return;
+      const rule = this.database.rules.createRule(userId, {
+        name: "Hide YouTube Shorts",
+        folderId: folder.id,
+        conditions: [{ field: "media", pattern: "short" }],
+        conditionOperator: "and",
+        action: "hide",
+      });
+      this.database.connection
+        .prepare("UPDATE rules SET youtube_generated = 1 WHERE id = ? AND user_id = ?")
+        .run(rule.id, userId);
     })();
   }
 

@@ -59,19 +59,14 @@ export function xVideoPostIds(
   articleUrl: string | null | undefined,
   feedContentHtml: string | null | undefined,
 ): string[] {
+  if (!feedContentHtml) return [];
   const postIds = new Set<string>();
-  if (feedContentHtml) {
-    for (const match of feedContentHtml.matchAll(ANCHOR)) {
-      const anchor = match[0];
-      const postId = xPostId(match[2]);
-      if (postId && isVideoAnchor(anchor)) postIds.add(postId);
-    }
+  for (const match of feedContentHtml.matchAll(ANCHOR)) {
+    const anchor = match[0];
+    const postId = xPostId(match[2]);
+    if (postId && isVideoAnchor(anchor)) postIds.add(postId);
   }
-  if (
-    postIds.size === 0 &&
-    feedContentHtml &&
-    /(?:amplify|ext_tw)_video_thumb/i.test(feedContentHtml)
-  ) {
+  if (postIds.size === 0 && /(?:amplify|ext_tw)_video_thumb/i.test(feedContentHtml)) {
     const postId = xPostId(articleUrl);
     if (postId) postIds.add(postId);
   }

@@ -187,19 +187,18 @@ export function useArticleQueue({
         : [article, ...current],
     );
     setActiveArticleId(article.id);
-    if (listAnchor.phase === "awaiting-article") {
-      const context = route.articleContext();
-      const surrounding: ReaderRoute = context?.route ?? {
-        kind: "reader",
-        scope: article.feedId === null ? "all" : "feed",
-        scopeId: article.feedId,
-        state: article.feedId === null ? "saved" : "all",
-        search: "",
-      };
-      route.setArticleContext(surrounding, context?.articleIndex);
-      setLoadedReaderRoute(surrounding);
-      setListAnchor({ phase: "around-article", articleId: listAnchor.articleId });
-    }
+    if (listAnchor.phase !== "awaiting-article") return;
+    const context = route.articleContext();
+    const surrounding: ReaderRoute = context?.route ?? {
+      kind: "reader",
+      scope: article.feedId === null ? "all" : "feed",
+      scopeId: article.feedId,
+      state: article.feedId === null ? "saved" : "all",
+      search: "",
+    };
+    route.setArticleContext(surrounding, context?.articleIndex);
+    setLoadedReaderRoute(surrounding);
+    setListAnchor({ phase: "around-article", articleId: listAnchor.articleId });
   }, [
     detail.data,
     route.routedArticleId,

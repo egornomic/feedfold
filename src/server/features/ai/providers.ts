@@ -412,38 +412,37 @@ export function createAiProviders(
             if (!part || typeof part !== "object") continue;
             const block = part as Record<string, unknown>;
             if (block.type === "refusal") refused = true;
-            if (block.type === "output_text" && typeof block.text === "string") {
-              values.push(block.text);
-              const annotations = Array.isArray(block.annotations) ? block.annotations : [];
-              for (const annotationValue of annotations) {
-                const annotation = record(annotationValue);
-                if (annotation?.type !== "url_citation") continue;
-                const sourceIndex = addGroundingSource(
-                  sources,
-                  sourceIndices,
-                  annotation.url,
-                  annotation.title,
-                );
-                if (
-                  sourceIndex === null ||
-                  typeof annotation.start_index !== "number" ||
-                  typeof annotation.end_index !== "number" ||
-                  !Number.isInteger(annotation.start_index) ||
-                  !Number.isInteger(annotation.end_index) ||
-                  annotation.start_index < 0 ||
-                  annotation.end_index <= annotation.start_index ||
-                  annotation.end_index > block.text.length
-                ) {
-                  continue;
-                }
-                supports.push({
-                  startIndex: textLength + annotation.start_index,
-                  endIndex: textLength + annotation.end_index,
-                  sourceIndices: [sourceIndex],
-                });
+            if (block.type !== "output_text" || typeof block.text !== "string") continue;
+            values.push(block.text);
+            const annotations = Array.isArray(block.annotations) ? block.annotations : [];
+            for (const annotationValue of annotations) {
+              const annotation = record(annotationValue);
+              if (annotation?.type !== "url_citation") continue;
+              const sourceIndex = addGroundingSource(
+                sources,
+                sourceIndices,
+                annotation.url,
+                annotation.title,
+              );
+              if (
+                sourceIndex === null ||
+                typeof annotation.start_index !== "number" ||
+                typeof annotation.end_index !== "number" ||
+                !Number.isInteger(annotation.start_index) ||
+                !Number.isInteger(annotation.end_index) ||
+                annotation.start_index < 0 ||
+                annotation.end_index <= annotation.start_index ||
+                annotation.end_index > block.text.length
+              ) {
+                continue;
               }
-              textLength += block.text.length;
+              supports.push({
+                startIndex: textLength + annotation.start_index,
+                endIndex: textLength + annotation.end_index,
+                sourceIndices: [sourceIndex],
+              });
             }
+            textLength += block.text.length;
           }
         }
         const usage = response.usage as Record<string, unknown> | undefined;

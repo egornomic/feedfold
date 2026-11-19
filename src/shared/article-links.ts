@@ -19,22 +19,21 @@ export function extractHttpLinks(text: string): TextLink[] {
     const explicitLabel = /(?:^|[.!?]\s+)([\p{L}\p{N}][\p{L}\p{N} _+#&/-]{0,39}):$/u.exec(
       context,
     )?.[1];
+    previousMatchEnd = start + rawText.length;
 
     try {
       const url = new URL(linkText);
-      if (url.protocol === "http:" || url.protocol === "https:") {
-        links.push({
-          href: url.toString(),
-          label: explicitLabel ?? url.hostname.replace(/^www\./, ""),
-          start,
-          end: start + linkText.length,
-          text: linkText,
-        });
-      }
+      if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+      links.push({
+        href: url.toString(),
+        label: explicitLabel ?? url.hostname.replace(/^www\./, ""),
+        start,
+        end: start + linkText.length,
+        text: linkText,
+      });
     } catch {
       // Invalid URLs do not become links.
     }
-    previousMatchEnd = start + rawText.length;
   }
 
   return links;
