@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -66,7 +67,7 @@ export async function createApp(services: AppServices): Promise<FastifyInstance>
   const requestUsers = new WeakMap<FastifyRequest, { id: number; username: string }>();
   const userId = (request: FastifyRequest): number => {
     const user = requestUsers.get(request);
-    if (!user) throw new Error("Authenticated user is missing");
+    assert(user, "Authenticated user is missing");
     return user.id;
   };
 

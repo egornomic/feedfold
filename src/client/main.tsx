@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 import "@fontsource-variable/ibm-plex-sans/wght.css";
 import "@fontsource-variable/ibm-plex-sans/wght-italic.css";
+import { assert } from "../shared/assert";
 import { App } from "./app/app";
 import { ApplicationBoundary } from "./app/application-boundary";
 import { isDesktopApp } from "./platform/desktop";
@@ -28,7 +29,7 @@ for (const style of ["normal", "italic"])
   void document.fonts.load(`${style} 1em "IBM Plex Sans Variable"`, "aąЖ");
 
 const root = document.getElementById("root");
-if (!root) throw new Error("The feedfold root element is missing.");
+assert(root, "The feedfold root element is missing.");
 const Application = import.meta.env.DEV
   ? lazy(() => import("../demo/stress-app").then(({ StressApp }) => ({ default: StressApp })))
   : App;

@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useStore } from "zustand";
+import { assert } from "../../shared/assert";
 import {
   applyReaderAppearance,
   createReaderPreferencesStore,
@@ -44,7 +45,7 @@ export function SessionStateProvider({
 
 function useSessionStores() {
   const stores = useContext(SessionStateContext);
-  if (!stores) throw new Error("Session state requires a signed-in account");
+  assert(stores, "Session state requires a signed-in account");
   return stores;
 }
 

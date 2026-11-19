@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type Sqlite from "better-sqlite3";
 import type { Feed, WebFeedConfig } from "../../../shared/types.js";
 import { InvalidRequestError, OperationForbiddenError } from "../../errors.js";
@@ -84,15 +85,11 @@ export class FeedService {
   ): Feed {
     return this.sqlite.transaction(() => {
       this.assertCanCreateFeed(userId);
-      const feed = this.repository.createFeed(userId, input);
-      if (!feed.paused) {
-        this.ingestion.initializeSubscription(
-          userId,
-          feed.id,
-          this.repository.sourceIdForFeed(feed.id),
-        );
-      }
-      return this.repository.getFeed(userId, feed.id) as Feed;
+      const { id, sourceId } = this.repository.createFeed(userId, input);
+      if (!input.paused) this.ingestion.initializeSubscription(userId, id, sourceId);
+      const feed = this.repository.getFeed(userId, id);
+      assert(feed, "The new feed is missing");
+      return feed;
     })();
   }
 
@@ -130,7 +127,9 @@ export class FeedService {
         parsed: input.parsed,
         webMatchCount: input.parsed.articles.length,
       });
-      return this.repository.getFeed(userId, feedId) as Feed;
+      const feed = this.repository.getFeed(userId, feedId);
+      assert(feed, "The new web feed is missing");
+      return feed;
     })();
   }
 
@@ -174,22 +173,22 @@ export class FeedService {
       paused?: boolean;
     },
   ): Feed | null {
-    const existing = this.repository.getFeed(userId, id);
-    if (!existing) return null;
-    if (
-      input.feedUrl !== undefined &&
-      new URL(input.feedUrl).href !== existing.feedUrl &&
-      this.sqlite
-        .prepare("SELECT 1 FROM youtube_feeds WHERE user_id = ? AND feed_id = ?")
-        .get(userId, id)
-    ) {
-      throw new InvalidRequestError(
-        "A synced YouTube feed must keep its channel URL. Add a separate feed for another source.",
-      );
-    }
     return this.sqlite.transaction(() => {
-      const updated = this.repository.updateFeed(userId, id, input);
-      if (updated && input.folderId !== undefined && input.folderId !== existing.folderId) {
+      const existing = this.repository.getFeed(userId, id);
+      if (!existing) return null;
+      if (
+        input.feedUrl !== undefined &&
+        new URL(input.feedUrl).href !== existing.feedUrl &&
+        this.sqlite
+          .prepare("SELECT 1 FROM youtube_feeds WHERE user_id = ? AND feed_id = ?")
+          .get(userId, id)
+      ) {
+        throw new InvalidRequestError(
+          "A synced YouTube feed must keep its channel URL. Add a separate feed for another source.",
+        );
+      }
+      const updated = this.repository.updateFeed(userId, existing, input);
+      if (updated.folderId !== existing.folderId) {
         this.rules.recomputeRulesForFeedArticles(userId, id, this.articles.listFeedArticleIds(id));
       }
       return updated;

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type Sqlite from "better-sqlite3";
 import {
   DEFAULT_ARTICLE_SUMMARY_PROMPT,
@@ -1852,6 +1853,6 @@ export function migrateDatabase(
       if (migration.foreignKeysOff) database.pragma("foreign_keys = ON");
     }
     const violations = database.pragma("foreign_key_check") as unknown[];
-    if (violations.length > 0) throw new Error(`Migration ${index + 1} broke foreign keys`);
+    assert(violations.length === 0, `Migration ${index + 1} broke foreign keys`);
   }
 }

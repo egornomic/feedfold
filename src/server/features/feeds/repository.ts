@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type Sqlite from "better-sqlite3";
 import type {
   Feed,
@@ -155,7 +156,7 @@ export class FeedRepository {
       folderId?: number | null;
       paused?: boolean;
     },
-  ): Feed {
+  ): { id: number; sourceId: number } {
     this.folders.assertFolderExists(userId, input.folderId);
     const timestamp = now();
     const feedUrl = xFeedUrl(input.feedUrl, nitterBaseUrls()) ?? new URL(input.feedUrl).toString();
@@ -180,12 +181,12 @@ export class FeedRepository {
         timestamp,
         timestamp,
       );
-    return this.getFeed(userId, Number(result.lastInsertRowid)) as Feed;
+    return { id: Number(result.lastInsertRowid), sourceId };
   }
 
   updateFeed(
     userId: number,
-    id: number,
+    existing: Feed,
     input: {
       title?: string;
       feedUrl?: string;
@@ -193,9 +194,8 @@ export class FeedRepository {
       folderId?: number | null;
       paused?: boolean;
     },
-  ): Feed | null {
-    const existing = this.getFeed(userId, id);
-    if (!existing) return null;
+  ): Feed {
+    const { id } = existing;
     this.folders.assertFolderExists(userId, input.folderId);
     const feedUrl = input.feedUrl
       ? ((existing.sourceKind === "published" ? xFeedUrl(input.feedUrl, nitterBaseUrls()) : null) ??
@@ -212,38 +212,38 @@ export class FeedRepository {
     const title = input.title ?? (existing.title === existing.feedUrl ? feedUrl : existing.title);
     const paused = input.paused ?? existing.paused;
     const sourceChanged = sourceId !== oldSourceId;
-    this.sqlite.transaction(() => {
+    this.sqlite
+      .prepare(
+        `UPDATE feeds
+         SET source_id = ?, title = ?, folder_id = ?, paused = ?,
+             initialized_at = CASE WHEN ? = 1 THEN NULL ELSE initialized_at END,
+             updated_at = ?
+         WHERE id = ? AND user_id = ?`,
+      )
+      .run(
+        sourceId,
+        title,
+        input.folderId === undefined ? existing.folderId : input.folderId,
+        paused ? 1 : 0,
+        sourceChanged ? 1 : 0,
+        now(),
+        id,
+        userId,
+      );
+    if (input.siteUrl !== undefined) {
       this.sqlite
-        .prepare(
-          `UPDATE feeds
-           SET source_id = ?, title = ?, folder_id = ?, paused = ?,
-               initialized_at = CASE WHEN ? = 1 THEN NULL ELSE initialized_at END,
-               updated_at = ?
-           WHERE id = ? AND user_id = ?`,
-        )
-        .run(
-          sourceId,
-          title,
-          input.folderId === undefined ? existing.folderId : input.folderId,
-          paused ? 1 : 0,
-          sourceChanged ? 1 : 0,
-          now(),
-          id,
-          userId,
-        );
-      if (input.siteUrl !== undefined) {
-        this.sqlite
-          .prepare("UPDATE feed_sources SET site_url = ? WHERE id = ?")
-          .run(input.siteUrl, sourceId);
-      }
-      if (!paused && (sourceChanged || existing.paused)) {
-        this.sqlite
-          .prepare("UPDATE feed_sources SET next_poll_at = ? WHERE id = ?")
-          .run(now(), sourceId);
-      }
-      if (sourceChanged) this.deleteOrphanSources();
-    })();
-    return this.getFeed(userId, id);
+        .prepare("UPDATE feed_sources SET site_url = ? WHERE id = ?")
+        .run(input.siteUrl, sourceId);
+    }
+    if (!paused && (sourceChanged || existing.paused)) {
+      this.sqlite
+        .prepare("UPDATE feed_sources SET next_poll_at = ? WHERE id = ?")
+        .run(now(), sourceId);
+    }
+    if (sourceChanged) this.deleteOrphanSources();
+    const updated = this.getFeed(userId, id);
+    assert(updated, "The updated feed is missing");
+    return updated;
   }
 
   deleteFeed(userId: number, id: number): boolean {
@@ -313,11 +313,12 @@ export class FeedRepository {
         lastModified: row.lastModified === null ? null : String(row.lastModified),
         pollIntervalMinutes: Number(row.pollIntervalMinutes) as FeedPollIntervalMinutes,
       };
-      const sourceKind = row.sourceKind as FeedSourceKind;
+      const { sourceKind } = row;
       if (sourceKind === "published") {
-        if (row.webConfigJson !== null) {
-          throw new Error(`Published feed ${base.id} unexpectedly has a web feed configuration`);
-        }
+        assert(
+          row.webConfigJson === null,
+          `Published feed ${base.id} has a web feed configuration`,
+        );
         return {
           ...base,
           sourceKind,
@@ -326,13 +327,15 @@ export class FeedRepository {
           lastMatchCount: null,
         };
       }
-      if (sourceKind !== "web" || row.webConfigJson === null) {
-        throw new Error(`Web feed ${base.id} is missing its page selection`);
-      }
+      assert(sourceKind === "web", `Feed ${base.id} has an invalid source kind`);
+      assert(
+        typeof row.webConfigJson === "string",
+        `Web feed ${base.id} is missing its page selection`,
+      );
       return {
         ...base,
         sourceKind,
-        webConfig: JSON.parse(String(row.webConfigJson)) as WebFeedConfig,
+        webConfig: JSON.parse(row.webConfigJson) as WebFeedConfig,
         selectionRevision: Number(row.selectionRevision),
         lastMatchCount: Number(row.lastMatchCount),
       };

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { JSDOM } from "jsdom";
 import type { WebFeedAnalysis, WebFeedConfig } from "../../../../shared/types.js";
@@ -101,7 +102,7 @@ export class WebFeedService {
       this.#pruneSnapshots();
       while (this.#snapshots.size >= MAX_SNAPSHOTS) {
         const oldest = this.#snapshots.keys().next().value;
-        if (typeof oldest !== "string") break;
+        assert(oldest !== undefined, "A full snapshot cache must contain a snapshot");
         this.#snapshots.delete(oldest);
       }
       this.#snapshots.set(snapshotId, {

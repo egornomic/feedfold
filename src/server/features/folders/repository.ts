@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type Sqlite from "better-sqlite3";
 import { validFolderParent } from "../../../shared/folder-tree.js";
 import type { Folder, FolderSortDirection } from "../../../shared/types.js";
@@ -95,7 +96,9 @@ export class FolderRepository {
         timestamp,
         timestamp,
       );
-    return this.getFolder(userId, Number(result.lastInsertRowid)) as Folder;
+    const folder = this.getFolder(userId, Number(result.lastInsertRowid));
+    assert(folder, "The new folder is missing");
+    return folder;
   }
 
   updateFolder(

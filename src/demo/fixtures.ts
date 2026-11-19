@@ -1,3 +1,4 @@
+import { assert } from "../shared/assert.js";
 import type { AiSettings, AppSettings, Article, Feed, Folder, Rule } from "../shared/types.js";
 
 export interface DemoData {
@@ -411,7 +412,7 @@ export function createDemoData(now = new Date()): DemoData {
   ];
   const articles = articleSpecs.map((spec): Article => {
     const feed = feedsById.get(spec.feedId);
-    if (!feed) throw new Error(`Demo feed ${spec.feedId} is missing.`);
+    assert(feed, `Demo feed ${spec.feedId} is missing.`);
     const publishedAt =
       spec.publishedAt === undefined ? before(now, spec.hoursAgo) : spec.publishedAt;
     const contentHtml =

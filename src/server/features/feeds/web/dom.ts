@@ -114,12 +114,7 @@ function fieldSelector(items: Element[], patterns: string[]): string | null {
   for (const selector of patterns) {
     let matches = 0;
     for (const item of items) {
-      try {
-        if (selectedElement(item, selector)) matches += 1;
-      } catch {
-        matches = 0;
-        break;
-      }
+      if (selectedElement(item, selector)) matches += 1;
     }
     if (matches === 0) continue;
     if (!best || matches > best.matches) best = { selector, matches };

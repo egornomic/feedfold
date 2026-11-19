@@ -1,4 +1,5 @@
 import type Sqlite from "better-sqlite3";
+import { z } from "zod";
 import { telegramPostIdentity } from "../../shared/telegram.js";
 import type {
   AiArticleSourceKind,
@@ -106,32 +107,21 @@ interface ArticleCursorBoundary {
 
 export type ArticleCursor = Map<string, ArticleCursorBoundary>;
 
+const cursorBoundaries = z.array(
+  z.tuple([
+    z.string(),
+    z.string(),
+    z.number().refine(Number.isInteger),
+    z.number().min(0).refine(Number.isInteger),
+  ]),
+);
+
 export function decodeArticleCursor(cursor: string): ArticleCursor {
   try {
-    const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
-    if (!Array.isArray(value)) throw new Error("Invalid cursor fields");
-    const boundaries: ArticleCursor = new Map();
-    for (const boundary of value) {
-      if (
-        !Array.isArray(boundary) ||
-        boundary.length !== 4 ||
-        typeof boundary[0] !== "string" ||
-        typeof boundary[1] !== "string" ||
-        typeof boundary[2] !== "number" ||
-        !Number.isInteger(boundary[2]) ||
-        typeof boundary[3] !== "number" ||
-        !Number.isInteger(boundary[3]) ||
-        boundary[3] < 0
-      ) {
-        throw new Error("Invalid cursor fields");
-      }
-      boundaries.set(boundary[0], {
-        sortAt: boundary[1],
-        id: boundary[2],
-        consumed: boundary[3],
-      });
-    }
-    return boundaries;
+    const value = cursorBoundaries.parse(JSON.parse(Buffer.from(cursor, "base64url").toString()));
+    return new Map(
+      value.map(([bucket, sortAt, id, consumed]) => [bucket, { sortAt, id, consumed }]),
+    );
   } catch {
     throw new InvalidRequestError("This article page has expired. Reload the list.");
   }

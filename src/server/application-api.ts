@@ -190,10 +190,7 @@ export class ApplicationApi {
       return this.#application.analyzeWebPage(this.#userId, body.url);
     },
     createFeed: async (payload) => {
-      return notFound(
-        await this.#application.createFeed(this.#userId, inputs.createFeed.parse(payload)),
-        "Feed",
-      );
+      return this.#application.createFeed(this.#userId, inputs.createFeed.parse(payload));
     },
     feed: async (payload) => {
       const body = input(z.object({ id }).strict(), payload);

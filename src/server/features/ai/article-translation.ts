@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { extractHttpLinks } from "../../../shared/article-links.js";
 import type { AiArticleSourceKind } from "../../../shared/types.js";
@@ -178,7 +179,7 @@ export function renderArticleTranslation(
   });
   const fragment = JSDOM.fragment(prepared.sourceHtml);
   const segments = translationSegments(fragment);
-  if (segments.length !== prepared.segmentCount) throw invalidTranslationResponse();
+  assert(segments.length === count, "Prepared article translation has an incorrect segment count");
   for (const [id, segment] of segments.entries()) {
     segment.node.data = `${segment.prefix}${translated[id]}${segment.suffix}`;
   }

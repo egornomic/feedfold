@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type Sqlite from "better-sqlite3";
 import { articleMatchesRule, type RuleArticle } from "../../../shared/article-rules.js";
 import type {
@@ -79,7 +80,9 @@ export class RuleRepository {
         );
       const id = Number(result.lastInsertRowid);
       this.reapplyRule(id);
-      return this.getRule(userId, id) as Rule;
+      const rule = this.getRule(userId, id);
+      assert(rule, "The new rule is missing");
+      return rule;
     })();
   }
 
