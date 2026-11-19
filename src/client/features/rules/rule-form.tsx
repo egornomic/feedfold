@@ -1,5 +1,5 @@
 import { Check, LoaderCircle, Plus, X } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type {
   BootstrapData,
   Rule,
@@ -10,7 +10,13 @@ import type {
 } from "../../../shared/types";
 import { errorMessage, type RuleInput } from "../../api/api";
 import { DropdownSelect } from "../../ui/dropdown";
-import { collapseWhileExiting, type MotionState, motionExitDuration } from "../../ui/motion";
+import {
+  type AnimationOrigin,
+  collapseWhileExiting,
+  type MotionState,
+  motionExitDuration,
+  setTriggerOrigin,
+} from "../../ui/motion";
 import type { ReaderDataMutations } from "../reader/reader-data";
 import type { RuleFormPreset } from "./rule-form-types";
 import { RULE_ACTION_COPY, RULE_FIELD_LABELS, RuleActionIcon } from "./rule-presentation";
@@ -26,6 +32,7 @@ export function RuleForm({
   initial,
   preset,
   motionState,
+  origin,
   mutations,
   onCancel,
   onSaved,
@@ -35,6 +42,7 @@ export function RuleForm({
   initial?: Rule | undefined;
   preset?: RuleFormPreset | undefined;
   motionState: MotionState;
+  origin?: AnimationOrigin | undefined;
   mutations: ReaderDataMutations;
   onCancel: () => void;
   onSaved: (rule: Rule) => Promise<void> | void;
@@ -56,6 +64,12 @@ export function RuleForm({
   const conditionInputRefs = useRef(new Map<number, HTMLInputElement>());
   const conditionRemovalTimers = useRef(new Map<number, number>());
   const addConditionButtonRef = useRef<HTMLButtonElement>(null);
+  const attachForm = useCallback(
+    (element: HTMLFormElement | null) => {
+      if (element) setTriggerOrigin(element, origin);
+    },
+    [origin],
+  );
   const [conditions, setConditions] = useState<EditableRuleCondition[]>(() => {
     const values = initial?.conditions ?? [
       { field: preset?.field ?? "title", pattern: preset?.pattern ?? "" },
@@ -155,6 +169,7 @@ export function RuleForm({
 
   return (
     <form
+      ref={attachForm}
       className="inline-editor rule-form"
       data-motion-state={motionState}
       inert={motionState === "closed"}

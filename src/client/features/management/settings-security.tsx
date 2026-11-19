@@ -1,12 +1,21 @@
 import { startAuthentication } from "@simplewebauthn/browser";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, KeyRound, LoaderCircle, X } from "lucide-react";
-import { type FormEvent, useCallback, useRef, useState } from "react";
+import { type FormEvent, type SubmitEvent, useCallback, useRef, useState } from "react";
 import { ApiError, api, errorMessage } from "../../api/api";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import { Modal, useDialog } from "../../ui/dialog";
+import { type AnimationOrigin, triggerCenter } from "../../ui/motion";
 
-export type SensitiveAction = <T>(action: () => Promise<T>) => Promise<T>;
+export type SensitiveAction = <T>(
+  action: () => Promise<T>,
+  origin: AnimationOrigin | undefined,
+) => Promise<T>;
+
+export function submitOrigin(event: SubmitEvent<HTMLFormElement>) {
+  const { submitter } = event.nativeEvent;
+  return submitter ? triggerCenter(submitter) : undefined;
+}
 
 interface StepUpRequest {
   operationId: string;
@@ -34,7 +43,7 @@ export function useSensitiveAction() {
   const stepUpError = stepUp.phase === "asking" ? stepUp.error : null;
 
   const runSensitive = useCallback<SensitiveAction>(
-    async <T,>(action: () => Promise<T>) => {
+    async <T,>(action: () => Promise<T>, origin: AnimationOrigin | undefined) => {
       try {
         return await action();
       } catch (caught) {
@@ -63,7 +72,7 @@ export function useSensitiveAction() {
             },
             error: null,
           });
-          stepUpDialog.open();
+          stepUpDialog.open(origin);
         });
       }
     },

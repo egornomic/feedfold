@@ -19,6 +19,7 @@ import type { BootstrapData, Feed, Folder } from "../../../shared/types";
 import { useInterfaceState } from "../../app/session-state";
 import { DropdownSelect } from "../../ui/dropdown";
 import { Menu, MenuPopup } from "../../ui/menu";
+import { type AnimationOrigin, triggerCenter } from "../../ui/motion";
 import { formatNumber } from "../../ui/number-format";
 import {
   FeedDragProvider,
@@ -39,10 +40,11 @@ import {
 } from "../feeds/feed-filters";
 import { feedHost } from "../feeds/feed-format";
 import {
+  type FeedActionHandler,
   FeedActionMenuItems,
   type FeedManagementAction,
+  type FolderActionHandler,
   FolderActionMenuItems,
-  type FolderManagementAction,
 } from "../feeds/feed-management";
 import { folderBranchFeedCount, folderHierarchy, folderPathLabel } from "../feeds/folder-hierarchy";
 import type { ReaderDataMutations } from "../reader/reader-data";
@@ -157,7 +159,8 @@ function FeedsPageContent({
   showToast: (message: string) => void;
 }) {
   const setManagementRequest = useInterfaceState((state) => state.setManagementRequest);
-  const onAddFolder = () => setManagementRequest({ kind: "create-folder" });
+  const onAddFolder = (trigger: HTMLButtonElement) =>
+    setManagementRequest({ kind: "create-folder", origin: triggerCenter(trigger) });
   const onFeedAction = useInterfaceState((state) => state.openFeedManagement);
   const onFolderAction = useInterfaceState((state) => state.openFolderManagement);
   const [activeTab, setActiveTab] = useState<FeedsPageTab>("subscriptions");
@@ -233,7 +236,11 @@ function FeedsPageContent({
               </button>
             </div>
           ) : (
-            <button className="primary-button" type="button" onClick={onAddFolder}>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={(event) => onAddFolder(event.currentTarget)}
+            >
               <FolderPlus aria-hidden="true" size={16} />
               Add folder
             </button>
@@ -429,7 +436,7 @@ function FeedsPageContent({
                       folders={bootstrap.folders}
                       manualRefreshEnabled={bootstrap.capabilities.manualRefresh}
                       onRefresh={() => onRefresh(feed.id)}
-                      onAction={(action) => onFeedAction(feed, action)}
+                      onAction={(action, origin) => onFeedAction(feed, action, origin)}
                     />
                   ))}
                 </ul>
@@ -460,7 +467,11 @@ function FeedsPageContent({
               <FolderIcon aria-hidden="true" size={22} />
               <h3>No folders yet</h3>
               <p>Create a folder to group feeds. Until then, feeds remain at the top level.</p>
-              <button className="secondary-button" type="button" onClick={onAddFolder}>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={(event) => onAddFolder(event.currentTarget)}
+              >
                 <FolderPlus aria-hidden="true" size={16} />
                 Add folder
               </button>
@@ -567,7 +578,7 @@ function FeedRow({
   folders: Folder[];
   manualRefreshEnabled: boolean;
   onRefresh: () => void;
-  onAction: (action: FeedManagementAction) => void;
+  onAction: (action: FeedManagementAction, origin: AnimationOrigin) => void;
 }) {
   const status = visibleFeedStatus(feed);
   const sourceUrl = feed.siteUrl ?? feed.feedUrl;
@@ -615,7 +626,7 @@ function FeedRow({
             <button
               className="feed-repair-button"
               type="button"
-              onClick={() => onAction("selection")}
+              onClick={(event) => onAction("selection", triggerCenter(event.currentTarget))}
             >
               Repair
             </button>
@@ -679,7 +690,7 @@ function FolderFeedRow({
 }: {
   feed: Feed;
   feedDrag: FeedDragState;
-  onAction: (action: FeedManagementAction) => void;
+  onAction: (action: FeedManagementAction, origin: AnimationOrigin) => void;
 }) {
   const status = visibleFeedStatus(feed);
   const statusLabel = feedStatusLabel(feed, status);
@@ -699,7 +710,7 @@ function FolderFeedRow({
         aria-label={`Move ${feed.title} to another folder`}
         ref={dragRef}
         title={`Drag ${feed.title} to another folder`}
-        onClick={() => onAction("move")}
+        onClick={(event) => onAction("move", triggerCenter(event.currentTarget))}
       >
         <GripVertical className="folder-feed-grip" aria-hidden="true" size={15} />
         <FeedSourceIcon
@@ -744,8 +755,8 @@ function FolderBranch({
   feedDrag: FeedDragState;
   onToggle: (target: FeedDropTarget) => void;
   onReveal: (target: FeedDropTarget) => void;
-  onFeedAction: (feed: Feed, action: FeedManagementAction) => void;
-  onFolderAction: (folder: Folder, action: FolderManagementAction) => void;
+  onFeedAction: FeedActionHandler<Feed>;
+  onFolderAction: FolderActionHandler<Folder>;
 }) {
   const folderId = folder?.id ?? null;
   const target = feedDropTarget(folderId);
@@ -813,7 +824,9 @@ function FolderBranch({
             variant="actions"
             managementTarget={{ kind: "folder", id: folder.id }}
           >
-            <FolderActionMenuItems onAction={(action) => onFolderAction(folder, action)} />
+            <FolderActionMenuItems
+              onAction={(action, origin) => onFolderAction(folder, action, origin)}
+            />
           </AnchoredPopover>
         ) : (
           <span className="folder-row-action-space" aria-hidden="true" />
@@ -840,7 +853,7 @@ function FolderBranch({
               key={feed.id}
               feed={feed}
               feedDrag={feedDrag}
-              onAction={(action) => onFeedAction(feed, action)}
+              onAction={(action, origin) => onFeedAction(feed, action, origin)}
             />
           ))}
         </ul>

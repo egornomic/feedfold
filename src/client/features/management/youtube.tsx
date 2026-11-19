@@ -6,6 +6,7 @@ import { httpRequest } from "../../api/http-request";
 import { youtubeQuery } from "../../api/query";
 import { useRequestMutation } from "../../api/use-request-mutation";
 import { Modal, useDialog } from "../../ui/dialog";
+import { triggerCenter } from "../../ui/motion";
 
 type YouTubeActivity =
   | { phase: "idle"; message: { kind: "notice" | "error"; text: string } | null }
@@ -160,9 +161,9 @@ export function YouTubeSettings({ userId }: { userId: string }) {
               className="primary-button"
               type="button"
               disabled={busy}
-              onClick={() => {
+              onClick={(event) => {
                 setActivity(IDLE);
-                connectDialog.open();
+                connectDialog.open(triggerCenter(event.currentTarget));
               }}
             >
               Connect YouTube

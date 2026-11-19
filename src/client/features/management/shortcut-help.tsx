@@ -1,6 +1,7 @@
 import { AlertTriangle, Keyboard, X } from "lucide-react";
 import { Kbd } from "../../ui/controls";
 import { Modal, useDialog } from "../../ui/dialog";
+import type { AnimationOrigin } from "../../ui/motion";
 import "./shortcut-help.css";
 
 const shortcuts = [
@@ -96,15 +97,22 @@ function ShortcutHelp({
   enabled,
   manualRefreshEnabled,
   onClose,
+  origin,
 }: {
   enabled: boolean;
   manualRefreshEnabled: boolean;
   onClose: () => void;
+  origin?: AnimationOrigin | undefined;
 }) {
   const dialog = useDialog(onClose);
 
   return (
-    <Modal dialog={dialog} className="shortcut-dialog" aria-labelledby="shortcut-dialog-title">
+    <Modal
+      dialog={dialog}
+      origin={origin}
+      className="shortcut-dialog"
+      aria-labelledby="shortcut-dialog-title"
+    >
       <div className="dialog-heading">
         <div>
           <span className="dialog-icon" aria-hidden="true">

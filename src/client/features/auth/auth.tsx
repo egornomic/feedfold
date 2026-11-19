@@ -20,6 +20,7 @@ import { AUTH_REQUIRED_EVENT, api, appUrl, errorMessage } from "../../api/api.js
 import { useRequestMutation } from "../../api/use-request-mutation.js";
 import { BrandIdentity } from "../../ui/brand.js";
 import { Modal, useDialog } from "../../ui/dialog.js";
+import type { AnimationOrigin } from "../../ui/motion.js";
 import { Onboarding } from "./onboarding.js";
 import { finishOnboarding, saveOnboardingStep } from "./onboarding-state.js";
 
@@ -60,11 +61,13 @@ export function LoginDialog({
   onDismiss,
   onReady,
   initialOnboardingUser,
+  origin,
 }: {
   onAuthenticated: (user: SessionUser) => void;
   onDismiss: () => void;
   onReady: () => void;
   initialOnboardingUser?: SessionUser | undefined;
+  origin?: AnimationOrigin | undefined;
 }) {
   const { run: mutateRequest } = useRequestMutation();
   const [stage, setStage] = useState<AuthStage>(() =>
@@ -225,6 +228,7 @@ export function LoginDialog({
   return (
     <Modal
       dialog={dialog}
+      origin={origin}
       outsideDismiss
       dismissible={!setupUser}
       className={`login-dialog${setupUser ? " onboarding-dialog" : ""}`}

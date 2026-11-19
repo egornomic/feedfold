@@ -17,7 +17,7 @@ import { MARK_READ_AGE_DAYS } from "../../../shared/types";
 import { useInterfaceState } from "../../app/session-state";
 import { IconButton } from "../../ui/controls";
 import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
-import { useMotionPresence } from "../../ui/motion";
+import { triggerCenter, useMotionPresence } from "../../ui/motion";
 import { formatNumber } from "../../ui/number-format";
 
 interface ReaderToolbarProps {
@@ -66,7 +66,6 @@ export function ReaderToolbar({
   const navOpen = useInterfaceState((state) => state.navOpen);
   const onToggleNav = useInterfaceState((state) => state.toggleNav);
   const setShortcutHelpOpen = useInterfaceState((state) => state.setShortcutHelpOpen);
-  const onHelp = () => setShortcutHelpOpen(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
@@ -255,7 +254,7 @@ export function ReaderToolbar({
           />
           <IconButton
             label="Open keyboard shortcut reference (?)"
-            onClick={onHelp}
+            onClick={(event) => setShortcutHelpOpen(true, triggerCenter(event.currentTarget))}
             className="help-action"
             tooltip
           >
