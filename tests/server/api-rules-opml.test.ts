@@ -806,7 +806,11 @@ describe("live API, OPML, and filtering rules", () => {
     const parent = bootstrap.folders.find((folder) => folder.name === "Parent");
     const child = bootstrap.folders.find((folder) => folder.name === "Child");
     expect(child?.parentId).toBe(parent?.id);
-    expect(bootstrap.folders.some((folder) => folder.name === "Someday")).toBe(true);
+    expect(bootstrap.folders.map(({ name, unreadCount }) => [name, unreadCount])).toEqual([
+      ["Child", 2],
+      ["Parent", 2],
+      ["Someday", 0],
+    ]);
     expect(bootstrap.feeds.find((feed) => feed.title === "My saved label")).toMatchObject({
       title: "My saved label",
       folderId: child?.id,
@@ -862,19 +866,33 @@ describe("live API, OPML, and filtering rules", () => {
       ),
     ).toEqual(["Keep this story"]);
 
-    await asReader(`/api/folders/${child?.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ parentId: null }),
-    });
+    expect(
+      await asReader(`/api/folders/${child?.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ parentId: null }),
+      }),
+    ).toMatchObject({ parentId: null, unreadCount: 2 });
     const movedOut = await asReader<{ articles: Article[] }>("/api/articles?state=all");
     expect(new Set(movedOut.articles.map((article) => article.title))).toEqual(
       new Set(["Noisy weekly roundup", "Keep this story"]),
     );
     expect((await asReader<{ rules: Rule[] }>("/api/rules")).rules[0]?.matchedCount).toBe(0);
-    await asReader(`/api/folders/${child?.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ parentId: parent?.id }),
-    });
+    expect(
+      await asReader(`/api/folders/${child?.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ parentId: parent?.id }),
+      }),
+    ).toMatchObject({ parentId: parent?.id, unreadCount: 1 });
+    expect(
+      (await asReader<BootstrapData>("/api/bootstrap")).folders.map(({ name, unreadCount }) => [
+        name,
+        unreadCount,
+      ]),
+    ).toEqual([
+      ["Child", 1],
+      ["Parent", 1],
+      ["Someday", 0],
+    ]);
 
     const listed = await asReader<{ articles: Article[] }>("/api/articles?state=all");
     expect(listed.articles.map((article) => article.title)).toEqual(["Keep this story"]);

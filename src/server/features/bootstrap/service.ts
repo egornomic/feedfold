@@ -17,7 +17,7 @@ export class BootstrapService {
   getBootstrap(userId: number): Omit<BootstrapData, "aiSettings"> {
     const feeds = this.feeds.listFeeds(userId);
     return {
-      folders: this.folders.listFolders(userId),
+      folders: this.folders.listFolders(userId, feeds),
       feeds,
       settings: this.settings.getSettings(userId),
       counts: {

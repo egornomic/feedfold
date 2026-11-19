@@ -1,5 +1,5 @@
 import type Sqlite from "better-sqlite3";
-import type { Folder, FolderSortDirection } from "../../../shared/types.js";
+import type { Feed, Folder, FolderSortDirection } from "../../../shared/types.js";
 import type { RuleRepository } from "../rules/repository.js";
 import type { FolderRepository } from "./repository.js";
 
@@ -10,12 +10,16 @@ export class FolderService {
     private readonly rules: RuleRepository,
   ) {}
 
-  listFolders(userId: number): Folder[] {
-    return this.repository.listFolders(userId);
+  listFolders(userId: number, feeds: readonly Pick<Feed, "folderId" | "unreadCount">[]): Folder[] {
+    return this.repository.listFolders(userId, feeds);
   }
 
   getFolder(userId: number, id: number): Folder | null {
     return this.repository.getFolder(userId, id);
+  }
+
+  findRootFolderId(userId: number, name: string): number | undefined {
+    return this.repository.findRootFolderId(userId, name);
   }
 
   createFolder(
@@ -40,14 +44,14 @@ export class FolderService {
       sortDirection?: FolderSortDirection;
     },
   ): Folder | null {
-    const existing = this.repository.getFolder(userId, id);
-    if (!existing) return null;
     return this.sqlite.transaction(() => {
-      const updated = this.repository.updateFolder(userId, id, input);
-      if (updated && input.parentId !== undefined && input.parentId !== existing.parentId) {
+      const existing = this.repository.getFolderDetails(userId, id);
+      if (!existing) return null;
+      this.repository.updateFolder(userId, existing, input);
+      if (input.parentId !== undefined && input.parentId !== existing.parentId) {
         this.rules.recomputeRulesForAllArticles(userId);
       }
-      return updated;
+      return this.repository.getFolder(userId, id);
     })();
   }
 

@@ -181,18 +181,21 @@ export class YouTubeService {
     });
   }
 
+  private youtubeFolderId(userId: number): number {
+    return (
+      this.database.folders.findRootFolderId(userId, "YouTube") ??
+      this.database.folders.createFolder(userId, { name: "YouTube" }).id
+    );
+  }
+
   createShortsRule(userId: number): void {
     this.database.connection.transaction(() => {
-      const folder =
-        this.database.folders
-          .listFolders(userId)
-          .find((candidate) => candidate.name === "YouTube" && candidate.parentId === null) ??
-        this.database.folders.createFolder(userId, { name: "YouTube" });
+      const folderId = this.youtubeFolderId(userId);
       const existing = this.database.rules
         .listRules(userId)
         .find(
           (rule) =>
-            rule.folderId === folder.id &&
+            rule.folderId === folderId &&
             rule.action === "hide" &&
             rule.enabled &&
             rule.conditions.length === 1 &&
@@ -202,7 +205,7 @@ export class YouTubeService {
       if (existing) return;
       const rule = this.database.rules.createRule(userId, {
         name: "Hide YouTube Shorts",
-        folderId: folder.id,
+        folderId,
         conditions: [{ field: "media", pattern: "short" }],
         conditionOperator: "and",
         action: "hide",
@@ -235,11 +238,7 @@ export class YouTubeService {
           `Your YouTube subscriptions would exceed the ${limit}-feed account limit. Remove some subscriptions before the next automatic sync. Your feeds have not changed.`,
         );
       }
-      let folder = this.database.folders
-        .listFolders(userId)
-        .find((candidate) => candidate.name === "YouTube" && candidate.parentId === null);
-      if (missing.length && !folder)
-        folder = this.database.folders.createFolder(userId, { name: "YouTube" });
+      const folderId = missing.length > 0 ? this.youtubeFolderId(userId) : null;
       const track =
         this.database.connection.prepare(`INSERT INTO youtube_feeds (user_id, channel_id, feed_id) VALUES (?, ?, ?)
         ON CONFLICT(user_id, channel_id) DO UPDATE SET feed_id = excluded.feed_id`);
@@ -251,7 +250,7 @@ export class YouTubeService {
             feedUrl: url,
             title: channel.title,
             siteUrl: `https://www.youtube.com/channel/${channel.id}`,
-            folderId: folder?.id ?? null,
+            folderId,
           });
         track.run(userId, channel.id, feed.id);
       }
