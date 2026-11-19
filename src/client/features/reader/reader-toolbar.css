@@ -11,11 +11,13 @@
 }
 
 .reader-title-row {
+  --reader-toolbar-gap: 8px;
+
   display: flex;
   flex-wrap: wrap;
   min-height: 54px;
   align-items: center;
-  gap: 8px;
+  gap: var(--reader-toolbar-gap);
   padding: 8px 14px 8px 18px;
 }
 
@@ -87,7 +89,7 @@
   outline: 1px solid transparent;
   opacity: 1;
   transform: scale(1);
-  transform-origin: left center;
+  transform-origin: calc(-1 * (var(--control-size) / 2 + var(--reader-toolbar-gap))) center;
   transition:
     opacity var(--duration-surface) var(--ease-out),
     transform var(--duration-surface) var(--ease-out),

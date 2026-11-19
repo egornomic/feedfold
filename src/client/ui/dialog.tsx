@@ -1,19 +1,23 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { surfaceTransition } from "./motion.js";
+import { type AnimationOrigin, setTriggerOrigin, surfaceTransition } from "./motion.js";
 
 export function useDialog(onClosed: () => void, { autoOpen = true } = {}) {
   const [isOpen, setIsOpen] = useState(autoOpen);
+  const [origin, setOrigin] = useState<AnimationOrigin>();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const open = useCallback(() => setIsOpen(true), []);
+  const open = useCallback((triggerOrigin?: AnimationOrigin) => {
+    setOrigin(triggerOrigin);
+    setIsOpen(true);
+  }, []);
   const close = useCallback(() => setIsOpen(false), []);
 
   useEffect(() => {
     if (autoOpen) open();
   }, [autoOpen, open]);
 
-  return { isOpen, setIsOpen, dialogRef, open, close, onClosed };
+  return { isOpen, setIsOpen, dialogRef, open, close, onClosed, origin };
 }
 
 export function Modal({
@@ -22,14 +26,24 @@ export function Modal({
   outsideDismiss = false,
   className,
   children,
+  origin = dialog.origin,
   ...props
 }: Omit<Dialog.Popup.Props, "className"> & {
   dialog: ReturnType<typeof useDialog>;
   dismissible?: boolean;
   outsideDismiss?: boolean;
   className: string;
+  origin?: AnimationOrigin | undefined;
 }) {
   const reduced = Boolean(useReducedMotion());
+  const { dialogRef } = dialog;
+  const attachPopup = useCallback(
+    (element: HTMLDivElement | null) => {
+      dialogRef.current = element;
+      if (element) setTriggerOrigin(element, reduced ? undefined : origin);
+    },
+    [dialogRef, origin, reduced],
+  );
   const actionsRef = useRef<Dialog.Root.Actions>(null);
   const closed = {
     opacity: 0,
@@ -59,7 +73,7 @@ export function Modal({
               className={`dialog-backdrop${className === "image-lightbox" ? " image-lightbox-backdrop" : ""}`}
             />
             <Dialog.Popup
-              ref={dialog.dialogRef}
+              ref={attachPopup}
               render={
                 <motion.div
                   initial={surfaceTransition(reduced).duration === 0 ? false : closed}

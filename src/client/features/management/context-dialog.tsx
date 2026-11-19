@@ -875,6 +875,7 @@ function ContextManagementDialog({
   return (
     <Modal
       dialog={dialog}
+      origin={request.origin}
       finalFocus={false}
       className={`management-dialog${isWide ? " is-wide" : ""}`}
       aria-labelledby={isRule ? undefined : "management-dialog-title"}

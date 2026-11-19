@@ -3,8 +3,8 @@ import { ListFilter } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AiCustomPrompt, Article } from "../../../../shared/types";
-import { surfaceTransition } from "../../../ui/motion";
-import type { FeedManagementAction } from "../../feeds/feed-management";
+import { type AnimationOrigin, surfaceTransition, triggerCenter } from "../../../ui/motion";
+import type { FeedActionHandler } from "../../feeds/feed-management";
 import {
   captureTextSelection,
   restoreTextSelection,
@@ -48,11 +48,11 @@ export function ArticleDocument({
   translationLanguage: string;
   customPrompts: AiCustomPrompt[];
   showYouTubeDescriptions: boolean;
-  onFeedAction: (feedId: number, action: FeedManagementAction) => void;
+  onFeedAction: FeedActionHandler<number>;
   onToggleFullContent: (article: Article) => void;
   onRegenerateSummary: (article: Article) => void;
   onOpenAiSettings: () => void;
-  onFilterSelection: (article: Article, text: string) => void;
+  onFilterSelection: (article: Article, text: string, origin: AnimationOrigin) => void;
 }) {
   const documentRef = useRef<HTMLDivElement>(null);
   const reduced = Boolean(useReducedMotion());
@@ -201,10 +201,10 @@ export function ArticleDocument({
                   type="button"
                   aria-label="Filter selected text"
                   onPointerDown={(event) => event.preventDefault()}
-                  onClick={() => {
+                  onClick={(event) => {
                     const { text } = displayedSelectionMenu;
                     setSelectionMenu(null);
-                    onFilterSelection(article, text);
+                    onFilterSelection(article, text, triggerCenter(event.currentTarget));
                   }}
                 >
                   <ListFilter aria-hidden="true" size={15} />
