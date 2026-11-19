@@ -15,12 +15,12 @@
     "electron-winstaller": false
   },
   "dependencies": {
-    "@fastify/static": "10.1.2",
+    "@fastify/static": "10.1.10",
     "@mozilla/readability": "0.6.0",
     "@simplewebauthn/server": "13.3.2",
     "argon2": "0.45.1",
     "better-sqlite3": "13.0.3",
-    "fastify": "5.12.5",
+    "fastify": "5.12.8",
     "feedsmith": "2.9.6",
     "htmlparser2": "10.1.0",
     "jsdom": "29.1.1",
@@ -35,6 +35,9 @@
     "electron-builder": "26.15.3"
   },
   "overrides": {
+    "feedsmith": {
+      "fast-xml-parser": "5.12.0"
+    },
     "@electron/get": "5.1.0",
     "brace-expansion@<1.1.21": "1.1.21",
     "brace-expansion@>=2.0.0 <2.1.7": "2.1.7",
