@@ -13,7 +13,6 @@ interface InterfaceState {
     shortcutHelpOrigin: AnimationOrigin | undefined;
     managementRequest: ManagementRequest | null;
     setNavOpen: (open: boolean) => void;
-    toggleNav: () => void;
     setShortcutHelpOpen: (open: boolean, origin?: AnimationOrigin) => void;
     setManagementRequest: (request: ManagementRequest | null) => void;
     openFeedManagement: FeedActionHandler<Pick<Feed, "id">>;
@@ -27,7 +26,6 @@ export function createInterfaceStore() {
         shortcutHelpOrigin: undefined,
         managementRequest: null,
         setNavOpen: (navOpen) => set({ navOpen }),
-        toggleNav: () => set((state) => ({ navOpen: !state.navOpen })),
         setShortcutHelpOpen: (shortcutHelpOpen, shortcutHelpOrigin) =>
             set({ shortcutHelpOpen, shortcutHelpOrigin }),
         setManagementRequest: (managementRequest) => set({ managementRequest }),

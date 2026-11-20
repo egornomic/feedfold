@@ -97,6 +97,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
     const shortcutHelpOrigin = useInterfaceState(
         (state) => state.shortcutHelpOrigin,
     );
+    const navOpen = useInterfaceState((state) => state.navOpen);
     const setNavOpen = useInterfaceState((state) => state.setNavOpen);
     const setShortcutHelpOpen = useInterfaceState(
         (state) => state.setShortcutHelpOpen,
@@ -126,8 +127,41 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
     const ruleDraftId = useRef(0);
     const ruleReturnRoute = useRef<ReaderRoute | null>(null);
     const bootstrapRef = useRef(bootstrap);
+    const mainRef = useRef<HTMLElement>(null);
     const readingWorkspaceRef = useRef<HTMLDivElement>(null);
     bootstrapRef.current = bootstrap;
+
+    const [compact, setCompact] = useState(
+        () => window.matchMedia("(max-width: 1020px)").matches,
+    );
+    const drawerOpen = compact && navOpen;
+    const drawerLocation = useRef<string | null>(null);
+
+    useEffect(() => {
+        const viewport = window.matchMedia("(max-width: 1020px)");
+        const update = () => {
+            setCompact(viewport.matches);
+            if (!viewport.matches) {
+                setNavOpen(false);
+            }
+        };
+        viewport.addEventListener("change", update);
+        update();
+        return () => viewport.removeEventListener("change", update);
+    }, [setNavOpen]);
+
+    useLayoutEffect(() => {
+        if (drawerOpen) {
+            drawerLocation.current = window.location.href;
+            return;
+        }
+        if (compact && drawerLocation.current === window.location.href) {
+            mainRef.current
+                ?.querySelector<HTMLButtonElement>(".menu-button")
+                ?.focus({ preventScroll: true });
+        }
+        drawerLocation.current = null;
+    }, [compact, drawerOpen]);
 
     const queue = useArticleQueue({
         route,
@@ -417,6 +451,7 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
 
     useAppShortcuts({
         bootstrap,
+        drawerOpen,
         route,
         queue,
         articleActions,
@@ -455,10 +490,13 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
                 `${desktopSidebarCollapsed ? " is-sidebar-collapsed" : ""}`
             }
         >
-            <a className="skip-link" href="#main-content">
+            <a className="skip-link" href="#main-content" inert={drawerOpen}>
                 Skip to articles
             </a>
             <Sidebar
+                compact={compact}
+                drawerOpen={drawerOpen}
+                onClose={() => setNavOpen(false)}
                 bootstrap={bootstrap}
                 user={user}
                 localApp={isDesktopApp()}
@@ -490,14 +528,16 @@ function AppShellContent({ user, onLogout, onAccountDeleted }: AppShellProps) {
                 </div>
             ) : null}
             <main
+                ref={mainRef}
                 id="main-content"
                 className="main-column"
                 tabIndex={-1}
                 // Article transitions remain interactive so a swipe can reverse mid-animation.
                 inert={
-                    route.pending &&
-                    (route.route.kind !== "article" ||
-                        route.current().kind !== "article")
+                    drawerOpen ||
+                    (route.pending &&
+                        (route.route.kind !== "article" ||
+                            route.current().kind !== "article"))
                 }
                 aria-busy={route.pending}
             >

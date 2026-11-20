@@ -17,7 +17,7 @@ import {
     X,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import type { AddFeedSourceType, AppView } from "../../../shared/app-routes";
 import type {
     ArticleState,
@@ -64,6 +64,9 @@ function ArticleCount({ count }: { count: number }) {
 }
 
 interface SidebarProps {
+    compact: boolean;
+    drawerOpen: boolean;
+    onClose: () => void;
     bootstrap: BootstrapData;
     user: SessionUser;
     localApp?: boolean;
@@ -108,6 +111,9 @@ export function Sidebar(props: SidebarProps) {
 }
 
 function SidebarContent({
+    compact,
+    drawerOpen,
+    onClose,
     bootstrap,
     user,
     localApp = false,
@@ -124,9 +130,6 @@ function SidebarContent({
     onRefresh,
     onLogout,
 }: SidebarProps) {
-    const open = useInterfaceState((state) => state.navOpen);
-    const setNavOpen = useInterfaceState((state) => state.setNavOpen);
-    const onClose = () => setNavOpen(false);
     const collapsed = useReaderPreferences(
         (state) => state.desktopSidebarCollapsed,
     );
@@ -142,17 +145,6 @@ function SidebarContent({
     );
     const [contextMenu, setContextMenu] =
         useState<SidebarContextMenuState | null>(null);
-    const [compact, setCompact] = useState(
-        () => window.matchMedia("(max-width: 1020px)").matches,
-    );
-
-    useEffect(() => {
-        const viewport = window.matchMedia("(max-width: 1020px)");
-        const update = () => setCompact(viewport.matches);
-        viewport.addEventListener("change", update);
-        update();
-        return () => viewport.removeEventListener("change", update);
-    }, []);
 
     const rootFolders = bootstrap.folders.filter(
         (folder) => folder.parentId === null,
@@ -203,10 +195,15 @@ function SidebarContent({
         [],
     );
 
-    const drawerSwipe = useDrawerSwipe(
-        compact && open && !draggedFeed,
-        onClose,
-    );
+    const drawerSwipe = useDrawerSwipe(drawerOpen && !draggedFeed, onClose);
+    const { drawerRef } = drawerSwipe;
+    useLayoutEffect(() => {
+        if (drawerOpen) {
+            drawerRef.current
+                ?.querySelector<HTMLButtonElement>(".close-nav")
+                ?.focus({ preventScroll: true });
+        }
+    }, [drawerOpen, drawerRef]);
 
     const {
         ref: topLevelRef,
@@ -217,17 +214,47 @@ function SidebarContent({
     return (
         <>
             <motion.aside
-                ref={drawerSwipe.drawerRef}
+                ref={drawerRef}
                 onPanStart={drawerSwipe.onPanStart}
                 onPan={drawerSwipe.onPan}
                 onPanEnd={drawerSwipe.onPanEnd}
                 className={
-                    `sidebar${open ? " is-open" : ""}` +
+                    `sidebar${drawerOpen ? " is-open" : ""}` +
                     `${collapsed ? " is-collapsed" : ""}` +
                     `${draggedFeed ? " is-dragging-feed" : ""}`
                 }
+                role={drawerOpen ? "dialog" : undefined}
                 aria-label="Primary navigation"
-                inert={compact && !open}
+                aria-modal={drawerOpen || undefined}
+                inert={compact && !drawerOpen}
+                onKeyDown={(event) => {
+                    if (!drawerOpen || event.defaultPrevented || draggedFeed) {
+                        return;
+                    }
+                    if (event.key === "Escape") {
+                        event.preventDefault();
+                        onClose();
+                    }
+                    if (event.key !== "Tab") {
+                        return;
+                    }
+                    const controls = Array.from(
+                        event.currentTarget.querySelectorAll<HTMLElement>(
+                            "button:enabled, a[href]",
+                        ),
+                    ).filter(
+                        (control) =>
+                            control.tabIndex >= 0 &&
+                            control.getClientRects().length > 0 &&
+                            getComputedStyle(control).visibility === "visible",
+                    );
+                    const first = controls.at(0);
+                    const last = controls.at(-1);
+                    if (event.target === (event.shiftKey ? first : last)) {
+                        event.preventDefault();
+                        (event.shiftKey ? last : first)?.focus();
+                    }
+                }}
             >
                 <div className="brand-row">
                     <button
@@ -542,9 +569,10 @@ function SidebarContent({
             </motion.aside>
             <button
                 ref={drawerSwipe.scrimRef}
-                className={`nav-scrim${open ? " is-open" : ""}`}
+                className={`nav-scrim${drawerOpen ? " is-open" : ""}`}
                 type="button"
-                aria-label="Close navigation"
+                tabIndex={-1}
+                aria-hidden="true"
                 onClick={onClose}
             />
         </>
