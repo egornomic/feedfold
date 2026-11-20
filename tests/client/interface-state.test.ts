@@ -15,7 +15,7 @@ it("shares navigation, preferences, and panel controls across the reader and man
   const { document } = fixture.dom.window;
   const key = async (key: string) => {
     await act(async () => {
-      document.body.dispatchEvent(
+      (document.activeElement ?? document.body).dispatchEvent(
         new fixture.dom.window.KeyboardEvent("keydown", { key, bubbles: true }),
       );
     });
@@ -32,6 +32,7 @@ it("shares navigation, preferences, and panel controls across the reader and man
       false,
     );
 
+    await fixture.setCompactViewport(true);
     await click(document, '.reader-toolbar [aria-label="Open navigation"]');
     expect(document.querySelector(".nav-scrim.is-open")).not.toBeNull();
     await key("Escape");
@@ -84,8 +85,8 @@ it("shares navigation, preferences, and panel controls across the reader and man
   }
 });
 
-it.each(["shortcut help", "folder management"])(
-  "discards navigation and %s after session expiry while retaining reader preferences",
+it.each(["navigation", "shortcut help", "folder management"])(
+  "discards %s after session expiry while retaining reader preferences",
   async (panel) => {
     const fixture = readerFixture(panel === "folder management" ? "/feeds" : "/articles/unread");
     const { document } = fixture.dom.window;
@@ -93,15 +94,16 @@ it.each(["shortcut help", "folder management"])(
       await fixture.mount();
       await waitFor("signed-in shell", () => document.querySelector(".app-shell") !== null);
       await click(document, '[aria-label="Hide sidebar"]');
-      await click(document, '[aria-label="Open navigation"]');
-      if (panel === "shortcut help") {
+      if (panel === "navigation") {
+        await fixture.setCompactViewport(true);
+        await click(document, '[aria-label="Open navigation"]');
+      } else if (panel === "shortcut help") {
         await click(document, '[aria-label="Open keyboard shortcut reference (?)"]');
       } else {
         await click(document, "#folders-tab");
         await click(document, ".page-header-actions .primary-button");
       }
       await waitFor("open panel", () => document.querySelector('[role="dialog"]') !== null);
-      expect(document.querySelector(".nav-scrim.is-open")).not.toBeNull();
       const openPanel = document.querySelector('[role="dialog"]');
       assert(openPanel);
       const { AUTH_REQUIRED_EVENT } = await import("../../src/client/api/api.js");

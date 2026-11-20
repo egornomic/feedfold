@@ -83,7 +83,7 @@ export function ReaderToolbar({
     onMarkReadByAge,
 }: ReaderToolbarProps) {
     const navOpen = useInterfaceState((state) => state.navOpen);
-    const onToggleNav = useInterfaceState((state) => state.toggleNav);
+    const setNavOpen = useInterfaceState((state) => state.setNavOpen);
     const setShortcutHelpOpen = useInterfaceState(
         (state) => state.setShortcutHelpOpen,
     );
@@ -107,7 +107,8 @@ export function ReaderToolbar({
             if (
                 (event.metaKey || event.ctrlKey) &&
                 event.key.toLowerCase() === "f" &&
-                !readingArticle
+                !readingArticle &&
+                !navOpen
             ) {
                 event.preventDefault();
                 setSearchOpen(true);
@@ -116,7 +117,7 @@ export function ReaderToolbar({
         };
         window.addEventListener("keydown", find);
         return () => window.removeEventListener("keydown", find);
-    }, [readingArticle]);
+    }, [navOpen, readingArticle]);
 
     function closeSearch() {
         setSearchOpen(false);
@@ -136,8 +137,8 @@ export function ReaderToolbar({
         >
             <div className="reader-title-row">
                 <IconButton
-                    label={navOpen ? "Close navigation" : "Open navigation"}
-                    onClick={onToggleNav}
+                    label="Open navigation"
+                    onClick={() => setNavOpen(true)}
                     className="menu-button"
                     tooltip
                 >
