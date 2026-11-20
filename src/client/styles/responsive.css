@@ -55,6 +55,11 @@
         transform var(--duration-surface) var(--ease-out);
 }
 
+.empty-state h2 {
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+}
+
 .empty-state-actions {
     display: flex;
     flex-wrap: wrap;
