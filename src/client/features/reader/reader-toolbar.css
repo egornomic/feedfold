@@ -539,7 +539,7 @@
 }
 
 .reader-options-menu {
-    width: min(204px, calc(100vw - 16px));
+    width: min(260px, calc(100vw - 16px));
     min-width: 0;
 }
 
