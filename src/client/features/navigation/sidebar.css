@@ -140,7 +140,7 @@
     min-width: 20px;
     flex: 0 0 auto;
     margin-left: auto;
-    color: var(--muted);
+    color: var(--text-secondary);
     font-size: var(--type-label);
     font-variant-numeric: tabular-nums;
     text-align: right;
@@ -162,7 +162,7 @@
     margin: 0;
     padding: 12px 8px 5px 9px;
     border: 0;
-    color: var(--muted);
+    color: var(--text-secondary);
     font-size: var(--type-label);
     font-weight: var(--weight-bold);
     letter-spacing: 0.07em;
