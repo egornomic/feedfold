@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { seedReaderBacklog } from "../helpers/reader-backlog.js";
 import {
   bottom,
+  browser,
   context,
   database,
   desktopAppPath,
@@ -193,9 +194,13 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
     });
     const page = await open("magazine");
     try {
+      await page.setViewportSize({ width: 621, height: 900 });
       await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
       await page
         .getByRole("button", { name: `Open ${sample.articles[0]?.title}`, exact: true })
+        .waitFor();
+      await page
+        .getByRole("button", { name: "Mark loaded articles as read", exact: true })
         .waitFor();
       await page.getByRole("button", { name: "Mark older articles as read", exact: true }).click();
       await page.getByRole("menuitem", { name: "Older than a day", exact: true }).click();
@@ -204,6 +209,113 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
       expect(await page.locator(".virtual-article-row").count()).toBe(0);
     } finally {
       await page.close();
+    }
+  });
+
+  it.each([
+    [320, "touch"],
+    [320, "keyboard"],
+    [620, "touch"],
+    [620, "keyboard"],
+  ] as const)("bulk marks articles from Reader options at %i px with %s", async (width, input) => {
+    const sample = seedReaderBacklog(database, `Mobile bulk read ${width} ${input}`, 3);
+    database.feeds.completeSourceRefresh(sample.sourceId, {
+      ...sample.refresh,
+      parsed: {
+        title: sample.feed.title,
+        siteUrl: null,
+        articles: sample.articles.map((article, index) => ({
+          ...article,
+          publishedAt: new Date(
+            Date.now() - (index === 2 ? 8 : index + 2) * 86_400_000,
+          ).toISOString(),
+        })),
+      },
+    });
+    const mobileContext = await browser.newContext({
+      baseURL: origin,
+      storageState: await context.storageState(),
+      viewport: { width, height: 640 },
+      hasTouch: input === "touch",
+      isMobile: true,
+    });
+    const page = await mobileContext.newPage();
+    page.setDefaultTimeout(3000);
+    const options = page.getByRole("button", { name: "Reader options", exact: true });
+    const older = page.getByRole("menuitem", { name: "Mark older articles as read", exact: true });
+    const loaded = page.getByRole("menuitem", {
+      name: "Mark loaded articles as read",
+      exact: true,
+    });
+    const week = page.getByRole("menuitem", { name: "Older than a week", exact: true });
+    const ageRequest = Promise.withResolvers<void>();
+    try {
+      await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
+      await page.getByRole("button", { name: `Open ${sample.articles[0]?.title}` }).waitFor();
+      if (input === "touch") {
+        await options.tap();
+        await older.tap();
+      } else {
+        await page.getByRole("button", { name: "Search articles", exact: true }).focus();
+        await page.keyboard.press("Tab");
+        await page.keyboard.press("Enter");
+        await older.waitFor();
+        await page.keyboard.press("End");
+        await page.keyboard.press("ArrowRight");
+      }
+      await week.waitFor();
+      expect(await page.getByRole("menuitem", { name: /^Older than / }).allTextContents()).toEqual([
+        "Older than a day",
+        "Older than two days",
+        "Older than three days",
+        "Older than a week",
+        "Older than two weeks",
+      ]);
+      if (input === "touch") {
+        await page.route(
+          "**/api/articles/mark-read",
+          async (route) => {
+            await ageRequest.promise;
+            await route.continue();
+          },
+          { times: 1 },
+        );
+        await week.tap();
+        await options.tap();
+        await loaded.waitFor();
+        expect(await loaded.isDisabled()).toBe(true);
+        expect(await older.isDisabled()).toBe(true);
+        await options.tap();
+        ageRequest.resolve();
+      } else {
+        await page.keyboard.press("End");
+        await page.keyboard.press("ArrowUp");
+        await page.keyboard.press("Enter");
+      }
+      await page.getByRole("button", { name: `Open ${sample.articles[2]?.title}` }).waitFor({
+        state: "hidden",
+      });
+      const unreadTitles = () =>
+        database.articles
+          .listArticlePage(1, { feedId: sample.feed.id, state: "unread" })
+          .articles.map((article) => article.title);
+      expect(unreadTitles()).toEqual(sample.articles.slice(0, 2).map((article) => article.title));
+
+      if (input === "touch") {
+        await options.tap();
+        await loaded.tap();
+      } else {
+        await page.keyboard.press("Enter");
+        await loaded.waitFor();
+        await page.keyboard.press("End");
+        await page.keyboard.press("ArrowUp");
+        await page.keyboard.press("Enter");
+      }
+      await page.getByText("Marked 2 articles as read", { exact: true }).waitFor();
+      await expect.poll(unreadTitles).toEqual([]);
+    } finally {
+      ageRequest.resolve();
+      await mobileContext.close();
     }
   });
 

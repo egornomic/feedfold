@@ -524,7 +524,8 @@
         min-height: var(--control-size-touch);
         grid-area: options;
     }
-    .reader-options-menu .dropdown-select-option {
+    .reader-options-menu .dropdown-select-option,
+    .mark-read-menu > button {
         min-height: var(--control-size-touch);
     }
     .article-actions {

@@ -1,6 +1,7 @@
 import {
     Check,
     ChevronDown,
+    ChevronRight,
     CircleHelp,
     Ellipsis,
     FileText,
@@ -51,6 +52,14 @@ interface ReaderToolbarProps {
     onMarkRead: () => void;
     onMarkReadByAge: (days: MarkReadAgeDays) => void;
 }
+
+type MarkReadActionProps = Pick<
+    ReaderToolbarProps,
+    "onMarkRead" | "onMarkReadByAge"
+> & { disabled: boolean };
+
+const MARK_LOADED_READ_LABEL = "Mark loaded articles as read";
+const MARK_OLDER_READ_LABEL = "Mark older articles as read";
 
 export function ReaderToolbar({
     title,
@@ -262,8 +271,11 @@ export function ReaderToolbar({
                         unreadCount={unreadCount}
                         showArticleFilters={showArticleStateSwitcher}
                         mode={mode}
+                        disabled={markReadPending}
                         onArticleStateChange={onArticleStateChange}
                         onModeChange={onModeChange}
+                        onMarkRead={onMarkRead}
+                        onMarkReadByAge={onMarkReadByAge}
                     />
                 ) : null}
                 <div className="toolbar-actions">
@@ -323,9 +335,12 @@ function ReaderOptionsMenu({
     unreadCount,
     showArticleFilters,
     mode,
+    disabled,
     onArticleStateChange,
     onModeChange,
-}: {
+    onMarkRead,
+    onMarkReadByAge,
+}: MarkReadActionProps & {
     articleState: ArticleState;
     unreadCount: number;
     showArticleFilters: boolean;
@@ -410,6 +425,32 @@ function ReaderOptionsMenu({
                         </Menu.RadioItem>
                     ))}
                 </Menu.RadioGroup>
+                <Menu.Separator className="context-menu-separator" />
+                <MenuItem
+                    className="dropdown-select-option"
+                    disabled={disabled}
+                    onClick={onMarkRead}
+                >
+                    <span>{MARK_LOADED_READ_LABEL}</span>
+                </MenuItem>
+                <Menu.SubmenuRoot disabled={disabled}>
+                    <Menu.SubmenuTrigger
+                        className="dropdown-select-option"
+                        render={<button type="button" />}
+                        nativeButton
+                        openOnHover={false}
+                    >
+                        <span>{MARK_OLDER_READ_LABEL}</span>
+                        <ChevronRight aria-hidden="true" size={15} />
+                    </Menu.SubmenuTrigger>
+                    <MenuPopup
+                        className="mark-read-menu context-action-menu"
+                        aria-label={MARK_OLDER_READ_LABEL}
+                        positioner={{ side: "bottom" }}
+                    >
+                        <MarkReadAgeItems onMarkReadByAge={onMarkReadByAge} />
+                    </MenuPopup>
+                </Menu.SubmenuRoot>
             </MenuPopup>
         </Menu.Root>
     );
@@ -426,19 +467,25 @@ const MARK_READ_AGE_LABELS: Record<MarkReadAgeDays, string> = {
 const MARK_READ_MENU_ID = "mark-read-age-menu";
 const MARK_READ_MENU_HEADING_ID = "mark-read-age-menu-heading";
 
+function MarkReadAgeItems({
+    onMarkReadByAge,
+}: Pick<MarkReadActionProps, "onMarkReadByAge">) {
+    return MARK_READ_AGE_DAYS.map((days) => (
+        <MenuItem key={days} onClick={() => onMarkReadByAge(days)}>
+            {MARK_READ_AGE_LABELS[days]}
+        </MenuItem>
+    ));
+}
+
 function MarkReadSplitButton({
     disabled,
     onMarkRead,
     onMarkReadByAge,
-}: {
-    disabled: boolean;
-    onMarkRead: () => void;
-    onMarkReadByAge: (days: MarkReadAgeDays) => void;
-}) {
+}: MarkReadActionProps) {
     return (
         <div className="mark-read-split-button">
             <IconButton
-                label="Mark loaded articles as read"
+                label={MARK_LOADED_READ_LABEL}
                 onClick={onMarkRead}
                 disabled={disabled}
                 className="mark-read-primary"
@@ -449,8 +496,8 @@ function MarkReadSplitButton({
             <Menu.Root modal={false} disabled={disabled}>
                 <Menu.Trigger
                     className="icon-button mark-read-menu-trigger"
-                    aria-label="Mark older articles as read"
-                    data-tooltip="Mark older articles as read"
+                    aria-label={MARK_OLDER_READ_LABEL}
+                    data-tooltip={MARK_OLDER_READ_LABEL}
                     disabled={disabled}
                 >
                     <ChevronDown aria-hidden="true" size={16} />
@@ -461,16 +508,9 @@ function MarkReadSplitButton({
                     aria-labelledby={MARK_READ_MENU_HEADING_ID}
                 >
                     <p id={MARK_READ_MENU_HEADING_ID}>
-                        Mark older articles as read
+                        {MARK_OLDER_READ_LABEL}
                     </p>
-                    {MARK_READ_AGE_DAYS.map((days) => (
-                        <MenuItem
-                            key={days}
-                            onClick={() => onMarkReadByAge(days)}
-                        >
-                            {MARK_READ_AGE_LABELS[days]}
-                        </MenuItem>
-                    ))}
+                    <MarkReadAgeItems onMarkReadByAge={onMarkReadByAge} />
                 </MenuPopup>
             </Menu.Root>
         </div>
