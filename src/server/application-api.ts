@@ -6,7 +6,6 @@ import type {
     UntrustedApiRequest,
 } from "../shared/api/operations.js";
 import { readerMutationRoutes } from "../shared/reader-mutations.js";
-import type { MarkReadRequest } from "../shared/types.js";
 import { accountActivityTouchBefore } from "./account-activity.js";
 import {
     ApplicationService,
@@ -223,10 +222,12 @@ export class ApplicationApi {
                 "Article",
             );
         },
+        previewMarkRead: async (payload) => {
+            const body = inputs.previewMarkRead.parse(payload);
+            return this.#database.articles.previewMarkRead(this.#userId, body);
+        },
         markRead: async (payload) => {
-            const body = inputs.markRead.parse(
-                payload ?? {},
-            ) as MarkReadRequest;
+            const body = inputs.markRead.parse(payload);
             return {
                 updated: this.#database.articles.markArticlesRead(
                     this.#userId,

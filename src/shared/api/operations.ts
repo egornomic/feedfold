@@ -141,6 +141,10 @@ interface ApiOperations {
         ResourceId & { state: Input<"updateArticleState"> },
         Article
     >;
+    previewMarkRead: Operation<
+        Input<"previewMarkRead">,
+        { count: number; olderThan: string }
+    >;
     markRead: Operation<Input<"markRead">, { updated: number }>;
     refresh: Operation<Input<"refresh">, RefreshResult>;
     discoverFeed: Operation<Input<"url">, FeedDiscoveryResult>;
@@ -230,6 +234,7 @@ export const API_OPERATIONS = [
     "summarizeArticle",
     "translateArticle",
     "updateArticleState",
+    "previewMarkRead",
     "markRead",
     "refresh",
     "discoverFeed",

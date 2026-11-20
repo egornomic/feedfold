@@ -1,3 +1,4 @@
+import type { Page } from "playwright";
 import { describe, expect, it } from "vitest";
 import { seedReaderBacklog } from "../helpers/reader-backlog.js";
 import {
@@ -9,6 +10,21 @@ import {
   origin,
   settle,
 } from "./reader-browser-fixture.js";
+
+async function markOlder(page: Page) {
+  await page.getByRole("button", { name: "Mark older articles as read", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Older than a day", exact: true }).click();
+}
+
+async function confirmOlderRead(page: Page, accept: boolean): Promise<string> {
+  const dialog = page.waitForEvent("dialog").then(async (prompt) => {
+    const message = prompt.message();
+    await (accept ? prompt.accept() : prompt.dismiss());
+    return message;
+  });
+  const [message] = await Promise.all([dialog, markOlder(page)]);
+  return message;
+}
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
   it("keeps a read article open after refreshing its unread reader context", async () => {
@@ -178,8 +194,58 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
     },
   );
 
-  it("removes older articles from the unread queue after a bulk read without reloading", async () => {
-    const sample = seedReaderBacklog(database, "Bulk read queue", 3);
+  it.each(["feed", "folder"] as const)(
+    "marks older unread articles across every page of a %s",
+    async (scope) => {
+      const sample = seedReaderBacklog(database, `Bulk read ${scope}`, 105);
+      const outside = seedReaderBacklog(database, `Outside bulk read ${scope}`, 1);
+      database.connection
+        .prepare(
+          "UPDATE articles SET published_at = '2000-01-01T00:00:00.000Z' WHERE source_id IN (?, ?)",
+        )
+        .run(sample.sourceId, outside.sourceId);
+      const parent = database.folders.createFolder(1, { name: "Bulk read parent" });
+      const child = database.folders.createFolder(1, {
+        name: "Bulk read child",
+        parentId: parent.id,
+      });
+      database.feeds.updateFeed(1, sample.feed.id, { folderId: child.id });
+      const scopeId = scope === "feed" ? sample.feed.id : parent.id;
+      const page = await open("magazine");
+      try {
+        const firstPage = desktopAppPath
+          ? null
+          : page.waitForResponse((response) => {
+              const { pathname, searchParams } = new URL(response.url());
+              return (
+                pathname === "/api/articles" && searchParams.get(`${scope}Id`) === String(scopeId)
+              );
+            });
+        await page.goto(`${origin}${scope}s/${scopeId}/unread`);
+        const initial = firstPage
+          ? await (await firstPage).json()
+          : database.articles.listArticlePage(1, {
+              state: "unread",
+              limit: 100,
+              ...(scope === "feed" ? { feedId: scopeId } : { folderId: scopeId }),
+            });
+        expect(initial.articles).toHaveLength(100);
+        expect(initial.nextCursor).toBeTruthy();
+        const message = await confirmOlderRead(page, true);
+        expect(message).toBe("Mark 105 articles as read?");
+        await page.getByText("Marked 105 articles as read", { exact: true }).waitFor();
+        await page.getByText("No unread articles", { exact: true }).waitFor();
+        expect(database.feeds.getFeed(1, sample.feed.id)?.unreadCount).toBe(0);
+        expect(database.feeds.getFeed(1, outside.feed.id)?.unreadCount).toBe(1);
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
+  it("confirms only the unread search matches older than the cutoff", async () => {
+    const sample = seedReaderBacklog(database, "Filtered bulk read", 3);
+    const titles = ["Target old", "Unrelated old", "Target recent"];
     database.feeds.completeSourceRefresh(sample.sourceId, {
       ...sample.refresh,
       parsed: {
@@ -187,21 +253,36 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
         siteUrl: null,
         articles: sample.articles.map((article, index) => ({
           ...article,
-          publishedAt: new Date(Date.now() - (index + 2) * 86_400_000).toISOString(),
+          title: titles[index] ?? article.title,
+          publishedAt: new Date(Date.now() - (index === 2 ? 0 : 172_800_000)).toISOString(),
         })),
       },
     });
     const page = await open("magazine");
+    const path = `${origin}feeds/${sample.feed.id}/all`;
+    const readTitles = () =>
+      database.articles
+        .listArticlePage(1, { feedId: sample.feed.id, state: "read" })
+        .articles.map(({ title }) => title);
     try {
-      await page.goto(`${origin}feeds/${sample.feed.id}/unread`);
-      await page
-        .getByRole("button", { name: `Open ${sample.articles[0]?.title}`, exact: true })
-        .waitFor();
-      await page.getByRole("button", { name: "Mark older articles as read", exact: true }).click();
-      await page.getByRole("menuitem", { name: "Older than a day", exact: true }).click();
-      await expect.poll(() => database.feeds.getFeed(1, sample.feed.id)?.unreadCount).toBe(0);
-      await page.getByText("No unread articles", { exact: true }).waitFor();
-      expect(await page.locator(".virtual-article-row").count()).toBe(0);
+      await page.goto(`${path}?q=absent`);
+      await page.getByText("No articles match “absent”", { exact: true }).waitFor();
+      await markOlder(page);
+      const feedback = await page
+        .getByText(/^(No matching unread articles|Marked \d+ articles? as read)$/)
+        .textContent();
+      expect({ feedback, read: readTitles() }).toEqual({
+        feedback: "No matching unread articles",
+        read: [],
+      });
+
+      await page.goto(`${path}?q=target`);
+      await page.getByRole("button", { name: "Open Target old", exact: true }).waitFor();
+      expect(await confirmOlderRead(page, false)).toBe("Mark 1 article as read?");
+      expect(readTitles()).toEqual([]);
+      expect(await confirmOlderRead(page, true)).toBe("Mark 1 article as read?");
+      await page.getByText("Marked 1 article as read", { exact: true }).waitFor();
+      expect(readTitles()).toEqual(["Target old"]);
     } finally {
       await page.close();
     }

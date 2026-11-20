@@ -6,7 +6,6 @@ import {
     FEED_POLL_INTERVAL_MINUTES,
     type FeedPollIntervalMinutes,
     MARK_READ_AGE_DAYS,
-    type MarkReadAgeDays,
 } from "../types.js";
 
 export const resourceId = z.number().int().positive();
@@ -90,21 +89,28 @@ const aiRequestCredential = z
         apiKey: z.string().trim().min(1).max(10_000),
     })
     .strict();
+const articleFilters = z
+    .object({
+        state: z.enum(["all", "unread", "read", "saved"]),
+        feedId: resourceId.exactOptional(),
+        folderId: resourceId.exactOptional(),
+        search: z.string().trim().max(300).exactOptional(),
+    })
+    .strict();
+const olderArticles = articleFilters.extend({
+    olderThan: z.iso.datetime({ precision: 3 }),
+    confirmedCount: z.number().int().positive(),
+});
 
 export const inputs = {
     url: z.object({ url: httpUrl }).strict(),
-    articles: z
-        .object({
-            state: z.enum(["all", "unread", "read", "saved"]).default("unread"),
-            feedId: resourceId.exactOptional(),
-            folderId: resourceId.exactOptional(),
-            search: z.string().trim().max(300).exactOptional(),
-            limit: z.number().int().min(1).max(500).exactOptional(),
-            cursor: z.string().min(1).max(50_000).exactOptional(),
-            anchorId: resourceId.exactOptional(),
-            includeContent: z.boolean().exactOptional(),
-        })
-        .strict(),
+    articles: articleFilters.extend({
+        state: articleFilters.shape.state.default("unread"),
+        limit: z.number().int().min(1).max(500).exactOptional(),
+        cursor: z.string().min(1).max(50_000).exactOptional(),
+        anchorId: resourceId.exactOptional(),
+        includeContent: z.boolean().exactOptional(),
+    }),
     updateArticleState: z
         .object({
             isRead: z.boolean().exactOptional(),
@@ -116,22 +122,15 @@ export const inputs = {
                 state.isRead !== undefined || state.isSaved !== undefined,
             "Choose whether to update read state or saved state.",
         ),
-    markRead: z
-        .object({
-            articleIds: z.array(resourceId).max(1_000).exactOptional(),
-            feedId: resourceId.exactOptional(),
-            folderId: resourceId.exactOptional(),
-            olderThanDays: z
-                .number()
-                .int()
-                .refine(
-                    (value) =>
-                        MARK_READ_AGE_DAYS.includes(value as MarkReadAgeDays),
-                    "Choose one of the available age thresholds.",
-                )
-                .exactOptional(),
-        })
-        .strict(),
+    previewMarkRead: articleFilters.extend({
+        olderThanDays: z.literal(MARK_READ_AGE_DAYS, {
+            error: "Choose one of the available age thresholds.",
+        }),
+    }),
+    markRead: z.union([
+        z.object({ articleIds: z.array(resourceId).max(1_000) }).strict(),
+        olderArticles,
+    ]),
     summarizeArticle: z
         .object({
             promptId: z.uuid().nullable(),

@@ -389,11 +389,66 @@ describe("account-owned Saved", () => {
         SELECT ?, id, '2026-10-01' FROM articles WHERE source_id = ?
     `)
       .run(feed.id, sourceId);
-    const response = await request("/api/articles/mark-read", "POST", { feedId: feed.id });
+    database.connection
+      .prepare("UPDATE articles SET discovered_at = '2026-10-01' WHERE source_id = ?")
+      .run(sourceId);
+    const filters = { state: "unread", feedId: feed.id };
+    const preview = await request("/api/articles/mark-read/preview", "POST", {
+      ...filters,
+      olderThanDays: 1,
+    });
+    expect(preview.status).toBe(200);
+    const { count, olderThan } = await preview.json();
+    expect(count).toBe(33002);
+    const response = await request("/api/articles/mark-read", "POST", {
+      ...filters,
+      olderThan,
+      confirmedCount: count,
+    });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ updated: 33002 });
     expect((await saved()).map(({ isRead }) => isRead)).toEqual([true, true]);
     expect(database.bootstrap.getBootstrap(reader.user.id).counts.unread).toBe(0);
+  });
+
+  it("leaves the saved articles unread if an additional article matches after preview", async () => {
+    const { articles, database, feed, request, saved } = await savedReader();
+    const [first, second] = articles;
+    if (!first || !second) throw new Error("Articles were not delivered");
+    database.connection
+      .prepare("UPDATE articles SET discovered_at = '2000-01-01T00:00:00.000Z'")
+      .run();
+    const change = (id: number, state: { isSaved?: boolean; isRead?: boolean }) =>
+      request(`/api/articles/${id}/state`, "PATCH", state);
+    expect((await change(second.id, { isSaved: false })).status).toBe(200);
+    const readPreview = await request("/api/articles/mark-read/preview", "POST", {
+      state: "read",
+      olderThanDays: 1,
+    });
+    expect(readPreview.status).toBe(200);
+    expect(await readPreview.json()).toMatchObject({ count: 0 });
+    const filters = { state: "saved" };
+    const preview = await request("/api/articles/mark-read/preview", "POST", {
+      ...filters,
+      olderThanDays: 1,
+    });
+    expect(preview.status).toBe(200);
+    const { count, olderThan } = await preview.json();
+    expect(count).toBe(1);
+
+    expect((await change(second.id, { isSaved: true })).status).toBe(200);
+    const payload = { ...filters, olderThan, confirmedCount: count };
+    const response = await request("/api/articles/mark-read", "POST", payload);
+    expect({ status: response.status, read: (await saved()).map(({ isRead }) => isRead) }).toEqual({
+      status: 409,
+      read: [false, false],
+    });
+    expect((await change(second.id, { isSaved: false })).status).toBe(200);
+    expect((await request(`/api/feeds/${feed.id}`, "DELETE")).status).toBe(204);
+    const updated = await request("/api/articles/mark-read", "POST", payload);
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toEqual({ updated: 1 });
+    expect(await saved()).toMatchObject([{ id: first.id, feedId: null, isRead: true }]);
   });
 
   it("preserves retained content and save dates when the database is reopened", async () => {

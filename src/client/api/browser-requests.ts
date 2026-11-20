@@ -78,6 +78,8 @@ export const browserRequests: {
         post(`/api/articles/${id}/translation`, body),
     updateArticleState: ({ id, state }) =>
         patch(`/api/articles/${id}/state`, state),
+    previewMarkRead: (payload) =>
+        post("/api/articles/mark-read/preview", payload),
     markRead: (payload) => post("/api/articles/mark-read", payload),
     refresh: (payload) => post("/api/refresh", payload),
     discoverFeed: (payload) => post("/api/feeds/discover", payload),

@@ -16,7 +16,10 @@ import {
     updateReaderArticleStates,
 } from "./article-state";
 import type { ReaderData } from "./reader-data";
-import { shouldAutoMarkRoutedArticleRead } from "./reader-state";
+import {
+    articleQueryForReaderRoute,
+    shouldAutoMarkRoutedArticleRead,
+} from "./reader-state";
 
 interface ArticleActionsOptions {
     loadFullArticle: ArticleEnrichmentController["loadFullArticle"];
@@ -302,28 +305,36 @@ export function useArticleActions({
     const markOlderArticlesRead = useCallback(
         async (days: MarkReadAgeDays) => {
             try {
-                const readerRoute = route.readerRoute;
-                const result = await mutateRequest(() =>
-                    api.markRead({
+                const filters = articleQueryForReaderRoute(route.readerRoute);
+                await mutateRequest(async () => {
+                    const noMatchesMessage = "No matching unread articles";
+                    const { count, olderThan } = await api.previewMarkRead({
+                        ...filters,
                         olderThanDays: days,
-                        ...(readerRoute.scope === "feed" &&
-                        readerRoute.scopeId !== null
-                            ? { feedId: readerRoute.scopeId }
-                            : {}),
-                        ...(readerRoute.scope === "folder" &&
-                        readerRoute.scopeId !== null
-                            ? { folderId: readerRoute.scopeId }
-                            : {}),
-                    }),
-                );
-                await Promise.all([loadBootstrap(), loadArticles()]);
-                showToast(
-                    result.updated === 0
-                        ? "No unread articles are older than that."
-                        : `Marked ${result.updated} ` +
-                              `${result.updated === 1 ? "article" : "articles"}` +
-                              " as read",
-                );
+                    });
+                    if (count === 0) {
+                        showToast(noMatchesMessage);
+                        return;
+                    }
+                    if (
+                        !window.confirm(
+                            `Mark ${count} ${count === 1 ? "article" : "articles"} as read?`,
+                        )
+                    ) {
+                        return;
+                    }
+                    const { updated } = await api.markRead({
+                        ...filters,
+                        olderThan,
+                        confirmedCount: count,
+                    });
+                    await Promise.all([loadBootstrap(), loadArticles()]);
+                    showToast(
+                        updated === 0
+                            ? noMatchesMessage
+                            : `Marked ${updated} ${updated === 1 ? "article" : "articles"} as read`,
+                    );
+                });
             } catch (caught) {
                 showToast(
                     `Could not mark older articles as read: ${errorMessage(caught)}`,

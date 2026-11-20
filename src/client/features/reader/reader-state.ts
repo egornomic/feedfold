@@ -111,12 +111,10 @@ export function readerRouteForSelection(
 
 export function articleQueryForReaderRoute(
     route: ReaderRoute,
-    options: {
-        limit: number;
-        includeContent: boolean;
-        cursor?: string;
-        anchorId?: number;
-    },
+    options: Pick<
+        ArticleQuery,
+        "limit" | "includeContent" | "cursor" | "anchorId"
+    > = {},
 ): ArticleQuery {
     return {
         state: route.state,

@@ -3,7 +3,6 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { inputs } from "../../../shared/api/inputs.js";
-import type { MarkReadRequest } from "../../../shared/types.js";
 import type { ApplicationService } from "../../application-service.js";
 import { QuotaExceededError } from "../../quota.js";
 import type { XMediaService } from "../../x-media.js";
@@ -182,10 +181,13 @@ export async function articleRoutes(
         return article ?? missing(reply, "Article");
     });
 
+    app.post("/api/articles/mark-read/preview", async (request) => {
+        const body = inputs.previewMarkRead.parse(request.body);
+        return articles.previewMarkRead(userId(request), body);
+    });
+
     app.post("/api/articles/mark-read", async (request) => {
-        const body = inputs.markRead.parse(
-            request.body ?? {},
-        ) as MarkReadRequest;
+        const body = inputs.markRead.parse(request.body);
         return { updated: articles.markArticlesRead(userId(request), body) };
     });
 

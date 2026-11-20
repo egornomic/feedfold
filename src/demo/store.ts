@@ -12,18 +12,21 @@ import {
     normalizeSearchText,
 } from "../shared/article-search.js";
 import { folderBranchIds, validFolderParent } from "../shared/folder-tree.js";
-import type {
-    AiProvider,
-    AiSettings,
-    Article,
-    ArticleAiSummary,
-    ArticlePage,
-    ArticleQuery,
-    Feed,
-    Folder,
-    Rule,
-    SessionUser,
-    WebFeedAnalysis,
+import {
+    type AiProvider,
+    type AiSettings,
+    type Article,
+    type ArticleAiSummary,
+    type ArticlePage,
+    type ArticleQuery,
+    type Feed,
+    type Folder,
+    MARK_READ_COUNT_CHANGED,
+    markReadCutoff,
+    type OlderArticleQuery,
+    type Rule,
+    type SessionUser,
+    type WebFeedAnalysis,
 } from "../shared/types.js";
 import {
     createDemoData,
@@ -200,48 +203,51 @@ export class DemoStore {
         return clone(article);
     }
 
-    markRead(request: ApiInput<"markRead">): { updated: number } {
-        const ids = request.articleIds ? new Set(request.articleIds) : null;
-        const cutoff = request.olderThanDays
-            ? Date.now() - request.olderThanDays * 24 * 60 * 60 * 1_000
-            : null;
-        const folderIds =
-            request.folderId === undefined
-                ? null
-                : this.folderBranchIds(request.folderId);
-        let updated = 0;
+    previewMarkRead({
+        olderThanDays,
+        ...filters
+    }: ApiInput<"previewMarkRead">): ApiOutput<"previewMarkRead"> {
+        const olderThan = markReadCutoff(olderThanDays);
+        return {
+            count: this.olderUnreadArticles({ ...filters, olderThan }).length,
+            olderThan,
+        };
+    }
 
-        for (const article of this.data.articles) {
-            if (article.isRead) {
-                continue;
-            }
-            if (ids && !ids.has(article.id)) {
-                continue;
-            }
-            if (
-                request.feedId !== undefined &&
-                article.feedId !== request.feedId
-            ) {
-                continue;
-            }
-            if (
-                folderIds &&
-                (article.folderId === null || !folderIds.has(article.folderId))
-            ) {
-                continue;
-            }
-            if (
-                cutoff !== null &&
-                Date.parse(article.publishedAt ?? article.discoveredAt) >=
-                    cutoff
-            ) {
-                continue;
-            }
+    markRead(request: ApiInput<"markRead">): { updated: number } {
+        const articles =
+            "articleIds" in request
+                ? this.unreadArticlesById(request.articleIds)
+                : this.olderUnreadArticles(request);
+        if (
+            "confirmedCount" in request &&
+            articles.length > 0 &&
+            articles.length !== request.confirmedCount
+        ) {
+            throw new Error(MARK_READ_COUNT_CHANGED);
+        }
+        for (const article of articles) {
             article.isRead = true;
-            updated += 1;
         }
 
-        return { updated };
+        return { updated: articles.length };
+    }
+
+    private unreadArticlesById(articleIds: number[]): Article[] {
+        const ids = new Set(articleIds);
+        return this.data.articles.filter(
+            (article) => !article.isRead && ids.has(article.id),
+        );
+    }
+
+    private olderUnreadArticles(query: OlderArticleQuery): Article[] {
+        const cutoff = Date.parse(query.olderThan);
+        return this.filteredArticles(query).filter(
+            (article) =>
+                !article.isRead &&
+                Date.parse(article.publishedAt ?? article.discoveredAt) <
+                    cutoff,
+        );
     }
 
     analyzeWebPage(
@@ -474,6 +480,7 @@ export class DemoStore {
         },
         updateArticleState: ({ id, state }) =>
             this.updateArticleState(id, state),
+        previewMarkRead: (request) => this.previewMarkRead(request),
         markRead: (request) => this.markRead(request),
         refresh: ({ feedIds }) => {
             const activeFeeds = this.data.feeds.filter((feed) => !feed.paused);
