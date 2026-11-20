@@ -418,11 +418,26 @@ describe("live API, OPML, and filtering rules", () => {
         ],
       },
     });
+    const previewOlder = await app.inject({
+      method: "POST",
+      url: "/api/articles/mark-read/preview",
+      headers: { cookie: readerCookie },
+      payload: { state: "unread", folderId: folder.id, olderThanDays: 1 },
+    });
+    expect(previewOlder.statusCode).toBe(200);
+    const { count, olderThan } = previewOlder.json();
+    expect(count).toBe(1);
+    const olderInFolder = {
+      state: "unread",
+      folderId: folder.id,
+      olderThan,
+      confirmedCount: count,
+    };
     const markOlder = await app.inject({
       method: "POST",
       url: "/api/articles/mark-read",
       headers: { cookie: readerCookie },
-      payload: { folderId: folder.id, olderThanDays: 1 },
+      payload: olderInFolder,
     });
     expect(markOlder.statusCode).toBe(200);
     expect(markOlder.json()).toEqual({ updated: 1 });
@@ -452,7 +467,7 @@ describe("live API, OPML, and filtering rules", () => {
           method: "POST",
           url: "/api/articles/mark-read",
           headers: { cookie: readerCookie },
-          payload: { folderId: folder.id, olderThanDays: 1 },
+          payload: olderInFolder,
         })
       ).json(),
     ).toEqual({ updated: 0 });
@@ -462,7 +477,7 @@ describe("live API, OPML, and filtering rules", () => {
           method: "POST",
           url: "/api/articles/mark-read",
           headers: { cookie: partnerCookie },
-          payload: { folderId: folder.id, olderThanDays: 1 },
+          payload: olderInFolder,
         })
       ).json(),
     ).toEqual({ updated: 0 });
@@ -470,9 +485,9 @@ describe("live API, OPML, and filtering rules", () => {
       (
         await app.inject({
           method: "POST",
-          url: "/api/articles/mark-read",
+          url: "/api/articles/mark-read/preview",
           headers: { cookie: readerCookie },
-          payload: { olderThanDays: 4 },
+          payload: { state: "unread", olderThanDays: 4 },
         })
       ).statusCode,
     ).toBe(400);

@@ -3,14 +3,19 @@ import {
     articleSearchColumns,
     normalizeSearchText,
 } from "../../../shared/article-search.js";
-import type {
-    Article,
-    ArticlePage,
-    ArticleQuery,
-    FeedSourceKind,
-    FolderSortDirection,
-    MarkReadRequest,
+import {
+    type Article,
+    type ArticleFilters,
+    type ArticlePage,
+    type ArticleQuery,
+    type FeedSourceKind,
+    type FolderSortDirection,
+    MARK_READ_COUNT_CHANGED,
+    type MarkReadAgeDays,
+    markReadCutoff,
+    type OlderArticleQuery,
 } from "../../../shared/types.js";
+import { ApplicationApiError } from "../../errors.js";
 import {
     type ArticleCursor,
     decodeArticleCursor,
@@ -74,6 +79,9 @@ const subscriptionArticles = `(SELECT f.user_id, fa.article_id, f.id AS feed_id,
   JOIN feed_articles fa INDEXED BY feed_articles_read_idx ON fa.feed_id = f.id
   LEFT JOIN saved_articles sa ON sa.user_id = f.user_id AND sa.article_id = fa.article_id)`;
 
+const articleDateSql =
+    "COALESCE(articles.published_at, articles.discovered_at)";
+
 export class ArticleRepository {
     constructor(private readonly sqlite: Sqlite.Database) {}
 
@@ -88,11 +96,8 @@ export class ArticleRepository {
         );
     }
 
-    listArticlePage(userId: number, query: ArticleQuery): ArticlePage {
+    private articleFilters(userId: number, query: ArticleFilters) {
         const savedOrder = query.state === "saved";
-        const sortAtSql = savedOrder
-            ? "feed_articles.saved_at"
-            : "COALESCE(articles.published_at, articles.discovered_at)";
         const where = ["feed_articles.user_id = ?"];
         const values: Array<string | number> = [userId];
         if (query.feedId !== undefined) {
@@ -164,6 +169,18 @@ export class ArticleRepository {
                 queueValues.push(...patterns);
             }
         }
+        return { where, values, queueWhere, queueValues };
+    }
+
+    listArticlePage(userId: number, query: ArticleQuery): ArticlePage {
+        const savedOrder = query.state === "saved";
+        const sortAtSql = savedOrder
+            ? "feed_articles.saved_at"
+            : articleDateSql;
+        const { where, values, queueWhere, queueValues } = this.articleFilters(
+            userId,
+            query,
+        );
         if (query.anchorId === undefined) {
             where.push(...queueWhere);
             values.push(...queueValues);
@@ -367,7 +384,7 @@ export class ArticleRepository {
             : "COALESCE(folders.sort_direction, 'newest')";
         const sortAtSql = savedOrder
             ? "feed_articles.saved_at"
-            : "COALESCE(articles.published_at, articles.discovered_at)";
+            : articleDateSql;
         const rows = this.sqlite
             .prepare(
                 `WITH filtered_articles AS (
@@ -577,60 +594,77 @@ export class ArticleRepository {
         })();
     }
 
-    markArticlesRead(userId: number, input: MarkReadRequest): number {
-        if (input.articleIds?.length === 0) {
-            return 0;
-        }
-        const where = [
-            "account_articles.user_id = ?",
-            "account_articles.is_read = 0",
-        ];
-        const values: Array<number | string> = [userId];
-        if (input.articleIds) {
-            where.push(
-                `articles.id IN (${input.articleIds.map(() => "?").join(", ")})`,
-            );
-            values.push(...input.articleIds);
-        } else {
-            where.push("account_articles.feed_id IS NOT NULL");
-        }
-        if (input.feedId !== undefined) {
-            where.push("account_articles.feed_id = ?");
-            values.push(input.feedId);
-        }
-        if (input.folderId !== undefined) {
-            where.push(
-                `account_articles.folder_id IN (
-           WITH RECURSIVE folder_tree(id) AS (
-             SELECT id FROM folders WHERE id = ? AND user_id = ?
-             UNION ALL
-             SELECT folders.id FROM folders JOIN folder_tree ON folders.parent_id = folder_tree.id
-             WHERE folders.user_id = ?
-           ) SELECT id FROM folder_tree
-         )`,
-            );
-            values.push(input.folderId, userId, userId);
-        }
-        if (input.olderThanDays !== undefined) {
-            where.push(
-                "COALESCE(articles.published_at, articles.discovered_at) < ?",
-            );
-            values.push(
-                new Date(
-                    Date.now() - input.olderThanDays * 86_400_000,
-                ).toISOString(),
-            );
-        }
-        const selection = `SELECT DISTINCT articles.id FROM account_articles
-      JOIN articles ON articles.id = account_articles.article_id
-      WHERE ${where.join(" AND ")}`;
+    private olderUnreadSelection(userId: number, query: OlderArticleQuery) {
+        const { where, values, queueWhere, queueValues } = this.articleFilters(
+            userId,
+            query,
+        );
+        const articles =
+            query.state === "saved" ? "account_articles" : subscriptionArticles;
+        where.push(
+            ...queueWhere,
+            "feed_articles.is_read = 0",
+            `${articleDateSql} < ?`,
+        );
+        return {
+            selection: `SELECT DISTINCT articles.id FROM ${articles} AS feed_articles
+              JOIN articles ON articles.id = feed_articles.article_id
+              LEFT JOIN feeds ON feeds.id = feed_articles.feed_id
+              WHERE ${where.join(" AND ")}`,
+            values: [...values, ...queueValues, query.olderThan],
+        };
+    }
+
+    private countSelection(
+        selection: string,
+        values: Array<string | number>,
+    ): number {
+        return Number(
+            this.sqlite
+                .prepare(`SELECT COUNT(*) FROM (${selection})`)
+                .pluck()
+                .get(...values),
+        );
+    }
+
+    previewMarkRead(
+        userId: number,
+        {
+            olderThanDays,
+            ...filters
+        }: ArticleFilters & { olderThanDays: MarkReadAgeDays },
+    ): { count: number; olderThan: string } {
+        const olderThan = markReadCutoff(olderThanDays);
+        const { selection, values } = this.olderUnreadSelection(userId, {
+            ...filters,
+            olderThan,
+        });
+        return { count: this.countSelection(selection, values), olderThan };
+    }
+
+    markArticlesRead(
+        userId: number,
+        input:
+            | (OlderArticleQuery & { confirmedCount: number })
+            | { articleIds: number[] },
+    ): number {
         return this.sqlite.transaction(() => {
-            const count = Number(
-                this.sqlite
-                    .prepare(`SELECT COUNT(*) FROM (${selection})`)
-                    .pluck()
-                    .get(...values),
-            );
+            const { selection, values } =
+                "articleIds" in input
+                    ? {
+                          selection: `SELECT DISTINCT article_id FROM account_articles
+                       WHERE user_id = ? AND is_read = 0
+                         AND article_id IN (SELECT value FROM json_each(?))`,
+                          values: [userId, JSON.stringify(input.articleIds)],
+                      }
+                    : this.olderUnreadSelection(userId, input);
+            const count = this.countSelection(selection, values);
+            if (count === 0) {
+                return 0;
+            }
+            if ("confirmedCount" in input && count !== input.confirmedCount) {
+                throw new ApplicationApiError(409, MARK_READ_COUNT_CHANGED);
+            }
             this.sqlite
                 .prepare(
                     `UPDATE feed_articles SET is_read = 1 WHERE article_id IN (${selection})

@@ -57,6 +57,13 @@ export type AiFeature = "article_summary";
 export type AiArticleSourceKind = "full" | "feed" | "excerpt";
 export const MARK_READ_AGE_DAYS = [1, 2, 3, 7, 14] as const;
 export type MarkReadAgeDays = (typeof MARK_READ_AGE_DAYS)[number];
+export const MARK_READ_COUNT_CHANGED =
+    "The number of matching unread articles changed. Try again.";
+
+export function markReadCutoff(days: MarkReadAgeDays): string {
+    return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
 export const DUPLICATE_ARTICLE_WINDOW_DAYS = [1, 7, 30] as const;
 export type DuplicateArticleWindowDays =
     (typeof DUPLICATE_ARTICLE_WINDOW_DAYS)[number];
@@ -354,22 +361,22 @@ export interface BootstrapData {
     };
 }
 
-export interface ArticleQuery {
+export interface ArticleFilters {
     state: ArticleState;
     feedId?: number;
     folderId?: number;
     search?: string;
+}
+
+export interface ArticleQuery extends ArticleFilters {
     limit?: number;
     cursor?: string;
     anchorId?: number;
     includeContent?: boolean;
 }
 
-export interface MarkReadRequest {
-    articleIds?: number[];
-    feedId?: number;
-    folderId?: number;
-    olderThanDays?: MarkReadAgeDays;
+export interface OlderArticleQuery extends ArticleFilters {
+    olderThan: string;
 }
 
 export interface ArticlePage {

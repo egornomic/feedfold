@@ -14,7 +14,6 @@ import type {
     AiProvider,
     ArticleQuery,
     ImportResult,
-    MarkReadRequest,
     Rule,
     SessionUser,
     WebFeedConfig,
@@ -201,7 +200,10 @@ export function createApiClient(runtime: ApiRuntime) {
             state: { isRead?: boolean; isSaved?: boolean },
         ) => request("updateArticleState", { id, state }),
 
-        markRead: (body: MarkReadRequest) => request("markRead", body),
+        previewMarkRead: (body: ApiInput<"previewMarkRead">) =>
+            request("previewMarkRead", body),
+
+        markRead: (body: ApiInput<"markRead">) => request("markRead", body),
 
         refresh: (feedIds?: number[]) =>
             request("refresh", feedIds ? { feedIds } : {}),
