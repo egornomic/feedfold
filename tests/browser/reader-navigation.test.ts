@@ -13,6 +13,75 @@ import {
 } from "./reader-browser-fixture.js";
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it.skipIf(Boolean(desktopAppPath))(
+    "keeps keyboard focus in the mobile navigation drawer",
+    async () => {
+      const page = await open("magazine");
+      try {
+        await page.setViewportSize({ width: 320, height: 800 });
+        const opener = page.getByRole("button", { name: "Open navigation", exact: true });
+        const drawer = page.getByRole("dialog", { name: "Primary navigation" });
+        const close = drawer.getByRole("button", { name: "Close navigation", exact: true });
+        const isFocused = (element: typeof close) =>
+          element.evaluateAll((nodes) => nodes.some((node) => node === document.activeElement));
+
+        await opener.focus();
+        await page.keyboard.press("Enter");
+        expect(await isFocused(close)).toBe(true);
+        await page.locator(".reader-options-trigger").focus();
+        expect(await isFocused(close)).toBe(true);
+        await page.keyboard.press("Enter");
+        await drawer.waitFor({ state: "hidden" });
+        expect(await isFocused(opener)).toBe(true);
+
+        const article = page.locator(".article-open-button").first();
+        await article.focus();
+        await page.keyboard.press("Enter");
+        const title = page.locator(".article-swipe-layer.is-active h2");
+        await title.waitFor();
+        const articleUrl = page.url();
+        const articleTitle = await title.textContent();
+        await opener.focus();
+        await page.keyboard.press("Enter");
+
+        expect(await isFocused(close)).toBe(true);
+        await page.keyboard.press("ArrowRight");
+        expect(page.url()).toBe(articleUrl);
+
+        const logout = drawer.getByRole("button", { name: "Log out virtual-reader" });
+        const brand = drawer.locator(".brand");
+        await page.keyboard.press("Shift+Tab");
+        expect(await isFocused(brand)).toBe(true);
+        await page.keyboard.press("Shift+Tab");
+        expect(await isFocused(logout)).toBe(true);
+        await page.keyboard.press("Tab");
+        expect(await isFocused(brand)).toBe(true);
+        await page.keyboard.press("Tab");
+        expect(await isFocused(close)).toBe(true);
+
+        const add = drawer.getByRole("button", { name: "Add subscription or folder" });
+        await add.focus();
+        await page.keyboard.press("Enter");
+        const menu = page.getByRole("menu", { name: "Add subscription or folder" });
+        await menu.waitFor();
+        await page.keyboard.press("Escape");
+        await menu.waitFor({ state: "hidden" });
+        await expect.poll(() => isFocused(add)).toBe(true);
+
+        await page.keyboard.press("Escape");
+        await drawer.waitFor({ state: "hidden" });
+        expect(page.url()).toBe(articleUrl);
+        expect(await title.textContent()).toBe(articleTitle);
+        expect(await isFocused(opener)).toBe(true);
+
+        await page.keyboard.press("Escape");
+        await expect.poll(() => new URL(page.url()).pathname).toBe(`/feeds/${backlog.feed.id}/all`);
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
   it("returns from the final article when the queue refresh fails offline", async () => {
     const sample = seedReaderBacklog(database, "Offline queue completion", 1);
     const page = await open("magazine");

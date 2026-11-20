@@ -84,12 +84,14 @@ export function readerFixture(path = "/articles/unread", count = 10) {
     url: `https://feedfold.test${path}`,
   });
   Object.defineProperty(dom.window, "feedfoldDesktop", { value: bridge });
+  const compactViewport = Object.assign(new dom.window.EventTarget(), { matches: false });
   Object.defineProperty(dom.window, "matchMedia", {
-    value: (query: string) => ({
-      matches: query === "(prefers-reduced-motion: reduce)",
-      addEventListener() {},
-      removeEventListener() {},
-    }),
+    value: (query: string) =>
+      query === "(max-width: 1020px)"
+        ? compactViewport
+        : Object.assign(new dom.window.EventTarget(), {
+            matches: query === "(prefers-reduced-motion: reduce)",
+          }),
   });
   Object.defineProperty(dom.window.HTMLElement.prototype, "scrollIntoView", { value: () => {} });
   dom.window.document.documentElement.dataset.inputModality = "keyboard";
@@ -101,6 +103,12 @@ export function readerFixture(path = "/articles/unread", count = 10) {
   const root = createRoot(container);
 
   return {
+    setCompactViewport: async (matches: boolean) => {
+      await act(async () => {
+        compactViewport.matches = matches;
+        compactViewport.dispatchEvent(new dom.window.Event("change"));
+      });
+    },
     database,
     services,
     feed,

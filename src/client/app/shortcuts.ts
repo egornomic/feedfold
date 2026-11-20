@@ -13,6 +13,7 @@ import { useInterfaceState, useReaderPreferences } from "./session-state";
 
 interface AppShortcuts {
     bootstrap: BootstrapData | null;
+    drawerOpen: boolean;
     route: AppRouteController;
     queue: ArticleQueueController;
     articleActions: ReturnType<typeof useArticleActions>;
@@ -26,6 +27,7 @@ interface AppShortcuts {
 
 export function useAppShortcuts({
     bootstrap,
+    drawerOpen,
     route,
     queue,
     articleActions,
@@ -45,7 +47,6 @@ export function useAppShortcuts({
     const setShortcutHelpOpen = useInterfaceState(
         (state) => state.setShortcutHelpOpen,
     );
-    const setNavOpen = useInterfaceState((state) => state.setNavOpen);
     const articleFontSize = useReaderPreferences(
         (state) => state.articleFontSize,
     );
@@ -55,18 +56,18 @@ export function useAppShortcuts({
     const sequence = useRef<{ startedAt: number } | null>(null);
     useEffect(() => {
         const handleKey = (event: KeyboardEvent) => {
-            if (managementRequest) {
+            if (
+                event.defaultPrevented ||
+                managementRequest ||
+                shortcutHelpOpen ||
+                drawerOpen
+            ) {
                 return;
             }
             if (event.key === "Escape") {
-                setShortcutHelpOpen(false);
-                setNavOpen(false);
-                if (route.routedArticleId !== null) {
+                if (!event.repeat && route.routedArticleId !== null) {
                     route.returnToArticleList();
                 }
-                return;
-            }
-            if (shortcutHelpOpen) {
                 return;
             }
             if (!bootstrap?.settings.singleKeyShortcuts) {
@@ -248,6 +249,7 @@ export function useAppShortcuts({
         bootstrap?.capabilities.manualRefresh,
         bootstrap?.settings.singleKeyShortcuts,
         changeReadingMode,
+        drawerOpen,
         managementRequest,
         navigateTo,
         articleFontSize,
@@ -261,6 +263,5 @@ export function useAppShortcuts({
         selectScope,
         shortcutHelpOpen,
         setShortcutHelpOpen,
-        setNavOpen,
     ]);
 }

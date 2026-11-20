@@ -396,7 +396,9 @@ export function feedDragScenarios(surface: Surface) {
                 ),
               ).toBe(true);
             }
-            expect(await page.getByRole("dialog").count()).toBe(0);
+            expect(
+              await page.getByRole("dialog", { name: /^(?!Primary navigation$)/ }).count(),
+            ).toBe(0);
             expect(await scope.locator(".is-feed-drop-target").count()).toBe(0);
           }
           if (input === "keyboard") {
@@ -434,7 +436,9 @@ export function feedDragScenarios(surface: Surface) {
           await page.waitForTimeout(100);
           expect(await location(context, feed)).toBeNull();
           expect(writes).toEqual([]);
-          expect(await page.getByRole("dialog").count()).toBe(0);
+          expect(await page.getByRole("dialog", { name: /^(?!Primary navigation$)/ }).count()).toBe(
+            0,
+          );
         } finally {
           await context.close();
         }
