@@ -20,6 +20,7 @@ export interface InvitationOverview {
 }
 
 export type ArticleState = "all" | "unread" | "read" | "saved";
+export const ARTICLE_SEARCH_MAX_LENGTH = 300;
 export type FolderSortDirection = "newest" | "oldest";
 export type ReadingMode = "magazine" | "expanded";
 type ExtractionStatus =
