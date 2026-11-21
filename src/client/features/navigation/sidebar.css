@@ -196,12 +196,12 @@
 .tree-row {
     position: relative;
     display: grid;
-    grid-template-columns: max(22px, var(--control-target-min)) minmax(0, 1fr);
+    grid-template-columns: max(24px, var(--control-target-min)) minmax(0, 1fr);
 }
 
 .tree-toggle {
     display: flex;
-    width: max(22px, var(--control-target-min));
+    width: 100%;
     min-height: var(--control-size);
     align-items: center;
     justify-content: center;
@@ -319,7 +319,9 @@
 }
 
 .status-dot.needs_attention {
+    border-radius: 0;
     background: var(--warning);
+    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
 }
 
 .status-dot.paused {
