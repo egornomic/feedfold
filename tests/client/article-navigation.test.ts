@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import { waitFor } from "./react-harness.js";
 import { readerFixture } from "./reader-fixture.js";
 
+async function clickBackWithPointer(fixture: ReturnType<typeof readerFixture>) {
+  const back = fixture.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Back to articles"]',
+  );
+  if (!back) throw new Error("The reader has no Back action");
+  await act(async () => {
+    back.dispatchEvent(new fixture.dom.window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  });
+}
+
 describe("reader navigation", () => {
   it.each([false, true])(
     "restores a rejected bulk read before a background reload can finish (queued unread: %s)",
@@ -289,11 +299,7 @@ describe("reader navigation", () => {
         }
         const articles = fixture.hold("articles");
         const bootstrap = fixture.hold("bootstrap");
-        const back = fixture.container.querySelector<HTMLButtonElement>(
-          '[aria-label="Back to articles"]',
-        );
-        if (!back) throw new Error("The reader has no Back action");
-        await act(async () => back.click());
+        await clickBackWithPointer(fixture);
         await waitFor(
           "the retained reading queue",
           () =>
@@ -342,11 +348,7 @@ describe("reader navigation", () => {
         `);
         await act(async () => action()?.click());
         await waitFor("the pending state change", () => mutation.held > 0);
-        const back = fixture.container.querySelector<HTMLButtonElement>(
-          '[aria-label="Back to articles"]',
-        );
-        if (!back) throw new Error("The reader has no Back action");
-        await act(async () => back.click());
+        await clickBackWithPointer(fixture);
         await waitFor(
           "the optimistically filtered queue",
           () => fixture.dom.window.location.pathname === `/articles/${state}` && row() === null,
@@ -587,11 +589,7 @@ describe("reader navigation", () => {
           fixture.container.querySelector(".article-swipe-layer.is-active .article-content")
             ?.textContent,
         ).toBe("Full content 5");
-        const back = fixture.container.querySelector<HTMLButtonElement>(
-          '[aria-label="Back to articles"]',
-        );
-        if (!back) throw new Error("The reader has no Back action");
-        await act(async () => back.click());
+        await clickBackWithPointer(fixture);
         if (result === "pending") await act(async () => articles.release());
         await waitFor(
           "the surrounding feed",

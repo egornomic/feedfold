@@ -116,6 +116,8 @@ interface PendingArticleNavigation {
 
 export function ReaderPane({
     article,
+    focusHeading,
+    onFocusHeading,
     contentLoaded,
     contentError,
     onRetryContent,
@@ -143,6 +145,8 @@ export function ReaderPane({
     onFilterSelection,
 }: {
     article: Article | null;
+    focusHeading: number | undefined;
+    onFocusHeading: () => void;
     contentLoaded: boolean;
     contentError: string | null;
     onRetryContent: (article: Article) => void;
@@ -154,7 +158,7 @@ export function ReaderPane({
     showYouTubeDescriptions: boolean;
     canPrevious: boolean;
     canNext: boolean;
-    onBack: () => void;
+    onBack: (keyboard: boolean) => void;
     onPrevious: ArticleNavigationHandler;
     onNext: ArticleNavigationHandler;
     onToggleRead: (article: Article) => void;
@@ -415,6 +419,24 @@ export function ReaderPane({
         transitionSetup.current = null;
         restoreActiveSurface(setup.velocity, setup.reducedMotion);
     }, [surfaces, restoreActiveSurface]);
+
+    useLayoutEffect(() => {
+        if (
+            focusHeading === undefined ||
+            activeSurface?.article.id !== focusHeading
+        ) {
+            return;
+        }
+        const header =
+            activeLayerRef.current?.querySelector<HTMLElement>(
+                ".article-header",
+            );
+        const heading = header?.querySelector("h2") ?? header;
+        if (heading) {
+            heading.focus({ preventScroll: true });
+            onFocusHeading();
+        }
+    }, [activeSurface?.article.id, focusHeading, onFocusHeading]);
 
     useEffect(() => {
         if (reducedMotion && activeMotion.current) {
@@ -753,7 +775,7 @@ export function ReaderPane({
                         type="button"
                         aria-label="Back to articles"
                         data-tooltip="Back to articles"
-                        onClick={onBack}
+                        onClick={(event) => onBack(event.detail === 0)}
                     >
                         <List aria-hidden="true" size={16} />
                     </button>

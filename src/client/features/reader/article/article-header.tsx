@@ -47,7 +47,11 @@ export function ArticleHeader({
         );
     const views = article.media?.viewCount;
     return (
-        <header className="article-header" id={id}>
+        <header
+            className="article-header"
+            id={id}
+            tabIndex={article.title ? undefined : -1}
+        >
             <div className="article-source-row">
                 {source}
                 <span aria-hidden="true">·</span>
@@ -84,7 +88,7 @@ export function ArticleHeader({
                 ) : null}
             </div>
             {article.title ? (
-                <h2>
+                <h2 tabIndex={-1}>
                     {article.url ? (
                         <a href={article.url} target="_blank" rel="noreferrer">
                             {article.title}
