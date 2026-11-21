@@ -244,6 +244,44 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
     },
   );
 
+  it("keeps an overlong search editable and submits it after correction", async () => {
+    const page = await open("magazine");
+    try {
+      await page.getByRole("button", { name: "Search articles", exact: true }).click();
+      const search = page.getByRole("searchbox", { name: "Search articles" });
+      const error = page.getByText("Use 300 characters or fewer.", { exact: true });
+      const validQuery = "x".repeat(300);
+      const invalidQuery = `${validQuery}x`;
+      const attemptedSearches: string[] = [];
+      page.on("request", (request) => {
+        const { pathname, searchParams } = new URL(request.url());
+        const query = searchParams.get("search");
+        if (pathname === "/api/articles" && query !== null) attemptedSearches.push(query);
+      });
+
+      await search.fill(invalidQuery);
+      await search.press("Enter");
+      await error.waitFor();
+      expect(await search.inputValue()).toBe(invalidQuery);
+      expect(await search.getAttribute("aria-invalid")).toBe("true");
+
+      await search.press("Backspace");
+      expect(await search.inputValue()).toBe(validQuery);
+      await error.waitFor({ state: "hidden" });
+      const [response] = await Promise.all([
+        page.waitForResponse((response) => {
+          const { pathname, searchParams } = new URL(response.url());
+          return pathname === "/api/articles" && searchParams.get("search") === validQuery;
+        }),
+        search.press("Enter"),
+      ]);
+      expect(response.status()).toBe(200);
+      expect(attemptedSearches).toEqual([validQuery]);
+    } finally {
+      await page.close();
+    }
+  });
+
   it("confirms only the unread search matches older than the cutoff", async () => {
     const sample = seedReaderBacklog(database, "Filtered bulk read", 3);
     const titles = ["Target old", "Unrelated old", "Target recent"];

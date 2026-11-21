@@ -486,10 +486,11 @@
         align-self: center;
     }
     .reader-title-row > .search-presence {
+        --search-field-height: var(--control-size-touch);
+
         grid-area: search;
         width: 100%;
         max-width: none;
-        height: var(--control-size-touch);
         margin-left: 0;
     }
     .reader-title-row > .search-presence[data-motion-state="closed"] {

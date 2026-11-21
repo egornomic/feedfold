@@ -19,12 +19,13 @@ import {
     useRef,
     useState,
 } from "react";
-import type {
-    ArticleState,
-    MarkReadAgeDays,
-    ReadingMode,
+import {
+    ARTICLE_SEARCH_MAX_LENGTH,
+    type ArticleState,
+    MARK_READ_AGE_DAYS,
+    type MarkReadAgeDays,
+    type ReadingMode,
 } from "../../../shared/types";
-import { MARK_READ_AGE_DAYS } from "../../../shared/types";
 import { useInterfaceState } from "../../app/session-state";
 import { IconButton } from "../../ui/controls";
 import { Menu, MenuItem, MenuPopup } from "../../ui/menu";
@@ -92,6 +93,7 @@ export function ReaderToolbar({
     const searchToggleRef = useRef<HTMLButtonElement>(null);
     const searchExpanded = searchOpen || searchActive || Boolean(searchInput);
     const searchPresence = useMotionPresence(searchExpanded);
+    const searchTooLong = searchInput.trim().length > ARTICLE_SEARCH_MAX_LENGTH;
     const showArticleStateSwitcher =
         !readingArticle &&
         (articleState === "unread" || articleState === "all");
@@ -201,7 +203,14 @@ export function ReaderToolbar({
                             data-motion-state={searchPresence.state}
                             inert={!searchExpanded}
                             aria-label="Article search"
-                            onSubmit={onSearch}
+                            onSubmit={(event) => {
+                                if (searchTooLong) {
+                                    event.preventDefault();
+                                    searchInputRef.current?.focus();
+                                    return;
+                                }
+                                onSearch(event);
+                            }}
                             onKeyDown={(event) => {
                                 if (event.key !== "Escape") {
                                     return;
@@ -221,6 +230,12 @@ export function ReaderToolbar({
                                 type="search"
                                 value={searchInput}
                                 placeholder="Search titles and article text"
+                                aria-invalid={searchTooLong || undefined}
+                                aria-describedby={
+                                    searchTooLong
+                                        ? "article-search-error"
+                                        : undefined
+                                }
                                 onChange={(event) =>
                                     onSearchInput(event.target.value)
                                 }
@@ -242,6 +257,15 @@ export function ReaderToolbar({
                                 Search
                             </button>
                         </form>
+                        <div
+                            id="article-search-error"
+                            className="search-error"
+                            role="status"
+                        >
+                            {searchTooLong
+                                ? `Use ${ARTICLE_SEARCH_MAX_LENGTH} characters or fewer.`
+                                : null}
+                        </div>
                     </div>
                 ) : null}
                 <fieldset className="view-switcher">
