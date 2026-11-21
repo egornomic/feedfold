@@ -79,9 +79,10 @@ function ReaderAppearance() {
     );
 
     useLayoutEffect(() => {
+        // Stored sizes are expressed in pixels at the standard 16px root size.
         document.documentElement.style.setProperty(
             "--article-font-size",
-            `${articleFontSize}px`,
+            `${articleFontSize / 16}rem`,
         );
     }, [articleFontSize]);
 

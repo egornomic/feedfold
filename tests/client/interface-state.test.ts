@@ -49,7 +49,9 @@ it("shares navigation, preferences, and panel controls across the reader and man
     await key("Escape");
     await waitFor("dismissed shortcuts", () => document.querySelector('[role="dialog"]') === null);
     await key("]");
-    expect(document.documentElement.style.getPropertyValue("--article-font-size")).toBe("19px");
+    expect(document.documentElement.style.getPropertyValue("--article-font-size")).toBe(
+      "1.1875rem",
+    );
 
     await key("g");
     await key("f");
