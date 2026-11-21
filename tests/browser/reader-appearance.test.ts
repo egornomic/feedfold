@@ -16,6 +16,51 @@ function appearance(page: Page) {
     }));
 }
 
+it.each(["magazine", "expanded"] as const)(
+  "scales full article text with the browser font size in %s view",
+  async (mode) => {
+    const page = await open(mode);
+    try {
+      if (mode === "magazine") await page.locator(".article-open-button").first().click();
+      const article = page
+        .locator(mode === "magazine" ? ".article-swipe-layer.is-active" : ".expanded-article")
+        .first();
+      const paragraph = article.locator(".article-content p").first();
+      const fontSize = () => paragraph.evaluate((element) => getComputedStyle(element).fontSize);
+      const heading = article.locator(".article-header h2");
+      const headingFontSize = () =>
+        heading.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+
+      expect(await fontSize()).toBe("18px");
+      const originalHeadingSize = await headingFontSize();
+      const browserSettings = await context.newCDPSession(page);
+      await browserSettings.send("Page.setFontSizes", { fontSizes: { standard: 32 } });
+      expect(await headingFontSize()).toBeGreaterThan(originalHeadingSize);
+      expect(await fontSize()).toBe("36px");
+
+      await page.keyboard.press("]");
+      await expect.poll(fontSize).toBe("38px");
+      await page.reload();
+      expect(await fontSize()).toBe("38px");
+      await browserSettings.send("Page.setFontSizes", { fontSizes: { standard: 16 } });
+      expect(await fontSize()).toBe("19px");
+
+      await page.goto("/settings");
+      await page.getByRole("button", { name: "Increase article text size" }).click();
+      const sizeSetting = page.getByRole("status").filter({ hasText: /^\d+px$/ });
+      expect(await sizeSetting.textContent()).toBe("20px");
+      await page.getByRole("button", { name: "Decrease article text size" }).click();
+      expect(await sizeSetting.textContent()).toBe("19px");
+      await page.goBack();
+      expect(await fontSize()).toBe("19px");
+      await page.keyboard.press("[");
+      await expect.poll(fontSize).toBe("18px");
+    } finally {
+      await page.close();
+    }
+  },
+);
+
 it.each([
   { theme: "light", palette: "sand", device: "dark" },
   { theme: "dark", palette: "codex", device: "light" },
