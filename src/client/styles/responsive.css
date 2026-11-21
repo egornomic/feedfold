@@ -981,7 +981,9 @@
         transition: none;
     }
 
-    .article-source-trigger svg {
+    .article-source-trigger svg,
+    .mark-read-menu-trigger > svg,
+    .summary-action-chevron {
         transition: none;
     }
 
