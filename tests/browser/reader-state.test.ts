@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import { describe, expect, it } from "vitest";
+import { AuthService } from "../../src/server/features/auth/service.js";
 import { seedReaderBacklog } from "../helpers/reader-backlog.js";
 import {
   bottom,
@@ -28,6 +29,75 @@ async function confirmOlderRead(page: Page, accept: boolean): Promise<string> {
 }
 
 describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a populated database`, () => {
+  it.skipIf(Boolean(desktopAppPath))(
+    "opens feed management from an empty All articles queue",
+    async () => {
+      const auth = new AuthService(database.auth, 20, { maxAccounts: 2 });
+      const reader = await auth.register("empty-reader", "reader-password");
+      if (!reader) throw new Error("Could not create the empty reader account");
+      const emptyContext = await browser.newContext({
+        baseURL: origin,
+        viewport: { width: 390, height: 844 },
+      });
+      try {
+        const login = await emptyContext.request.post("/api/auth/login", {
+          data: { username: "empty-reader", password: "reader-password" },
+        });
+        expect(login.status()).toBe(200);
+        database.feeds.createFeed(reader.user.id, {
+          title: "Empty subscription",
+          feedUrl: "https://example.test/empty.xml",
+          paused: true,
+        });
+        const response = await emptyContext.request.get("/api/articles?state=all");
+        expect(response.status()).toBe(200);
+        expect((await response.json()).articles).toEqual([]);
+
+        const page = await emptyContext.newPage();
+        page.setDefaultTimeout(5000);
+        await page.goto("/articles/all");
+        const empty = page.locator(".empty-state");
+        await empty.getByRole("heading", { name: "No articles in this view" }).waitFor();
+        await empty.getByRole("button", { name: "Manage feeds", exact: true }).click();
+        await page.waitForURL(`${origin}feeds`);
+        await page.getByRole("heading", { name: "Manage feeds", exact: true }).waitFor();
+        await page
+          .getByRole("list", { name: "Subscriptions", exact: true })
+          .getByText("Empty subscription", { exact: true })
+          .waitFor();
+      } finally {
+        await emptyContext.close();
+      }
+    },
+  );
+
+  it.each(["feed", "folder"] as const)(
+    "broadens an empty All articles queue for a %s",
+    async (scope) => {
+      const { feed } = seedReaderBacklog(database, `Empty ${scope} subscription`, 0);
+      const folder = database.folders.createFolder(1, { name: `Empty ${scope} group` });
+      database.feeds.updateFeed(1, feed.id, { folderId: folder.id });
+      const scopePath = scope === "feed" ? `feeds/${feed.id}` : `folders/${folder.id}`;
+      const page = await open("magazine");
+      try {
+        await page.goto(`${origin}${scopePath}/saved`);
+        const empty = page.locator(".empty-state");
+        await empty.getByRole("button", { name: "Show all articles", exact: true }).click();
+        await page.waitForURL(`${origin}${scopePath}/all`);
+        await page.locator('.reading-workspace[aria-busy="false"]').waitFor();
+        await empty
+          .getByRole("button", { name: "Show articles from all feeds", exact: true })
+          .click();
+        await page.waitForURL(`${origin}articles/all`);
+        await page
+          .getByRole("button", { name: "Open Virtualization backlog 0000", exact: true })
+          .waitFor();
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
   it("keeps a read article open after refreshing its unread reader context", async () => {
     const sample = seedReaderBacklog(database, "Refreshed unread article", 3);
     const page = await open("magazine");

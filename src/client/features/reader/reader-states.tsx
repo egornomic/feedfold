@@ -8,6 +8,7 @@ import {
     SearchX,
     Star,
 } from "lucide-react";
+import type { ReaderRoute } from "../../../shared/app-routes";
 import type { ArticleState, ReadingMode } from "../../../shared/types";
 import { BrandLogo } from "../../ui/brand";
 
@@ -111,19 +112,23 @@ export function InlineError({
 
 export function EmptyArticles({
     hasFeeds,
+    scope,
     search,
     state,
     onAddFeed,
     onShowSaved,
     onShowAll,
+    onManageFeeds,
     onClearSearch,
 }: {
     hasFeeds: boolean;
+    scope: ReaderRoute["scope"];
     search: string;
     state: ArticleState;
     onAddFeed: () => void;
     onShowSaved: () => void;
     onShowAll: () => void;
+    onManageFeeds: () => void;
     onClearSearch: () => void;
 }) {
     if (!hasFeeds) {
@@ -191,17 +196,28 @@ export function EmptyArticles({
             </section>
         );
     }
+    const isAllArticles = state === "all";
+    const showManageFeeds = isAllArticles && scope === "all";
+    const label = showManageFeeds
+        ? "Manage feeds"
+        : isAllArticles
+          ? "Show articles from all feeds"
+          : "Show all articles";
     return (
         <section className="inline-state empty-state">
             <Inbox aria-hidden="true" size={40} strokeWidth={1.7} />
             <h2>No articles in this view</h2>
-            <p>Choose another feed or article state.</p>
+            <p>
+                {showManageFeeds
+                    ? "Check your subscriptions or add another feed."
+                    : "Choose another feed or article state."}
+            </p>
             <button
                 className="secondary-button"
                 type="button"
-                onClick={onShowAll}
+                onClick={showManageFeeds ? onManageFeeds : onShowAll}
             >
-                Show all articles
+                {label}
             </button>
         </section>
     );
