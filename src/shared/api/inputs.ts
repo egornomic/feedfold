@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AI_PROMPT_MAX_LENGTH } from "../ai-prompts.js";
 import {
+    ARTICLE_SEARCH_MAX_LENGTH,
     DUPLICATE_ARTICLE_WINDOW_DAYS,
     type DuplicateArticleWindowDays,
     FEED_POLL_INTERVAL_MINUTES,
@@ -94,7 +95,11 @@ const articleFilters = z
         state: z.enum(["all", "unread", "read", "saved"]),
         feedId: resourceId.exactOptional(),
         folderId: resourceId.exactOptional(),
-        search: z.string().trim().max(300).exactOptional(),
+        search: z
+            .string()
+            .trim()
+            .max(ARTICLE_SEARCH_MAX_LENGTH)
+            .exactOptional(),
     })
     .strict();
 const olderArticles = articleFilters.extend({
