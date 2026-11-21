@@ -211,20 +211,24 @@ export function ReaderWorkspace({
                 ) : queue.articles.length === 0 ? (
                     <EmptyArticles
                         hasFeeds={bootstrap.feeds.length > 0}
+                        scope={displayedReaderRoute.scope}
                         search={displayedReaderRoute.search}
                         state={displayedReaderRoute.state}
                         onAddFeed={openAddFeed}
                         onShowSaved={() => selectScope(null, null, "saved")}
                         onShowAll={() =>
                             route.navigate(
-                                readerRouteForSelection(
-                                    "all",
-                                    selectedFeedId,
-                                    selectedFolderId,
-                                    route.readerRoute.search,
-                                ),
+                                displayedReaderRoute.state === "all"
+                                    ? readerRouteForSelection(
+                                          "all",
+                                          null,
+                                          null,
+                                          "",
+                                      )
+                                    : { ...displayedReaderRoute, state: "all" },
                             )
                         }
+                        onManageFeeds={() => route.navigate({ kind: "feeds" })}
                         onClearSearch={() => {
                             route.navigate(
                                 readerRouteForSelection(
