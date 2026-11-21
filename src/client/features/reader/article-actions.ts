@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { appRoutePath } from "../../../shared/app-routes";
 import type {
     Article,
     MarkReadAgeDays,
@@ -30,6 +31,12 @@ interface ArticleActionsOptions {
     showToast: (message: string) => void;
 }
 
+interface QueueFocus {
+    path: string;
+    articleId: number;
+    index: number;
+}
+
 export function useArticleActions({
     loadFullArticle,
     queue,
@@ -44,6 +51,13 @@ export function useArticleActions({
     const manuallyUnreadArticleIds = useRef(new Set<number>());
     const activeArticleIdRef = useRef(queue.activeArticleId);
     activeArticleIdRef.current = queue.activeArticleId;
+    const queueOrigin = useRef<QueueFocus | null>(null);
+    const [keyboardFocus, setKeyboardFocus] = useState<
+        | { kind: "article"; articleId: number }
+        | ({ kind: "queue" } & QueueFocus)
+        | null
+    >(null);
+    const clearKeyboardFocus = useCallback(() => setKeyboardFocus(null), []);
     const loadBootstrap = dataResource.loadBootstrap;
     const loadArticles = queue.loadArticles;
 
@@ -125,22 +139,70 @@ export function useArticleActions({
     const openArticle = useCallback(
         (
             article: Article,
-            openReader = true,
+            keyboard = false,
             historyMode: "push" | "replace" = "push",
         ) => {
-            activateArticle(article, !openReader);
-            if (openReader) {
-                route.navigate(
-                    { kind: "article", articleId: article.id },
-                    historyMode,
-                    queue
-                        .getArticles()
-                        .findIndex((item) => item.id === article.id),
+            const current = route.current();
+            const index = queue
+                .getArticles()
+                .findIndex((item) => item.id === article.id);
+            if (current.kind === "reader") {
+                queueOrigin.current = {
+                    path: appRoutePath(current),
+                    articleId: article.id,
+                    index,
+                };
+                setKeyboardFocus(
+                    keyboard
+                        ? { kind: "article", articleId: article.id }
+                        : null,
                 );
             }
+            activateArticle(article);
+            route.navigate(
+                { kind: "article", articleId: article.id },
+                historyMode,
+                index,
+            );
         },
         [activateArticle, queue.getArticles, route],
     );
+
+    useEffect(() => {
+        if (
+            route.route.kind !== "article" &&
+            route.current().kind !== "article"
+        ) {
+            queueOrigin.current = null;
+        }
+    }, [route.route.kind, route.current]);
+
+    function returnToQueue(keyboard: boolean) {
+        const current = route.current();
+        if (
+            keyboard &&
+            queue.readingMode === "magazine" &&
+            current.kind === "article"
+        ) {
+            const path = appRoutePath(route.readerRoute);
+            const origin = queueOrigin.current;
+            setKeyboardFocus({
+                kind: "queue",
+                ...(origin?.path === path
+                    ? origin
+                    : {
+                          path,
+                          articleId: current.articleId,
+                          index:
+                              route.articleContext()?.articleIndex ??
+                              queue.activeArticleIndex,
+                      }),
+            });
+        } else {
+            clearKeyboardFocus();
+        }
+        route.returnToArticleList();
+    }
 
     useEffect(() => {
         if (
@@ -156,15 +218,22 @@ export function useArticleActions({
     }, [changeArticleState, queue.activeArticle, route.routedArticleId]);
 
     const moveArticle = useCallback(
-        async (direction: 1 | -1): Promise<boolean> => {
+        async (direction: 1 | -1, keyboard = false): Promise<boolean> => {
             if (queue.articles.length === 0) {
                 return false;
             }
             const currentRoute = route.current();
             const routed = currentRoute.kind === "article";
             const openReader = readingMode === "magazine" || routed;
+            const open = (article: Article) => {
+                if (openReader) {
+                    openArticle(article, keyboard, routed ? "replace" : "push");
+                } else {
+                    activateArticle(article, true);
+                }
+            };
             if (openReader && !routed && queue.activeArticle) {
-                openArticle(queue.activeArticle, true);
+                open(queue.activeArticle);
                 return true;
             }
             const currentId =
@@ -184,7 +253,7 @@ export function useArticleActions({
                 if (!next) {
                     return false;
                 }
-                openArticle(next, openReader, routed ? "replace" : "push");
+                open(next);
                 return true;
             }
             if (
@@ -210,7 +279,7 @@ export function useArticleActions({
                         ) + 1
                     ];
                 if (next) {
-                    openArticle(next, openReader, routed ? "replace" : "push");
+                    open(next);
                     return true;
                 }
                 route.navigate(
@@ -225,12 +294,12 @@ export function useArticleActions({
             );
             const next = queue.articles[nextIndex];
             if (next && next.id !== currentId) {
-                openArticle(next, openReader, routed ? "replace" : "push");
+                open(next);
                 return true;
             }
             return false;
         },
-        [openArticle, queue, readingMode, route],
+        [activateArticle, openArticle, queue, readingMode, route],
     );
 
     const copyArticleUrl = useCallback(
@@ -354,6 +423,9 @@ export function useArticleActions({
         markReadPending,
         changeArticleState,
         openArticle,
+        returnToQueue,
+        keyboardFocus,
+        clearKeyboardFocus,
         moveArticle,
         copyArticleUrl,
         openArticleSource,

@@ -146,6 +146,7 @@ const articleKey = (_index: number, article: Article) => article.id;
 export function VirtualArticles({
     articles,
     activeId,
+    initialIndex,
     topAlignedId,
     expanded = false,
     enabled,
@@ -160,6 +161,7 @@ export function VirtualArticles({
 }: {
     articles: Article[];
     activeId: number | null;
+    initialIndex?: number | undefined;
     topAlignedId?: number | null;
     expanded?: boolean;
     enabled: boolean;
@@ -543,6 +545,7 @@ export function VirtualArticles({
             className={expanded ? "expanded-stream" : "article-list"}
             aria-label={expanded ? "Expanded articles" : "Articles"}
             data={articles}
+            initialTopMostItemIndex={initialIndex}
             computeItemKey={articleKey}
             components={components}
             context={{

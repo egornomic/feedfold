@@ -1,5 +1,5 @@
 import { CheckCircle2, Circle, Star } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { Article } from "../../../../shared/types";
 import { shouldShowArticleDescription } from "../article/article-content";
 import {
@@ -44,6 +44,8 @@ export function ArticleList({
     loadMoreError,
     articles,
     activeId,
+    focusArticleId,
+    onFocusArticle,
     markReadOnScroll,
     showYouTubeDescriptions,
     hasMore,
@@ -58,20 +60,50 @@ export function ArticleList({
     loadMoreError: boolean;
     articles: Article[];
     activeId: number | null;
+    focusArticleId: number | undefined;
+    onFocusArticle: () => void;
     markReadOnScroll: boolean;
     showYouTubeDescriptions: boolean;
     hasMore: boolean;
     loadingMore: boolean;
     onLoadMore: () => void;
-    onOpen: (article: Article, openReader?: boolean) => void;
+    onOpen: (article: Article, keyboard: boolean) => void;
     onMarkPassedRead: (articles: Article[]) => Promise<unknown>;
     onToggleRead: (article: Article) => void;
     onToggleSave: (article: Article) => void;
 }) {
+    const focusRow = useCallback(
+        (button: HTMLButtonElement | null) => {
+            const list = button?.closest('[role="list"]');
+            if (!button || !list) {
+                return;
+            }
+            const focusWhenVisible = () => {
+                if (getComputedStyle(button).visibility === "visible") {
+                    observer.disconnect();
+                    button.focus();
+                    onFocusArticle();
+                }
+            };
+            const observer = new MutationObserver(focusWhenVisible);
+            // Virtuoso mounts the row hidden and reveals it after its initial scroll.
+            observer.observe(list, { attributeFilter: ["style"] });
+            focusWhenVisible();
+            return () => observer.disconnect();
+        },
+        [onFocusArticle],
+    );
     return (
         <VirtualArticles
             articles={articles}
             activeId={activeId}
+            initialIndex={
+                focusArticleId === undefined
+                    ? undefined
+                    : articles.findIndex(
+                          (article) => article.id === focusArticleId,
+                      )
+            }
             enabled={enabled}
             loadMoreError={loadMoreError}
             markReadOnScroll={markReadOnScroll}
@@ -108,11 +140,14 @@ export function ArticleList({
                 >
                     <button
                         className="article-open-button"
+                        ref={
+                            article.id === focusArticleId ? focusRow : undefined
+                        }
                         type="button"
                         aria-current={
                             article.id === activeId ? "true" : undefined
                         }
-                        onClick={() => onOpen(article)}
+                        onClick={(event) => onOpen(article, event.detail === 0)}
                     >
                         <span className="sr-only">
                             Open {articleLabel(article)}

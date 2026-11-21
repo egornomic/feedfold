@@ -1,4 +1,4 @@
-import type { FormEvent, RefObject } from "react";
+import { type FormEvent, type RefObject, useLayoutEffect } from "react";
 import { appRoutePath, type ReaderRoute } from "../../../shared/app-routes";
 import type {
     Article,
@@ -91,6 +91,53 @@ export function ReaderWorkspace({
     );
 
     const readerPath = appRoutePath(displayedReaderRoute);
+    const { keyboardFocus, clearKeyboardFocus } = articleActions;
+    const returningToQueue =
+        keyboardFocus?.kind === "queue" &&
+        route.route.kind === "reader" &&
+        appRoutePath(route.route) === keyboardFocus.path
+            ? keyboardFocus
+            : null;
+    // Wait for the queue to clear its article selection and apply the list filter.
+    const waitingForQueue =
+        returningToQueue &&
+        (route.pending ||
+            queue.loading ||
+            (!queue.error &&
+                (!queue.queueReady || queue.activeArticleId !== null)));
+    const returnArticle =
+        returningToQueue && !waitingForQueue
+            ? (queue.articles.find(
+                  (article) => article.id === returningToQueue.articleId,
+              ) ??
+              queue.articles[
+                  Math.max(
+                      0,
+                      Math.min(
+                          returningToQueue.index,
+                          queue.articles.length - 1,
+                      ),
+                  )
+              ])
+            : undefined;
+    useLayoutEffect(() => {
+        if (
+            returningToQueue &&
+            !waitingForQueue &&
+            (!returnArticle || queue.error)
+        ) {
+            readingWorkspaceRef.current?.querySelector("button")?.focus();
+            clearKeyboardFocus();
+        }
+    }, [
+        clearKeyboardFocus,
+        queue.error,
+        readingWorkspaceRef,
+        returnArticle,
+        returningToQueue,
+        waitingForQueue,
+    ]);
+
     return (
         <>
             <ReaderToolbar
@@ -146,8 +193,9 @@ export function ReaderWorkspace({
             >
                 {queue.showLoading ? (
                     <ArticleListSkeleton mode={queue.readingMode} />
-                ) : queue.loading &&
-                  !queue.loadedReaderRoute ? null : queue.error ? (
+                ) : waitingForQueue ||
+                  (queue.loading &&
+                      !queue.loadedReaderRoute) ? null : queue.error ? (
                     <InlineError
                         title={
                             route.routedArticleId === null
@@ -197,6 +245,8 @@ export function ReaderWorkspace({
                             loadMoreError={queue.loadMoreError}
                             articles={queue.articles}
                             activeId={queue.activeArticleId}
+                            focusArticleId={returnArticle?.id}
+                            onFocusArticle={clearKeyboardFocus}
                             markReadOnScroll={
                                 !queue.loading &&
                                 bootstrap.settings.markReadOnScroll
@@ -231,6 +281,16 @@ export function ReaderWorkspace({
                         />
                         <ReaderPane
                             article={queue.activeArticle}
+                            focusHeading={
+                                readerOpen &&
+                                !route.pending &&
+                                keyboardFocus?.kind === "article" &&
+                                keyboardFocus.articleId ===
+                                    route.routedArticleId
+                                    ? keyboardFocus.articleId
+                                    : undefined
+                            }
+                            onFocusHeading={clearKeyboardFocus}
                             contentLoaded={
                                 queue.activeArticle !== null &&
                                 queue.fullContentLoadedIds.current.has(
@@ -282,7 +342,7 @@ export function ReaderWorkspace({
                             showYouTubeDescriptions={
                                 bootstrap.settings.showYouTubeDescriptions
                             }
-                            onBack={route.returnToArticleList}
+                            onBack={articleActions.returnToQueue}
                             onPrevious={() => articleActions.moveArticle(-1)}
                             onNext={() => articleActions.moveArticle(1)}
                             onToggleRead={(article) =>

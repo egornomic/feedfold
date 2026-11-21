@@ -66,7 +66,7 @@ export function useAppShortcuts({
             }
             if (event.key === "Escape") {
                 if (!event.repeat && route.routedArticleId !== null) {
-                    route.returnToArticleList();
+                    articleActions.returnToQueue(true);
                 }
                 return;
             }
@@ -144,10 +144,10 @@ export function useAppShortcuts({
 
             const activeArticle = queue.activeArticle;
             const actions: Record<string, () => void> = {
-                j: () => void articleActions.moveArticle(1),
-                k: () => void articleActions.moveArticle(-1),
-                arrowright: () => void articleActions.moveArticle(1),
-                arrowleft: () => void articleActions.moveArticle(-1),
+                j: () => void articleActions.moveArticle(1, true),
+                k: () => void articleActions.moveArticle(-1, true),
+                arrowright: () => void articleActions.moveArticle(1, true),
+                arrowleft: () => void articleActions.moveArticle(-1, true),
                 u: () => {
                     if (!activeArticle) {
                         return;

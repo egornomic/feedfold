@@ -64,6 +64,9 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
         await page.keyboard.press("Enter");
         const menu = page.getByRole("menu", { name: "Add subscription or folder" });
         await menu.waitFor();
+        await expect
+          .poll(() => menu.evaluate((node) => node.contains(document.activeElement)))
+          .toBe(true);
         await page.keyboard.press("Escape");
         await menu.waitFor({ state: "hidden" });
         await expect.poll(() => isFocused(add)).toBe(true);
@@ -76,6 +79,93 @@ describe(`${desktopAppPath ? "desktop" : "browser"} virtual reading with a popul
 
         await page.keyboard.press("Escape");
         await expect.poll(() => new URL(page.url()).pathname).toBe(`/feeds/${backlog.feed.id}/all`);
+        await expect.poll(() => isFocused(article)).toBe(true);
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
+  it.each([
+    { width: 1280, state: "all", openKey: "Enter" },
+    { width: 320, state: "unread", openKey: "Space" },
+  ])(
+    "moves keyboard focus between the $state queue and reader at $width px",
+    async ({ width, state, openKey }) => {
+      const sample = seedReaderBacklog(database, `Keyboard focus ${width}`, 90);
+      const page = await open("magazine");
+      const queuePath = `/feeds/${sample.feed.id}/${state}`;
+      const queueApi = `/api/articles?feedId=${sample.feed.id}&state=${state}&limit=100`;
+      try {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(`${origin}${queuePath}`);
+        await page.locator(".article-open-button").first().waitFor();
+        await surface(page).evaluate((element) => {
+          element.scrollTop = 4000;
+        });
+        await settle(page);
+        const { id } = await anchor(page);
+        const response = await page.request.get(queueApi);
+        expect(response.ok()).toBe(true);
+        const { articles } = (await response.json()) as {
+          articles: { id: number; title: string }[];
+        };
+        const index = articles.findIndex((article) => String(article.id) === id);
+        expect(index).toBeGreaterThan(10);
+        const opened = articles[index];
+        const returnTarget = articles[index + (state === "unread" ? 1 : 0)];
+        if (!opened || !returnTarget) throw new Error("Missing focus test articles");
+
+        const heading = page.locator(".article-swipe-layer.is-active h2");
+        const openButton = (title: string) =>
+          page.getByRole("button", { name: `Open ${title}`, exact: true });
+        await openButton(opened.title).focus();
+        await page.keyboard.press(openKey);
+        await heading.waitFor();
+        expect(await heading.textContent()).toContain(opened.title);
+        await expect
+          .poll(() => heading.evaluate((node) => node.matches(":focus-visible")))
+          .toBe(true);
+
+        await expect
+          .poll(async () => {
+            const response = await page.request.get(queueApi);
+            if (!response.ok()) return false;
+            const { articles } = (await response.json()) as {
+              articles: { id: number; isRead: boolean }[];
+            };
+            const article = articles.find(({ id }) => id === opened.id);
+            return state === "unread" ? article === undefined : article?.isRead;
+          })
+          .toBe(true);
+
+        const back = page.getByRole("button", { name: "Back to articles", exact: true });
+        for (
+          let i = 0;
+          i < 12 && !(await back.evaluate((node) => node === document.activeElement));
+          i++
+        ) {
+          await page.keyboard.press("Shift+Tab");
+        }
+        expect(await back.evaluate((node) => node === document.activeElement)).toBe(true);
+        await page.keyboard.press("Enter");
+        await expect.poll(() => new URL(page.url()).pathname).toBe(queuePath);
+        await expect
+          .poll(() =>
+            openButton(returnTarget.title).evaluateAll((nodes) =>
+              nodes.some((node) => node.matches(":focus-visible")),
+            ),
+          )
+          .toBe(true);
+        await page.keyboard.press("Tab");
+        const nextStop =
+          state === "unread"
+            ? openButton(articles[index + 2]?.title ?? "")
+            : page.getByRole("button", {
+                name: `Mark ${returnTarget.title} as unread`,
+                exact: true,
+              });
+        expect(await nextStop.evaluate((node) => node === document.activeElement)).toBe(true);
       } finally {
         await page.close();
       }
