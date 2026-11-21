@@ -103,8 +103,7 @@ export function ReaderWorkspace({
         returningToQueue &&
         (route.pending ||
             queue.loading ||
-            (!queue.error &&
-                (!queue.queueReady || queue.activeArticleId !== null)));
+            (!queue.error && queue.activeArticleId !== null));
     const returnArticle =
         returningToQueue && !waitingForQueue
             ? (queue.articles.find(
