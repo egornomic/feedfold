@@ -1732,7 +1732,14 @@ img.article-card-image {
 .article-content ul,
 .article-content ol {
     margin: 1.2em 0;
+}
+
+.article-content ul {
     padding-inline-start: 1.4em;
+}
+
+.article-content ol {
+    padding-inline-start: 2.5em;
 }
 
 .article-content li + li {
